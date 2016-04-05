@@ -16,6 +16,7 @@
  */
 package org.apache.nifi.processors.kafka;
 
+import java.nio.charset.StandardCharsets;
 import java.util.BitSet;
 
 import org.apache.nifi.flowfile.FlowFile;
@@ -29,7 +30,7 @@ import org.apache.nifi.flowfile.FlowFile;
 final class SplittableMessageContext {
     private final String topicName;
 
-    private final String delimiterPattern;
+    private final byte[] delimiterBytes;
 
     private final byte[] keyBytes;
 
@@ -40,15 +41,17 @@ final class SplittableMessageContext {
      *            the name of the Kafka topic
      * @param keyBytes
      *            the instance of byte[] representing the key. Can be null.
-     * @param delimiterPattern
-     *            the string representing the delimiter regex pattern. Can be
-     *            null. For cases where it is null the EOF pattern will be used
-     *            - "(\\W)\\Z".
+     * @param delimiterBytes
+     *            byte array representing bytes by which the data will be
+     *            delimited. Can be null.
      */
-    SplittableMessageContext(String topicName, byte[] keyBytes, String delimiterPattern) {
+    SplittableMessageContext(String topicName, byte[] keyBytes, byte[] delimiterBytes) {
+        if (topicName == null || topicName.trim().length() == 0){
+            throw new IllegalArgumentException("'topicName' must not be null or empty");
+        }
         this.topicName = topicName;
         this.keyBytes = keyBytes;
-        this.delimiterPattern = delimiterPattern != null ? delimiterPattern : "(\\W)\\Z";
+        this.delimiterBytes = delimiterBytes != null ? delimiterBytes : null;
     }
 
     /**
@@ -56,24 +59,30 @@ final class SplittableMessageContext {
      */
     @Override
     public String toString() {
-        return "topic: '" + topicName + "'; delimiter: '" + delimiterPattern + "'";
+        String delVal = this.delimiterBytes != null ? " delimiter: '" + new String(this.delimiterBytes, StandardCharsets.UTF_8) + "'" : "";
+        return "topic: '" + topicName + "';" + delVal;
     }
 
     /**
-     *
+     * Will set failed segments from an array of integers
      */
     void setFailedSegments(int... failedSegments) {
-        this.failedSegments = new BitSet();
-        for (int failedSegment : failedSegments) {
-            this.failedSegments.set(failedSegment);
+        if (failedSegments != null) {
+            this.failedSegments = new BitSet();
+            for (int failedSegment : failedSegments) {
+                this.failedSegments.set(failedSegment);
+            }
         }
     }
 
     /**
-     *
+     * Will set failed segments from an array of bytes that will be used to
+     * construct the final {@link BitSet} representing failed segments
      */
     void setFailedSegmentsAsByteArray(byte[] failedSegments) {
-        this.failedSegments = BitSet.valueOf(failedSegments);
+        if (failedSegments != null) {
+            this.failedSegments = BitSet.valueOf(failedSegments);
+        }
     }
 
     /**
@@ -92,17 +101,17 @@ final class SplittableMessageContext {
     }
 
     /**
-     * Returns the value of the delimiter regex pattern.
+     * Returns the delimiter bytes
      */
-    String getDelimiterPattern() {
-        return this.delimiterPattern;
+    byte[] getDelimiterBytes() {
+        return this.delimiterBytes;
     }
 
     /**
      * Returns the key bytes as String
      */
     String getKeyBytesAsString() {
-        return new String(this.keyBytes);
+        return this.keyBytes != null ? new String(this.keyBytes) : null;
     }
 
     /**
