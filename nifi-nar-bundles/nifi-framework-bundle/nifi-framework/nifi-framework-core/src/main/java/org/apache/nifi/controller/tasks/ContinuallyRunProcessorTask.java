@@ -144,6 +144,7 @@ public class ContinuallyRunProcessorTask implements Callable<Boolean> {
                         return false;
                     }
 
+
                     if (!isWorkToDo(procNode)) {
                         break;
                     }

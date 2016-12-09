@@ -132,12 +132,16 @@ public class EventRecord implements Record {
         builder.setLineageStartDate((Long) record.getFieldValue(EventRecordFields.Names.LINEAGE_START_DATE));
         builder.setParentUuids((List<String>) record.getFieldValue(EventRecordFields.Names.PARENT_UUIDS));
         builder.setPreviousAttributes(truncateAttributes((Map<String, String>) record.getFieldValue(EventRecordFields.Names.PREVIOUS_ATTRIBUTES), maxAttributeLength));
-        builder.setEventId((Long) record.getFieldValue(EventRecordFields.Names.EVENT_IDENTIFIER));
         builder.setRelationship((String) record.getFieldValue(EventRecordFields.Names.RELATIONSHIP));
         builder.setSourceQueueIdentifier((String) record.getFieldValue(EventRecordFields.Names.SOURCE_QUEUE_IDENTIFIER));
         builder.setSourceSystemFlowFileIdentifier((String) record.getFieldValue(EventRecordFields.Names.SOURCE_SYSTEM_FLOWFILE_IDENTIFIER));
         builder.setTransitUri((String) record.getFieldValue(EventRecordFields.Names.TRANSIT_URI));
         builder.setUpdatedAttributes(truncateAttributes((Map<String, String>) record.getFieldValue(EventRecordFields.Names.UPDATED_ATTRIBUTES), maxAttributeLength));
+
+        final Long eventId = (Long) record.getFieldValue(EventRecordFields.Names.EVENT_IDENTIFIER);
+        if (eventId != null) {
+            builder.setEventId(eventId);
+        }
 
         builder.setStorageLocation(storageFilename, storageByteOffset);
 

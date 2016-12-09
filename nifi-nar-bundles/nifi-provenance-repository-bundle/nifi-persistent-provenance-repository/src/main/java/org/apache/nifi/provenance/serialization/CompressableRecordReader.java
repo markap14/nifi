@@ -17,18 +17,18 @@
 
 package org.apache.nifi.provenance.serialization;
 
+import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 import java.util.zip.GZIPInputStream;
 
 import org.apache.nifi.provenance.ProvenanceEventRecord;
 import org.apache.nifi.provenance.StandardProvenanceEventRecord;
-import org.apache.nifi.provenance.StandardRecordReader;
 import org.apache.nifi.provenance.toc.TocReader;
-import org.apache.nifi.stream.io.BufferedInputStream;
 import org.apache.nifi.stream.io.ByteCountingInputStream;
 import org.apache.nifi.stream.io.LimitingInputStream;
 import org.apache.nifi.stream.io.StreamUtils;
@@ -36,7 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public abstract class CompressableRecordReader implements RecordReader {
-    private static final Logger logger = LoggerFactory.getLogger(StandardRecordReader.class);
+    private static final Logger logger = LoggerFactory.getLogger(CompressableRecordReader.class);
 
     private final ByteCountingInputStream rawInputStream;
     private final String filename;
@@ -48,6 +48,7 @@ public abstract class CompressableRecordReader implements RecordReader {
 
     private DataInputStream dis;
     private ByteCountingInputStream byteCountingIn;
+    private StandardProvenanceEventRecord pushbackEvent = null;
 
     public CompressableRecordReader(final InputStream in, final String filename, final int maxAttributeChars) throws IOException {
         this(in, filename, null, maxAttributeChars);
@@ -177,7 +178,7 @@ public abstract class CompressableRecordReader implements RecordReader {
         return byteCountingIn.getBytesConsumed();
     }
 
-    private boolean isData() throws IOException {
+    protected boolean isData() throws IOException {
         byteCountingIn.mark(1);
         int nextByte = byteCountingIn.read();
         byteCountingIn.reset();
@@ -268,11 +269,78 @@ public abstract class CompressableRecordReader implements RecordReader {
 
     @Override
     public StandardProvenanceEventRecord nextRecord() throws IOException {
+        if (pushbackEvent != null) {
+            final StandardProvenanceEventRecord toReturn = pushbackEvent;
+            pushbackEvent = null;
+            return toReturn;
+        }
+
         if (isData()) {
             return nextRecord(dis, serializationVersion);
         } else {
             return null;
         }
+    }
+
+    protected Optional<Integer> getBlockIndex(final long eventId) {
+        final TocReader tocReader = getTocReader();
+        if (tocReader == null) {
+            return Optional.empty();
+        } else {
+            final Integer blockIndex = tocReader.getBlockIndexForEventId(eventId);
+            return Optional.ofNullable(blockIndex);
+        }
+    }
+
+    @Override
+    public Optional<ProvenanceEventRecord> skipToEvent(final long eventId) throws IOException {
+        final Optional<Integer> blockIndex = getBlockIndex(eventId);
+        if (!blockIndex.isPresent()) {
+            return Optional.empty();
+        }
+
+        if (pushbackEvent != null) {
+            final StandardProvenanceEventRecord previousPushBack = pushbackEvent;
+            if (previousPushBack.getEventId() >= eventId) {
+                return Optional.of(previousPushBack);
+            } else {
+                pushbackEvent = null;
+            }
+        }
+
+        // Skip to the appropriate block index and then read until we've found an Event
+        // that has an ID >= the event id.
+        skipToBlock(blockIndex.get());
+
+        try {
+            boolean read = true;
+            while (read) {
+                final Optional<StandardProvenanceEventRecord> eventOptional = readToEvent(eventId, dis, serializationVersion);
+                if (eventOptional.isPresent()) {
+                    pushbackEvent = eventOptional.get();
+                    return Optional.of(pushbackEvent);
+                } else {
+                    read = isData();
+                }
+            }
+
+            return Optional.empty();
+        } catch (final EOFException eof) {
+            // This can occur if we run out of data and attempt to read the next event ID.
+            logger.error("Unexpectedly reached end of File when looking for Provenance Event with ID {} in {}", eventId, filename);
+            return Optional.empty();
+        }
+    }
+
+    protected Optional<StandardProvenanceEventRecord> readToEvent(final long eventId, final DataInputStream dis, final int serializationVerison) throws IOException {
+        StandardProvenanceEventRecord event;
+        while ((event = nextRecord()) != null) {
+            if (event.getEventId() >= eventId) {
+                return Optional.of(event);
+            }
+        }
+
+        return Optional.empty();
     }
 
     protected abstract StandardProvenanceEventRecord nextRecord(DataInputStream in, int serializationVersion) throws IOException;

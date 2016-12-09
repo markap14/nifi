@@ -18,9 +18,11 @@
 package org.apache.nifi.provenance;
 
 import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.nifi.provenance.schema.EventRecord;
 import org.apache.nifi.provenance.schema.EventRecordFields;
@@ -30,7 +32,6 @@ import org.apache.nifi.provenance.toc.TocWriter;
 import org.apache.nifi.repository.schema.Record;
 import org.apache.nifi.repository.schema.RecordSchema;
 import org.apache.nifi.repository.schema.SchemaRecordWriter;
-import org.apache.nifi.stream.io.DataOutputStream;
 
 public class ByteArraySchemaRecordWriter extends CompressableRecordWriter {
     private static final RecordSchema eventSchema = ProvenanceEventSchema.PROVENANCE_EVENT_SCHEMA_V1;
@@ -40,12 +41,14 @@ public class ByteArraySchemaRecordWriter extends CompressableRecordWriter {
 
     private final SchemaRecordWriter recordWriter = new SchemaRecordWriter();
 
-    public ByteArraySchemaRecordWriter(final File file, final TocWriter tocWriter, final boolean compressed, final int uncompressedBlockSize) throws IOException {
-        super(file, tocWriter, compressed, uncompressedBlockSize);
+    public ByteArraySchemaRecordWriter(final File file, final AtomicLong idGenerator, final TocWriter tocWriter, final boolean compressed,
+        final int uncompressedBlockSize) throws IOException {
+        super(file, idGenerator, tocWriter, compressed, uncompressedBlockSize);
     }
 
-    public ByteArraySchemaRecordWriter(final OutputStream out, final TocWriter tocWriter, final boolean compressed, final int uncompressedBlockSize) throws IOException {
-        super(out, tocWriter, compressed, uncompressedBlockSize);
+    public ByteArraySchemaRecordWriter(final OutputStream out, final AtomicLong idGenerator, final TocWriter tocWriter, final boolean compressed,
+        final int uncompressedBlockSize) throws IOException {
+        super(out, idGenerator, tocWriter, compressed, uncompressedBlockSize);
     }
 
     @Override

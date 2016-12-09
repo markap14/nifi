@@ -542,7 +542,7 @@ public class VolatileProvenanceRepository implements ProvenanceRepository {
         if (event == null) {
             final AsyncLineageSubmission submission = new AsyncLineageSubmission(LineageComputationType.EXPAND_PARENTS, eventId, Collections.<String>emptyList(), 1, userId);
             lineageSubmissionMap.put(submission.getLineageIdentifier(), submission);
-            submission.getResult().update(Collections.<ProvenanceEventRecord>emptyList());
+            submission.getResult().update(Collections.<ProvenanceEventRecord> emptyList(), 0L);
             return submission;
         }
 
@@ -573,7 +573,7 @@ public class VolatileProvenanceRepository implements ProvenanceRepository {
         if (event == null) {
             final AsyncLineageSubmission submission = new AsyncLineageSubmission(LineageComputationType.EXPAND_CHILDREN, eventId, Collections.<String>emptyList(), 1, userId);
             lineageSubmissionMap.put(submission.getLineageIdentifier(), submission);
-            submission.getResult().update(Collections.<ProvenanceEventRecord>emptyList());
+            submission.getResult().update(Collections.<ProvenanceEventRecord> emptyList(), 0L);
             return submission;
         }
 
@@ -681,7 +681,7 @@ public class VolatileProvenanceRepository implements ProvenanceRepository {
         @Override
         public void run() {
             final List<ProvenanceEventRecord> records = ringBuffer.getSelectedElements(filter);
-            submission.getResult().update(records);
+            submission.getResult().update(records, records.size());
         }
     }
 

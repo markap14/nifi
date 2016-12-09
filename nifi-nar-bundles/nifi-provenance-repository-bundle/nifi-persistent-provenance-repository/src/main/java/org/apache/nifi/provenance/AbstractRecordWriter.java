@@ -38,8 +38,6 @@ public abstract class AbstractRecordWriter implements RecordWriter {
     private volatile boolean dirty = false;
     private volatile boolean closed = false;
 
-    private int recordsWritten = 0;
-
     public AbstractRecordWriter(final File file, final TocWriter writer) throws IOException {
         logger.trace("Creating Record Writer for {}", file);
 
@@ -95,11 +93,6 @@ public abstract class AbstractRecordWriter implements RecordWriter {
     }
 
     @Override
-    public int getRecordsWritten() {
-        return recordsWritten;
-    }
-
-    @Override
     public File getFile() {
         return file;
     }
@@ -133,6 +126,7 @@ public abstract class AbstractRecordWriter implements RecordWriter {
         this.dirty = true;
     }
 
+    @Override
     public boolean isDirty() {
         return dirty;
     }
@@ -142,7 +136,7 @@ public abstract class AbstractRecordWriter implements RecordWriter {
     }
 
     @Override
-    public void sync() throws IOException {
+    public synchronized void sync() throws IOException {
         try {
             if (tocWriter != null) {
                 tocWriter.sync();

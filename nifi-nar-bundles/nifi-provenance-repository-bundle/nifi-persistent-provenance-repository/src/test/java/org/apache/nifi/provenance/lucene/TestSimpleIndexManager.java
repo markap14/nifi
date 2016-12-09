@@ -26,10 +26,10 @@ import java.util.UUID;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field.Store;
 import org.apache.lucene.document.StringField;
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.TopDocs;
+import org.apache.nifi.provenance.index.EventIndexSearcher;
+import org.apache.nifi.provenance.index.EventIndexWriter;
 import org.apache.nifi.util.file.FileUtils;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -46,8 +46,8 @@ public class TestSimpleIndexManager {
         final SimpleIndexManager mgr = new SimpleIndexManager();
         final File dir = new File("target/" + UUID.randomUUID().toString());
         try {
-            final IndexWriter writer1 = mgr.borrowIndexWriter(dir);
-            final IndexWriter writer2 = mgr.borrowIndexWriter(dir);
+            final EventIndexWriter writer1 = mgr.borrowIndexWriter(dir);
+            final EventIndexWriter writer2 = mgr.borrowIndexWriter(dir);
 
             final Document doc1 = new Document();
             doc1.add(new StringField("id", "1", Store.YES));
@@ -55,15 +55,15 @@ public class TestSimpleIndexManager {
             final Document doc2 = new Document();
             doc2.add(new StringField("id", "2", Store.YES));
 
-            writer1.addDocument(doc1);
-            writer2.addDocument(doc2);
-            mgr.returnIndexWriter(dir, writer2);
-            mgr.returnIndexWriter(dir, writer1);
+            writer1.index(doc1, 1000);
+            writer2.index(doc2, 1000);
+            mgr.returnIndexWriter(writer2);
+            mgr.returnIndexWriter(writer1);
 
-            final IndexSearcher searcher = mgr.borrowIndexSearcher(dir);
-            final TopDocs topDocs = searcher.search(new MatchAllDocsQuery(), 2);
+            final EventIndexSearcher searcher = mgr.borrowIndexSearcher(dir);
+            final TopDocs topDocs = searcher.getIndexSearcher().search(new MatchAllDocsQuery(), 2);
             assertEquals(2, topDocs.totalHits);
-            mgr.returnIndexSearcher(dir, searcher);
+            mgr.returnIndexSearcher(searcher);
         } finally {
             FileUtils.deleteFile(dir, true);
         }
