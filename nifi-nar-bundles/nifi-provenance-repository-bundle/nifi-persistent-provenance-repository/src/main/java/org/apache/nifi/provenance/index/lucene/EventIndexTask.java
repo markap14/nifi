@@ -41,7 +41,7 @@ import org.slf4j.LoggerFactory;
 public class EventIndexTask implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(EventIndexTask.class);
     private static final String EVENT_CATEGORY = "Provenance Repository";
-    public static final int INDEX_BUFFER_SIZE = 100;
+    public static final int MAX_DOCUMENTS_PER_THREAD = 100;
     public static final int DEFAULT_MAX_EVENTS_PER_COMMIT = 500_000;
 
     private final BlockingQueue<IndexableDocument> documentQueue;
@@ -65,15 +65,29 @@ public class EventIndexTask implements Runnable {
         this.shutdown = true;
     }
 
+    private void fetchDocuments(final List<IndexableDocument> destination) throws InterruptedException {
+        // We want to fetch up to INDEX_BUFFER_SIZE documents at a time. However, we don't want to continually
+        // call #drainTo on the queue. So we call poll, blocking for up to 1 second. If we get any event, then
+        // we will call drainTo to gather the rest. If we get no events, then we just return, having gathered
+        // no events.
+        IndexableDocument firstDoc = documentQueue.poll(1, TimeUnit.SECONDS);
+        if (firstDoc == null) {
+            return;
+        }
+
+        destination.add(firstDoc);
+        documentQueue.drainTo(destination, MAX_DOCUMENTS_PER_THREAD - 1);
+    }
+
     @Override
     public void run() {
-        final List<IndexableDocument> toIndex = new ArrayList<>(INDEX_BUFFER_SIZE);
+        final List<IndexableDocument> toIndex = new ArrayList<>(MAX_DOCUMENTS_PER_THREAD);
 
         while (!shutdown) {
             try {
                 // Get the Documents that we want to index.
                 toIndex.clear();
-                documentQueue.drainTo(toIndex, INDEX_BUFFER_SIZE);
+                fetchDocuments(toIndex);
 
                 if (toIndex.isEmpty()) {
                     continue;

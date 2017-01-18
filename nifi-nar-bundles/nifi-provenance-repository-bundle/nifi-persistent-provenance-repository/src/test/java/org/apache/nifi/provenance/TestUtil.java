@@ -16,8 +16,6 @@
  */
 package org.apache.nifi.provenance;
 
-import static org.apache.nifi.provenance.TestUtil.createFlowFile;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;

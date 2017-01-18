@@ -41,7 +41,13 @@ import org.apache.lucene.document.Document;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.MatchAllDocsQuery;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.SortField;
+import org.apache.lucene.search.SortField.Type;
 import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.search.TopFieldDocs;
 import org.apache.nifi.authorization.AccessDeniedException;
 import org.apache.nifi.authorization.user.NiFiUser;
 import org.apache.nifi.events.EventReporter;
@@ -55,6 +61,7 @@ import org.apache.nifi.provenance.StandardQueryResult;
 import org.apache.nifi.provenance.authorization.EventAuthorizer;
 import org.apache.nifi.provenance.authorization.EventTransformer;
 import org.apache.nifi.provenance.index.EventIndex;
+import org.apache.nifi.provenance.index.EventIndexSearcher;
 import org.apache.nifi.provenance.lineage.ComputeLineageSubmission;
 import org.apache.nifi.provenance.lineage.LineageComputationType;
 import org.apache.nifi.provenance.lucene.IndexManager;
@@ -81,6 +88,7 @@ public class LuceneEventIndex implements EventIndex {
     public static final int MAX_UNDELETED_QUERY_RESULTS = 10;
     public static final int MAX_DELETE_INDEX_WAIT_SECONDS = 30;
     public static final int MAX_LINEAGE_NODES = 1000;
+    public static final int MAX_INDEX_THREADS = 100;
 
     private final ConcurrentMap<String, AsyncQuerySubmission> querySubmissionMap = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, AsyncLineageSubmission> lineageSubmissionMap = new ConcurrentHashMap<>();
@@ -113,7 +121,26 @@ public class LuceneEventIndex implements EventIndex {
         queryExecutor = Executors.newFixedThreadPool(config.getQueryThreadPoolSize(), new NamedThreadFactory("Provenance Query"));
         indexExecutor = Executors.newFixedThreadPool(config.getIndexThreadPoolSize(), new NamedThreadFactory("Index Provenance Events"));
         directoryManager = new IndexDirectoryManager(config);
-        for (int i = 0; i < config.getIndexThreadPoolSize(); i++) {
+
+        // Limit number of indexing threads to 100. When we restore the repository on restart,
+        // we have to re-index up to MAX_THREADS * MAX_DOCUMENTS_PER_THREADS events prior to
+        // the last event that the index holds. This is done because we could have that many
+        // events 'in flight', waiting to be indexed when the last index writer was committed,
+        // so even though the index says the largest event ID is 1,000,000 for instance, Event
+        // with ID 999,999 may still not have been indexed because another thread was in the
+        // process of writing the event to the index.
+        final int configuredIndexPoolSize = config.getIndexThreadPoolSize();
+        final int numIndexThreads;
+        if (configuredIndexPoolSize > MAX_INDEX_THREADS) {
+            logger.warn("The Provenance Repository is configured to perform indexing of events using {} threads. This number exceeds the maximum allowable number of threads, which is {}. "
+                + "Will proceed using {} threads. This value is limited because the performance of indexing will decrease and startup times will increase when setting this value too high.",
+                configuredIndexPoolSize, MAX_INDEX_THREADS, MAX_INDEX_THREADS);
+            numIndexThreads = MAX_INDEX_THREADS;
+        } else {
+            numIndexThreads = configuredIndexPoolSize;
+        }
+
+        for (int i = 0; i < numIndexThreads; i++) {
             final EventIndexTask task = new EventIndexTask(documentQueue, config, indexManager, directoryManager, maxEventsPerCommit, eventReporter);
             indexTasks.add(task);
             indexExecutor.submit(task);
@@ -131,6 +158,11 @@ public class LuceneEventIndex implements EventIndex {
         maintenanceExecutor = Executors.newScheduledThreadPool(1, new NamedThreadFactory("Provenance Repository Maintenance"));
         maintenanceExecutor.scheduleWithFixedDelay(() -> performMaintenance(), 1, 1, TimeUnit.MINUTES);
         maintenanceExecutor.scheduleWithFixedDelay(new RemoveExpiredQueryResults(), 30, 30, TimeUnit.SECONDS);
+    }
+
+    @Override
+    public long getMinimumEventIdToReindex() {
+        return Math.max(0, getMaxEventId() - EventIndexTask.MAX_DOCUMENTS_PER_THREAD * LuceneEventIndex.MAX_DELETE_INDEX_WAIT_SECONDS);
     }
 
     protected IndexDirectoryManager getDirectoryManager() {
@@ -152,6 +184,45 @@ public class LuceneEventIndex implements EventIndex {
         }
     }
 
+    private long getMaxEventId() {
+        final List<File> allDirectories = getDirectoryManager().getDirectories(0L, Long.MAX_VALUE);
+        if (allDirectories.isEmpty()) {
+            return -1L;
+        }
+
+        Collections.sort(allDirectories, DirectoryUtils.NEWEST_INDEX_FIRST);
+
+        for (final File directory : allDirectories) {
+            final EventIndexSearcher searcher;
+            try {
+                searcher = indexManager.borrowIndexSearcher(directory);
+            } catch (final IOException ioe) {
+                logger.warn("Unable to read from Index Directory {}. Will assume that the index is incomplete and re-index all events from this directory", directory);
+                continue;
+            }
+
+            try {
+                final Sort sort = new Sort(new SortField(SearchableFields.Identifier.getSearchableFieldName(), Type.LONG, true));
+                final TopFieldDocs topDocs = searcher.getIndexSearcher().search(new MatchAllDocsQuery(), 1, sort);
+                final ScoreDoc[] scoreDocs = topDocs.scoreDocs;
+                if (scoreDocs.length == 0) {
+                    continue;
+                }
+
+                final ScoreDoc scoreDoc = scoreDocs[0];
+                final int docId = scoreDoc.doc;
+                final Document document = searcher.getIndexSearcher().doc(docId);
+                final long eventId = document.getField(SearchableFields.Identifier.getSearchableFieldName()).numericValue().longValue();
+                return eventId;
+            } catch (final IOException ioe) {
+                logger.warn("Unable to search Index Directory {}. Will assume that the index is incomplete and re-index all events from this directory", directory);
+            } finally {
+                indexManager.returnIndexSearcher(searcher);
+            }
+        }
+
+        return -1L;
+    }
 
     @Override
     public void reindexEvents(final Map<ProvenanceEventRecord, StorageSummary> events) {

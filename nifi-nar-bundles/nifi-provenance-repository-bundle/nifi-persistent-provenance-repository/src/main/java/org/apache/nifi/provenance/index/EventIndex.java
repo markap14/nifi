@@ -64,4 +64,6 @@ public interface EventIndex extends Closeable {
     ComputeLineageSubmission retrieveLineageSubmission(String lineageIdentifier, NiFiUser user);
 
     QuerySubmission retrieveQuerySubmission(String queryIdentifier, NiFiUser user);
+
+    long getMinimumEventIdToReindex();
 }

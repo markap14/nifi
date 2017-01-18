@@ -44,7 +44,6 @@ import org.apache.nifi.provenance.RepositoryConfiguration;
 import org.apache.nifi.provenance.StandardProvenanceEventRecord;
 import org.apache.nifi.provenance.authorization.EventAuthorizer;
 import org.apache.nifi.provenance.index.EventIndex;
-import org.apache.nifi.provenance.index.lucene.EventIndexTask;
 import org.apache.nifi.provenance.serialization.RecordReader;
 import org.apache.nifi.provenance.serialization.RecordWriter;
 import org.apache.nifi.provenance.serialization.StorageSummary;
@@ -534,46 +533,70 @@ public class WriteAheadStorePartition implements EventStorePartition {
     }
 
     void reindexLatestEvents(final EventIndex eventIndex) {
-        final List<File> eventFiles = getEventFilesFromDisk().sorted(DirectoryUtils.SMALLEST_ID_FIRST.reversed()).collect(Collectors.toList());
+        final List<File> eventFiles = getEventFilesFromDisk().sorted(DirectoryUtils.SMALLEST_ID_FIRST).collect(Collectors.toList());
         if (eventFiles.isEmpty()) {
             return;
         }
 
-        final int eventsToReindex = EventIndexTask.DEFAULT_MAX_EVENTS_PER_COMMIT * 2;
+        final long minEventIdToReindex = eventIndex.getMinimumEventIdToReindex();
+        final long eventsToReindex = getMaxEventId() - minEventIdToReindex;
 
-        // We need to reindex the last 2 * DEFAULT_MAX_EVENTS_PER_COMMIT events right now because we could have up to that many events not
-        // indexed. This is because we could have a commit happening in one thread while more events are being written in a separate thread.
         logger.info("Re-indexing up to the last {} events for {} to ensure that Event Index is accurate", eventsToReindex, partitionDirectory);
 
-        // Re-Index the last bunch of events
+        // Find the first event file that we care about.
+        int firstEventFileIndex = 0;
+        for (int i = eventFiles.size() - 1; i >= 0; i--) {
+            final File eventFile = eventFiles.get(i);
+            final long minIdInFile = DirectoryUtils.getMinId(eventFile);
+            if (minIdInFile <= minEventIdToReindex) {
+                firstEventFileIndex = i;
+                break;
+            }
+        }
+
+        // Create a subList that contains the files of interest
+        final List<File> eventFilesToReindex = eventFiles.subList(firstEventFileIndex, eventFiles.size());
+
+        // Re-Index the last bunch of events.
+        // We don't use an Event Iterator here because it's possible that one of the event files could be corrupt (for example, if NiFi does while
+        // writing to the file, a record may be incomplete). We don't want to prevent us from moving on and continuing to index the rest of the
+        // un-indexed events. So we just use a List of files and create a reader for each one.
         final long start = System.nanoTime();
         int reindexedCount = 0;
-        for (final File eventFile : eventFiles) {
+        for (final File eventFile : eventFilesToReindex) {
             if (reindexedCount >= eventsToReindex) {
                 break;
             }
 
             try {
-                final RecordReader recordReader = recordReaderFactory.newRecordReader(eventFile, Collections.emptyList(), Integer.MAX_VALUE);
-                final Map<ProvenanceEventRecord, StorageSummary> storageMap = new HashMap<>();
+                try (final RecordReader recordReader = recordReaderFactory.newRecordReader(eventFile, Collections.emptyList(), Integer.MAX_VALUE)) {
+                    if (reindexedCount == 0) {
+                        final Optional<ProvenanceEventRecord> eventOption = recordReader.skipToEvent(minEventIdToReindex);
+                        if (!eventOption.isPresent()) {
+                            continue;
+                        }
+                    }
 
-                StandardProvenanceEventRecord event;
-                while (reindexedCount < eventsToReindex) {
-                    final long startBytesConsumed = recordReader.getBytesConsumed();
+                    final Map<ProvenanceEventRecord, StorageSummary> storageMap = new HashMap<>();
 
-                    event = recordReader.nextRecord();
-                    if (event == null) {
-                        eventIndex.reindexEvents(storageMap);
-                        reindexedCount += storageMap.size();
-                        break;
-                    } else {
-                        final long eventSize = recordReader.getBytesConsumed() - startBytesConsumed;
-                        storageMap.put(event, new StorageSummary(event.getEventId(), eventFile.getName(), partitionName, recordReader.getBlockIndex(), eventSize, 0L));
+                    StandardProvenanceEventRecord event = null;
+                    while (true) {
+                        final long startBytesConsumed = recordReader.getBytesConsumed();
 
-                        if (storageMap.size() == 10000) {
+                        event = recordReader.nextRecord();
+                        if (event == null) {
                             eventIndex.reindexEvents(storageMap);
                             reindexedCount += storageMap.size();
-                            storageMap.clear();
+                            break; // stop reading from this file
+                        } else {
+                            final long eventSize = recordReader.getBytesConsumed() - startBytesConsumed;
+                            storageMap.put(event, new StorageSummary(event.getEventId(), eventFile.getName(), partitionName, recordReader.getBlockIndex(), eventSize, 0L));
+
+                            if (storageMap.size() == 10000) {
+                                eventIndex.reindexEvents(storageMap);
+                                reindexedCount += storageMap.size();
+                                storageMap.clear();
+                            }
                         }
                     }
                 }

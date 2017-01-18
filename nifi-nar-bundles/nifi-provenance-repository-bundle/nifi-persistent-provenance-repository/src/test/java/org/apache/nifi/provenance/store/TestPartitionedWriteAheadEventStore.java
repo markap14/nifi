@@ -28,10 +28,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
@@ -46,7 +44,6 @@ import org.apache.nifi.provenance.RepositoryConfiguration;
 import org.apache.nifi.provenance.StandardProvenanceEventRecord;
 import org.apache.nifi.provenance.authorization.EventAuthorizer;
 import org.apache.nifi.provenance.authorization.EventTransformer;
-import org.apache.nifi.provenance.index.EventIndex;
 import org.apache.nifi.provenance.serialization.RecordReaders;
 import org.apache.nifi.provenance.serialization.RecordWriters;
 import org.apache.nifi.provenance.serialization.StorageSummary;
@@ -58,9 +55,6 @@ import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;
-import org.mockito.Mockito;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 public class TestPartitionedWriteAheadEventStore {
     private static final RecordWriterFactory writerFactory = (file, idGen, compress, createToc) -> RecordWriters.newSchemaRecordWriter(file, idGen, compress, createToc);
@@ -155,51 +149,6 @@ public class TestPartitionedWriteAheadEventStore {
         }
     }
 
-    @Test
-    @SuppressWarnings("unchecked")
-    public void testReindexHandlesLast2Files() throws IOException {
-        final RepositoryConfiguration config = createConfig(1);
-        config.setMaxEventFileCount(10);
-
-        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP);
-        store.initialize();
-        assertEquals(-1, store.getMaxEventId());
-
-        final int numEvents = 29;
-        final List<ProvenanceEventRecord> allEvents = new ArrayList<>(numEvents);
-        for (int i = 0; i < numEvents; i++) {
-            final ProvenanceEventRecord event = createEvent();
-            final StorageResult result = store.addEvents(Collections.singleton(event));
-            final StorageSummary summary = result.getStorageLocations().values().iterator().next();
-            final long eventId = summary.getEventId();
-            final ProvenanceEventRecord eventWithId = addId(event, eventId);
-
-            assertEquals(i, store.getMaxEventId());
-
-            allEvents.add(eventWithId);
-        }
-
-        final Set<ProvenanceEventRecord> reindexed = new HashSet<>();
-        final EventIndex eventIndex = Mockito.mock(EventIndex.class);
-        Mockito.doAnswer(new Answer<Object>() {
-            @Override
-            public Object answer(final InvocationOnMock invocation) throws Throwable {
-                final Map<ProvenanceEventRecord, StorageSummary> eventMap = invocation.getArgumentAt(0, Map.class);
-                reindexed.addAll(eventMap.keySet());
-                return null;
-            }
-        }).when(eventIndex).reindexEvents(Mockito.any(Map.class));
-
-        store.close();
-
-        final EventStore recoveredStore = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP);
-        recoveredStore.reindexLatestEvents(eventIndex);
-
-        // Verify that what was re-indexed was the same as what was written to the store. We use a Set here because we
-        // are not concerned with the order in which the events are re-indexed, only that they all are re-indexed
-        // (since the events are stored as keys in a Map, we can't guarantee the order in this test anyway).
-        assertEquals(new HashSet<>(allEvents), reindexed);
-    }
 
     @Test()
     public void testMultipleWritesThenGetAllInSingleRead() throws IOException {
