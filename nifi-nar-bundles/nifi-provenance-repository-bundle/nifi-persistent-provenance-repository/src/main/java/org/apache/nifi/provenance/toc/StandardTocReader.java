@@ -74,7 +74,7 @@ public class StandardTocReader implements TocReader {
                     break;
             }
 
-            final int numBlocks = (int) ((buffer.length - 2) / blockInfoBytes);
+            final int numBlocks = (buffer.length - 2) / blockInfoBytes;
             offsets = new long[numBlocks];
 
             if ( version > 1 ) {
@@ -181,5 +181,10 @@ public class StandardTocReader implements TocReader {
         // None of the blocks start with an Event ID greater than the provided ID.
         // Therefore, if the event is present, it must be in the last block.
         return firstEventIds.length - 1;
+    }
+
+    @Override
+    public String toString() {
+        return "StandardTocReader[file=" + file + ", compressed=" + compressed + "]";
     }
 }

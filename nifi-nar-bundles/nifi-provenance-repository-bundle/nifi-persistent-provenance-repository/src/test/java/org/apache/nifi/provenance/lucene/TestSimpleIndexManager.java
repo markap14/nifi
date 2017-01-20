@@ -28,6 +28,7 @@ import org.apache.lucene.document.Field.Store;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.TopDocs;
+import org.apache.nifi.provenance.RepositoryConfiguration;
 import org.apache.nifi.provenance.index.EventIndexSearcher;
 import org.apache.nifi.provenance.index.EventIndexWriter;
 import org.apache.nifi.util.file.FileUtils;
@@ -40,10 +41,9 @@ public class TestSimpleIndexManager {
         System.setProperty("org.slf4j.simpleLogger.log.org.apache.nifi.provenance", "DEBUG");
     }
 
-
     @Test
     public void testMultipleWritersSimultaneouslySameIndex() throws IOException {
-        final SimpleIndexManager mgr = new SimpleIndexManager();
+        final SimpleIndexManager mgr = new SimpleIndexManager(new RepositoryConfiguration());
         final File dir = new File("target/" + UUID.randomUUID().toString());
         try {
             final EventIndexWriter writer1 = mgr.borrowIndexWriter(dir);

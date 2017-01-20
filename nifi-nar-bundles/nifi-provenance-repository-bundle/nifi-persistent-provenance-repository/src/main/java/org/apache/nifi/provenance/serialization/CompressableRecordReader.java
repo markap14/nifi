@@ -121,6 +121,8 @@ public abstract class CompressableRecordReader implements RecordReader {
             try {
                 StreamUtils.skip(rawInputStream, bytesToSkip);
                 logger.debug("Skipped stream from offset {} to {} ({} bytes skipped)", curOffset, offset, bytesToSkip);
+            } catch (final EOFException eof) {
+                throw new EOFException("Attempted to skip to byte offset " + offset + " for " + filename + " but file does not have that many bytes (TOC Reader=" + getTocReader() + ")");
             } catch (final IOException e) {
                 throw new IOException("Failed to skip to offset " + offset + " for block " + blockIndex + " of Provenance Log " + filename, e);
             }
@@ -178,24 +180,29 @@ public abstract class CompressableRecordReader implements RecordReader {
         return byteCountingIn.getBytesConsumed();
     }
 
-    protected boolean isData() throws IOException {
-        byteCountingIn.mark(1);
-        int nextByte = byteCountingIn.read();
-        byteCountingIn.reset();
+    @Override
+    public boolean isData() {
+        try {
+            byteCountingIn.mark(1);
+            int nextByte = byteCountingIn.read();
+            byteCountingIn.reset();
 
-        if (nextByte < 0) {
-            try {
-                resetStreamForNextBlock();
-            } catch (final EOFException eof) {
-                return false;
+            if (nextByte < 0) {
+                try {
+                    resetStreamForNextBlock();
+                } catch (final EOFException eof) {
+                    return false;
+                }
+
+                byteCountingIn.mark(1);
+                nextByte = byteCountingIn.read();
+                byteCountingIn.reset();
             }
 
-            byteCountingIn.mark(1);
-            nextByte = byteCountingIn.read();
-            byteCountingIn.reset();
+            return nextByte >= 0;
+        } catch (final IOException ioe) {
+            return false;
         }
-
-        return nextByte >= 0;
     }
 
     @Override

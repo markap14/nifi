@@ -79,10 +79,34 @@ public class TestLuceneEventIndex {
 
 
     @Test(timeout = 5000)
+    public void testGetMinimumIdToReindex() throws InterruptedException {
+        final RepositoryConfiguration repoConfig = createConfig(1);
+        repoConfig.setDesiredIndexSize(1L);
+        final IndexManager indexManager = new SimpleIndexManager(repoConfig);
+
+        final ArrayListEventStore eventStore = new ArrayListEventStore();
+        final LuceneEventIndex index = new LuceneEventIndex(repoConfig, indexManager, 20_000, EventReporter.NO_OP);
+        index.initialize(eventStore);
+
+        for (int i = 0; i < 50_000; i++) {
+            final ProvenanceEventRecord event = createEvent("1234");
+            final StorageResult storageResult = eventStore.addEvent(event);
+            index.addEvents(storageResult.getStorageLocations());
+        }
+
+        while (index.getMaxEventId("1") < 40_000L) {
+            Thread.sleep(25);
+        }
+
+        final long id = index.getMinimumEventIdToReindex("1");
+        assertTrue(id >= 30000L);
+    }
+
+    @Test(timeout = 5000)
     public void testUnauthorizedEventsGetPlaceholdersForLineage() throws InterruptedException {
         final RepositoryConfiguration repoConfig = createConfig(1);
         repoConfig.setDesiredIndexSize(1L);
-        final IndexManager indexManager = new SimpleIndexManager();
+        final IndexManager indexManager = new SimpleIndexManager(repoConfig);
 
         final ArrayListEventStore eventStore = new ArrayListEventStore();
         final LuceneEventIndex index = new LuceneEventIndex(repoConfig, indexManager, 3, EventReporter.NO_OP);
@@ -118,7 +142,7 @@ public class TestLuceneEventIndex {
     public void testUnauthorizedEventsGetPlaceholdersForExpandChildren() throws InterruptedException {
         final RepositoryConfiguration repoConfig = createConfig(1);
         repoConfig.setDesiredIndexSize(1L);
-        final IndexManager indexManager = new SimpleIndexManager();
+        final IndexManager indexManager = new SimpleIndexManager(repoConfig);
 
         final ArrayListEventStore eventStore = new ArrayListEventStore();
         final LuceneEventIndex index = new LuceneEventIndex(repoConfig, indexManager, 3, EventReporter.NO_OP);
@@ -193,7 +217,7 @@ public class TestLuceneEventIndex {
     public void testUnauthorizedEventsGetPlaceholdersForFindParents() throws InterruptedException {
         final RepositoryConfiguration repoConfig = createConfig(1);
         repoConfig.setDesiredIndexSize(1L);
-        final IndexManager indexManager = new SimpleIndexManager();
+        final IndexManager indexManager = new SimpleIndexManager(repoConfig);
 
         final ArrayListEventStore eventStore = new ArrayListEventStore();
         final LuceneEventIndex index = new LuceneEventIndex(repoConfig, indexManager, 3, EventReporter.NO_OP);
@@ -268,7 +292,7 @@ public class TestLuceneEventIndex {
     public void testUnauthorizedEventsGetFilteredForQuery() throws InterruptedException {
         final RepositoryConfiguration repoConfig = createConfig(1);
         repoConfig.setDesiredIndexSize(1L);
-        final IndexManager indexManager = new SimpleIndexManager();
+        final IndexManager indexManager = new SimpleIndexManager(repoConfig);
 
         final ArrayListEventStore eventStore = new ArrayListEventStore();
         final LuceneEventIndex index = new LuceneEventIndex(repoConfig, indexManager, 3, EventReporter.NO_OP);
@@ -294,7 +318,7 @@ public class TestLuceneEventIndex {
         };
 
         List<ProvenanceEventRecord> events = Collections.emptyList();
-        while (events.isEmpty()) {
+        while (events.size() < 2) {
             final QuerySubmission submission = index.submitQuery(query, authorizer, "unit test");
             assertTrue(submission.getResult().awaitCompletion(5, TimeUnit.SECONDS));
             events = submission.getResult().getMatchingEvents();
@@ -334,7 +358,7 @@ public class TestLuceneEventIndex {
     public void testExpiration() throws InterruptedException, IOException {
         final RepositoryConfiguration repoConfig = createConfig(1);
         repoConfig.setDesiredIndexSize(1L);
-        final IndexManager indexManager = new SimpleIndexManager();
+        final IndexManager indexManager = new SimpleIndexManager(repoConfig);
 
         final LuceneEventIndex index = new LuceneEventIndex(repoConfig, indexManager, 1, EventReporter.NO_OP);
 
@@ -375,7 +399,7 @@ public class TestLuceneEventIndex {
     @Test(timeout = 5000)
     public void addThenQueryWithEmptyQuery() throws InterruptedException {
         final RepositoryConfiguration repoConfig = createConfig();
-        final IndexManager indexManager = new SimpleIndexManager();
+        final IndexManager indexManager = new SimpleIndexManager(repoConfig);
 
         final LuceneEventIndex index = new LuceneEventIndex(repoConfig, indexManager, 1, EventReporter.NO_OP);
 
@@ -415,7 +439,7 @@ public class TestLuceneEventIndex {
     @Test(timeout = 50000)
     public void testQuerySpecificField() throws InterruptedException {
         final RepositoryConfiguration repoConfig = createConfig();
-        final IndexManager indexManager = new SimpleIndexManager();
+        final IndexManager indexManager = new SimpleIndexManager(repoConfig);
 
         final LuceneEventIndex index = new LuceneEventIndex(repoConfig, indexManager, 2, EventReporter.NO_OP);
 

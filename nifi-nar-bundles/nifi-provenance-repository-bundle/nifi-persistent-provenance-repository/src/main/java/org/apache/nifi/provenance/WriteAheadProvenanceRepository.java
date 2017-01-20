@@ -79,6 +79,7 @@ public class WriteAheadProvenanceRepository implements ProvenanceRepository {
     }
 
     public WriteAheadProvenanceRepository(final RepositoryConfiguration config) {
+        //        config.setMergeSegmentsOnIndexClose(true);
         this.config = config;
     }
 
@@ -92,7 +93,7 @@ public class WriteAheadProvenanceRepository implements ProvenanceRepository {
         final RecordReaderFactory recordReaderFactory = (file, logs, maxChars) -> RecordReaders.newRecordReader(file, logs, maxChars);
         eventStore = new PartitionedWriteAheadEventStore(config, recordWriterFactory, recordReaderFactory, eventReporter);
 
-        final IndexManager indexManager = new SimpleIndexManager();
+        final IndexManager indexManager = new SimpleIndexManager(config);
         eventIndex = new LuceneEventIndex(config, indexManager, eventReporter);
 
         this.eventReporter = eventReporter;

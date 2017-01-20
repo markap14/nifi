@@ -63,7 +63,6 @@ public class RepositoryConfiguration {
         return allowRollover;
     }
 
-
     public int getCompressionBlockBytes() {
         return compressionBlockBytes;
     }

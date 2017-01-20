@@ -238,7 +238,7 @@ public class PersistentProvenanceRepository implements ProvenanceRepository {
         this.maxPartitionMillis = configuration.getMaxEventFileLife(TimeUnit.MILLISECONDS);
         this.maxPartitionBytes = configuration.getMaxEventFileCapacity();
         this.indexConfig = new IndexConfiguration(configuration);
-        this.indexManager = new SimpleIndexManager();
+        this.indexManager = new SimpleIndexManager(configuration);
         this.alwaysSync = configuration.isAlwaysSync();
         this.rolloverCheckMillis = rolloverCheckMillis;
 

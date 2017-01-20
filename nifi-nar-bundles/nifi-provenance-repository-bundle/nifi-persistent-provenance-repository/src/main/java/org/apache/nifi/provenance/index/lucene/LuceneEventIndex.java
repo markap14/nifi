@@ -38,16 +38,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.lucene.document.Document;
+import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.Sort;
-import org.apache.lucene.search.SortField;
-import org.apache.lucene.search.SortField.Type;
 import org.apache.lucene.search.TermQuery;
-import org.apache.lucene.search.TopFieldDocs;
 import org.apache.nifi.authorization.AccessDeniedException;
 import org.apache.nifi.authorization.user.NiFiUser;
 import org.apache.nifi.events.EventReporter;
@@ -62,6 +57,7 @@ import org.apache.nifi.provenance.authorization.EventAuthorizer;
 import org.apache.nifi.provenance.authorization.EventTransformer;
 import org.apache.nifi.provenance.index.EventIndex;
 import org.apache.nifi.provenance.index.EventIndexSearcher;
+import org.apache.nifi.provenance.index.EventIndexWriter;
 import org.apache.nifi.provenance.lineage.ComputeLineageSubmission;
 import org.apache.nifi.provenance.lineage.LineageComputationType;
 import org.apache.nifi.provenance.lucene.IndexManager;
@@ -161,8 +157,8 @@ public class LuceneEventIndex implements EventIndex {
     }
 
     @Override
-    public long getMinimumEventIdToReindex() {
-        return Math.max(0, getMaxEventId() - EventIndexTask.MAX_DOCUMENTS_PER_THREAD * LuceneEventIndex.MAX_DELETE_INDEX_WAIT_SECONDS);
+    public long getMinimumEventIdToReindex(final String partitionName) {
+        return Math.max(0, getMaxEventId(partitionName) - EventIndexTask.MAX_DOCUMENTS_PER_THREAD * LuceneEventIndex.MAX_INDEX_THREADS);
     }
 
     protected IndexDirectoryManager getDirectoryManager() {
@@ -184,8 +180,8 @@ public class LuceneEventIndex implements EventIndex {
         }
     }
 
-    private long getMaxEventId() {
-        final List<File> allDirectories = getDirectoryManager().getDirectories(0L, Long.MAX_VALUE);
+    long getMaxEventId(final String partitionName) {
+        final List<File> allDirectories = getDirectoryManager().getDirectories(0L, Long.MAX_VALUE, partitionName);
         if (allDirectories.isEmpty()) {
             return -1L;
         }
@@ -197,25 +193,19 @@ public class LuceneEventIndex implements EventIndex {
             try {
                 searcher = indexManager.borrowIndexSearcher(directory);
             } catch (final IOException ioe) {
-                logger.warn("Unable to read from Index Directory {}. Will assume that the index is incomplete and re-index all events from this directory", directory);
+                logger.warn("Unable to read from Index Directory {}. Will assume that the index is incomplete and not consider this index when determining max event ID", directory);
                 continue;
             }
 
             try {
-                final Sort sort = new Sort(new SortField(SearchableFields.Identifier.getSearchableFieldName(), Type.LONG, true));
-                final TopFieldDocs topDocs = searcher.getIndexSearcher().search(new MatchAllDocsQuery(), 1, sort);
-                final ScoreDoc[] scoreDocs = topDocs.scoreDocs;
-                if (scoreDocs.length == 0) {
-                    continue;
-                }
-
-                final ScoreDoc scoreDoc = scoreDocs[0];
-                final int docId = scoreDoc.doc;
-                final Document document = searcher.getIndexSearcher().doc(docId);
+                final IndexReader reader = searcher.getIndexSearcher().getIndexReader();
+                final int maxDocId = reader.maxDoc() - 1;
+                final Document document = reader.document(maxDocId);
                 final long eventId = document.getField(SearchableFields.Identifier.getSearchableFieldName()).numericValue().longValue();
+                logger.info("Determined that Max Event ID indexed for Partition {} is approximately {} based on index {}", partitionName, eventId, directory);
                 return eventId;
             } catch (final IOException ioe) {
-                logger.warn("Unable to search Index Directory {}. Will assume that the index is incomplete and re-index all events from this directory", directory);
+                logger.warn("Unable to search Index Directory {}. Will assume that the index is incomplete and not consider this index when determining max event ID", directory, ioe);
             } finally {
                 indexManager.returnIndexSearcher(searcher);
             }
@@ -259,11 +249,24 @@ public class LuceneEventIndex implements EventIndex {
         }
 
         try {
-            indexTask.index(indexableDocs, true, true);
+            indexTask.index(indexableDocs, CommitPreference.PREVENT_COMMIT, true);
         } catch (final IOException ioe) {
             logger.error("Failed to reindex some Provenance Events", ioe);
             eventReporter.reportEvent(Severity.ERROR, EVENT_CATEGORY, "Failed to re-index some Provenance Events. "
                 + "Some Provenance Events may not be available for querying. See logs for more information.");
+        }
+    }
+
+    @Override
+    public void commitChanges(final String partitionName) throws IOException {
+        final Optional<File> indexDir = directoryManager.getActiveIndexDirectory(partitionName);
+        if (indexDir.isPresent()) {
+            final EventIndexWriter eventIndexWriter = indexManager.borrowIndexWriter(indexDir.get());
+            try {
+                eventIndexWriter.commit();
+            } finally {
+                indexManager.returnIndexWriter(eventIndexWriter, false, false);
+            }
         }
     }
 

@@ -114,4 +114,11 @@ public interface RecordReader extends Closeable {
      * @throws IOException if unable to get id of the last event
      */
     long getMaxEventId() throws IOException;
+
+    /**
+     * Returns <code>true</code> if there is more data for hte Record Reader to read, <code>false</code> otherwise.
+     *
+     * @return <code>true</code> if there is more data for hte Record Reader to read, <code>false</code> otherwise.
+     */
+    boolean isData();
 }

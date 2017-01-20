@@ -125,6 +125,7 @@ public class PartitionedWriteAheadEventStore extends PartitionedEventStore {
             futures.add(executor.submit(() -> partition.reindexLatestEvents(eventIndex)));
         }
 
+        executor.shutdown();
         for (final Future<?> future : futures) {
             try {
                 future.get();

@@ -18,6 +18,7 @@
 package org.apache.nifi.provenance.index;
 
 import java.io.Closeable;
+import java.io.IOException;
 import java.util.Map;
 
 import org.apache.nifi.authorization.user.NiFiUser;
@@ -65,5 +66,7 @@ public interface EventIndex extends Closeable {
 
     QuerySubmission retrieveQuerySubmission(String queryIdentifier, NiFiUser user);
 
-    long getMinimumEventIdToReindex();
+    long getMinimumEventIdToReindex(String partitionName);
+
+    void commitChanges(String partitionName) throws IOException;
 }

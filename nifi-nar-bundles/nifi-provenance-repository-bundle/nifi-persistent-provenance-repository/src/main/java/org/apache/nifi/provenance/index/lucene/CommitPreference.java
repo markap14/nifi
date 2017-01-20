@@ -15,30 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.nifi.provenance.index;
+package org.apache.nifi.provenance.index.lucene;
 
-import java.io.Closeable;
-import java.io.File;
-import java.io.IOException;
-import java.util.List;
-
-import org.apache.lucene.document.Document;
-import org.apache.lucene.index.IndexWriter;
-
-public interface EventIndexWriter extends Closeable {
-
-    boolean index(Document document, int commitThreshold) throws IOException;
-
-    boolean index(List<Document> documents, int commitThreshold) throws IOException;
-
-    File getDirectory();
-
-    long commit() throws IOException;
-
-    int getEventsIndexedSinceCommit();
-
-    long getEventsIndexed();
-
-    IndexWriter getIndexWriter();
-
+public enum CommitPreference {
+    FORCE_COMMIT,
+    PREVENT_COMMIT,
+    NO_PREFERENCE;
 }

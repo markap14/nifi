@@ -32,6 +32,10 @@ import java.util.Optional;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -50,7 +54,9 @@ import org.apache.nifi.provenance.serialization.StorageSummary;
 import org.apache.nifi.provenance.store.iterator.EventIterator;
 import org.apache.nifi.provenance.store.iterator.SelectiveRecordReaderEventIterator;
 import org.apache.nifi.provenance.store.iterator.SequentialRecordReaderEventIterator;
+import org.apache.nifi.provenance.toc.TocUtil;
 import org.apache.nifi.provenance.util.DirectoryUtils;
+import org.apache.nifi.provenance.util.NamedThreadFactory;
 import org.apache.nifi.util.FormatUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -113,7 +119,7 @@ public class WriteAheadStorePartition implements EventStorePartition {
         // the Largest Event ID to the smallest.
         long maxEventId = -1L;
         final List<File> fileList = Arrays.asList(files);
-        Collections.sort(fileList, Collections.reverseOrder(DirectoryUtils.SMALLEST_ID_FIRST));
+        Collections.sort(fileList, DirectoryUtils.LARGEST_ID_FIRST);
         for (final File file : fileList) {
             try {
                 final RecordReader reader = recordReaderFactory.newRecordReader(file, Collections.emptyList(), Integer.MAX_VALUE);
@@ -135,6 +141,7 @@ public class WriteAheadStorePartition implements EventStorePartition {
         }
 
         this.maxEventId.set(maxEventId);
+
 
         // file and re-queue the file for compression. Saw the following error on startup:
         /*
@@ -287,7 +294,7 @@ public class WriteAheadStorePartition implements EventStorePartition {
                 minEventIdToPathMap.put(nextEventId, updatedEventFile);
             }
 
-            if (lease != null && lease.getWriter() != null) {
+            if (config.isCompressOnRollover() && lease != null && lease.getWriter() != null) {
                 boolean offered = false;
                 while (!offered && !closed) {
                     try {
@@ -529,6 +536,11 @@ public class WriteAheadStorePartition implements EventStorePartition {
             return false;
         }
 
+        final File tocFile = TocUtil.getTocFile(file);
+        if (tocFile.exists() && !tocFile.delete()) {
+            logger.warn("Failed to remove Provenance Table-of-Contents file {}; this file should be cleaned up manually", tocFile);
+        }
+
         return true;
     }
 
@@ -538,10 +550,13 @@ public class WriteAheadStorePartition implements EventStorePartition {
             return;
         }
 
-        final long minEventIdToReindex = eventIndex.getMinimumEventIdToReindex();
+        final long minEventIdToReindex = eventIndex.getMinimumEventIdToReindex(partitionName);
+        final long maxEventId = getMaxEventId();
         final long eventsToReindex = getMaxEventId() - minEventIdToReindex;
 
-        logger.info("Re-indexing up to the last {} events for {} to ensure that Event Index is accurate", eventsToReindex, partitionDirectory);
+        logger.info("The last Provenance Event indexed for partition {} is {}, but the last event written to partition has ID {}. "
+            + "Re-indexing up to the last {} events to ensure that the Event Index is accurate and up-to-date",
+            partitionName, minEventIdToReindex, maxEventId, eventsToReindex, partitionDirectory);
 
         // Find the first event file that we care about.
         int firstEventFileIndex = 0;
@@ -557,60 +572,93 @@ public class WriteAheadStorePartition implements EventStorePartition {
         // Create a subList that contains the files of interest
         final List<File> eventFilesToReindex = eventFiles.subList(firstEventFileIndex, eventFiles.size());
 
+        final ExecutorService executor = Executors.newFixedThreadPool(Math.min(4, eventFilesToReindex.size()), new NamedThreadFactory("Re-Index Provenance Events", true));
+        final List<Future<?>> futures = new ArrayList<>(eventFilesToReindex.size());
+        final AtomicLong reindexedCount = new AtomicLong(0L);
+
         // Re-Index the last bunch of events.
         // We don't use an Event Iterator here because it's possible that one of the event files could be corrupt (for example, if NiFi does while
         // writing to the file, a record may be incomplete). We don't want to prevent us from moving on and continuing to index the rest of the
         // un-indexed events. So we just use a List of files and create a reader for each one.
         final long start = System.nanoTime();
-        int reindexedCount = 0;
+        int fileCount = 0;
         for (final File eventFile : eventFilesToReindex) {
-            if (reindexedCount >= eventsToReindex) {
-                break;
+            final boolean skipToEvent;
+            if (fileCount++ == 0) {
+                skipToEvent = true;
+            } else {
+                skipToEvent = false;
             }
 
-            try {
-                try (final RecordReader recordReader = recordReaderFactory.newRecordReader(eventFile, Collections.emptyList(), Integer.MAX_VALUE)) {
-                    if (reindexedCount == 0) {
-                        final Optional<ProvenanceEventRecord> eventOption = recordReader.skipToEvent(minEventIdToReindex);
-                        if (!eventOption.isPresent()) {
-                            continue;
-                        }
-                    }
+            final Runnable reindexTask = new Runnable() {
+                @Override
+                public void run() {
+                    final Map<ProvenanceEventRecord, StorageSummary> storageMap = new HashMap<>(1000);
 
-                    final Map<ProvenanceEventRecord, StorageSummary> storageMap = new HashMap<>();
-
-                    StandardProvenanceEventRecord event = null;
-                    while (true) {
-                        final long startBytesConsumed = recordReader.getBytesConsumed();
-
-                        event = recordReader.nextRecord();
-                        if (event == null) {
-                            eventIndex.reindexEvents(storageMap);
-                            reindexedCount += storageMap.size();
-                            break; // stop reading from this file
-                        } else {
-                            final long eventSize = recordReader.getBytesConsumed() - startBytesConsumed;
-                            storageMap.put(event, new StorageSummary(event.getEventId(), eventFile.getName(), partitionName, recordReader.getBlockIndex(), eventSize, 0L));
-
-                            if (storageMap.size() == 10000) {
-                                eventIndex.reindexEvents(storageMap);
-                                reindexedCount += storageMap.size();
-                                storageMap.clear();
+                    try (final RecordReader recordReader = recordReaderFactory.newRecordReader(eventFile, Collections.emptyList(), Integer.MAX_VALUE)) {
+                        if (skipToEvent) {
+                            final Optional<ProvenanceEventRecord> eventOption = recordReader.skipToEvent(minEventIdToReindex);
+                            if (!eventOption.isPresent()) {
+                                return;
                             }
                         }
+
+                        StandardProvenanceEventRecord event = null;
+                        while (true) {
+                            final long startBytesConsumed = recordReader.getBytesConsumed();
+
+                            event = recordReader.nextRecord();
+                            if (event == null) {
+                                eventIndex.reindexEvents(storageMap);
+                                reindexedCount.addAndGet(storageMap.size());
+                                storageMap.clear();
+                                break; // stop reading from this file
+                            } else {
+                                final long eventSize = recordReader.getBytesConsumed() - startBytesConsumed;
+                                storageMap.put(event, new StorageSummary(event.getEventId(), eventFile.getName(), partitionName, recordReader.getBlockIndex(), eventSize, 0L));
+
+                                if (storageMap.size() == 1000) {
+                                    eventIndex.reindexEvents(storageMap);
+                                    reindexedCount.addAndGet(storageMap.size());
+                                    storageMap.clear();
+                                }
+                            }
+                        }
+                    } catch (final EOFException eof) {
+                        // Ran out of data. Continue on.
+                        logger.warn("Failed to find event with ID {} in Event File {} due to {}", minEventIdToReindex, eventFile, eof.toString());
+                    } catch (final Exception e) {
+                        logger.error("Failed to index Provenance Events found in {}", eventFile, e);
                     }
                 }
-            } catch (final EOFException eof) {
-                // Ran out of data. Continue on.
-            } catch (final Exception e) {
-                logger.error("Failed to index Provenance Events found in {}", eventFile, e);
+            };
+
+            futures.add(executor.submit(reindexTask));
+        }
+
+        for (final Future<?> future : futures) {
+            try {
+                future.get();
+            } catch (final ExecutionException ee) {
+                logger.error("Failed to re-index some Provenance events. These events may not be query-able via the Provenance interface", ee.getCause());
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+                logger.error("Interrupted while waiting for Provenance events to be re-indexed", e);
+                break;
             }
+        }
+
+        try {
+            eventIndex.commitChanges(partitionName);
+        } catch (final IOException e) {
+            logger.error("Failed to re-index Provenance Events for partition " + partitionName, e);
         }
 
         final long millis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
         final long seconds = millis / 1000L;
         final long millisRemainder = millis % 1000L;
-        logger.info("Finished re-indexing {} events for {} in {}.{} seconds", reindexedCount, partitionDirectory, seconds, millisRemainder);
+        logger.info("Finished re-indexing {} events across {} files for {} in {}.{} seconds",
+            reindexedCount.get(), eventFilesToReindex.size(), partitionDirectory, seconds, millisRemainder);
     }
 
     @Override

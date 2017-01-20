@@ -20,10 +20,12 @@ package org.apache.nifi.provenance.index.lucene;
 import java.io.File;
 import java.io.FileFilter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
@@ -71,7 +73,7 @@ public class IndexDirectoryManager {
 
                 final long startTime = DirectoryUtils.getIndexTimestamp(indexDir);
                 final List<IndexLocation> dirsForTimestamp = indexLocationByTimestamp.computeIfAbsent(startTime, t -> new ArrayList<>());
-                final IndexLocation indexLoc = new IndexLocation(indexDir, partitionName, repoConfig.getDesiredIndexSize());
+                final IndexLocation indexLoc = new IndexLocation(indexDir, startTime, partitionName, repoConfig.getDesiredIndexSize());
                 dirsForTimestamp.add(indexLoc);
 
                 final Tuple<Long, IndexLocation> tuple = latestIndexByStorageDir.get(storageDir);
@@ -95,7 +97,8 @@ public class IndexDirectoryManager {
             final Map.Entry<Long, List<IndexLocation>> entry = itr.next();
             final List<IndexLocation> locations = entry.getValue();
 
-            final IndexLocation locToRemove = new IndexLocation(directory, directory.getName(), repoConfig.getDesiredIndexSize());
+            final IndexLocation locToRemove = new IndexLocation(directory, DirectoryUtils.getIndexTimestamp(directory),
+                directory.getName(), repoConfig.getDesiredIndexSize());
             locations.remove(locToRemove);
             if (locations.isEmpty()) {
                 itr.remove();
@@ -113,17 +116,17 @@ public class IndexDirectoryManager {
 
         // An index cannot be expired if it is the latest index in the storage directory. As a result, we need to
         // separate the indexes by Storage Directory so that we can easily determine if this is the case.
-        final Map<String, List<Tuple<Long, IndexLocation>>> startTimeWithFileByStorageDirectory = flattenDirectoriesByTimestamp().stream()
-            .collect(Collectors.groupingBy(tuple -> tuple.getValue().getPartitionName()));
+        final Map<String, List<IndexLocation>> startTimeWithFileByStorageDirectory = flattenDirectoriesByTimestamp().stream()
+            .collect(Collectors.groupingBy(indexLoc -> indexLoc.getPartitionName()));
 
         // Scan through the index directories and the associated index event start time.
         // If looking at index N, we can determine the index end time by assuming that it is the same as the
         // start time of index N+1. So we determine the time range of each index and select an index only if
         // its start time is before the given timestamp and its end time is <= the given timestamp.
-        for (final List<Tuple<Long, IndexLocation>> startTimeWithFile : startTimeWithFileByStorageDirectory.values()) {
+        for (final List<IndexLocation> startTimeWithFile : startTimeWithFileByStorageDirectory.values()) {
             for (int i = 0; i < startTimeWithFile.size(); i++) {
-                final Tuple<Long, IndexLocation> tuple = startTimeWithFile.get(i);
-                final Long indexStartTime = tuple.getKey();
+                final IndexLocation indexLoc = startTimeWithFile.get(i);
+                final Long indexStartTime = indexLoc.getIndexStartTimestamp();
                 if (indexStartTime > timestamp) {
                     // If the first timestamp in the index is later than the desired timestamp,
                     // then we are done. We can do this because the list is ordered by monotonically
@@ -132,10 +135,10 @@ public class IndexDirectoryManager {
                 }
 
                 if (i < startTimeWithFile.size() - 1) {
-                    final Tuple<Long, IndexLocation> nextTuple = startTimeWithFile.get(i + 1);
-                    final Long indexEndTime = nextTuple.getKey();
+                    final IndexLocation nextLocation = startTimeWithFile.get(i + 1);
+                    final Long indexEndTime = nextLocation.getIndexStartTimestamp();
                     if (indexEndTime <= timestamp) {
-                        selected.add(tuple.getValue().getIndexDirectory());
+                        selected.add(nextLocation.getIndexDirectory());
                     }
                 }
             }
@@ -152,12 +155,11 @@ public class IndexDirectoryManager {
      *
      * @return a List of Tuple&lt;Long, File&gt; where the key is the timestamp of the first event in the corresponding File.
      */
-    private List<Tuple<Long, IndexLocation>> flattenDirectoriesByTimestamp() {
-        final List<Tuple<Long, IndexLocation>> startTimeWithFile = new ArrayList<>();
+    private List<IndexLocation> flattenDirectoriesByTimestamp() {
+        final List<IndexLocation> startTimeWithFile = new ArrayList<>();
         for (final Map.Entry<Long, List<IndexLocation>> entry : indexLocationByTimestamp.entrySet()) {
-            final Long timestamp = entry.getKey();
             for (final IndexLocation indexLoc : entry.getValue()) {
-                startTimeWithFile.add(new Tuple<>(timestamp, indexLoc));
+                startTimeWithFile.add(indexLoc);
             }
         }
 
@@ -169,31 +171,66 @@ public class IndexDirectoryManager {
 
         // An index cannot be expired if it is the latest index in the partition. As a result, we need to
         // separate the indexes by partition so that we can easily determine if this is the case.
-        final Map<String, List<Tuple<Long, IndexLocation>>> startTimeWithFileByStorageDirectory = flattenDirectoriesByTimestamp().stream()
-            .collect(Collectors.groupingBy(tuple -> tuple.getValue().getPartitionName()));
+        final Map<String, List<IndexLocation>> startTimeWithFileByStorageDirectory = flattenDirectoriesByTimestamp().stream()
+            .collect(Collectors.groupingBy(indexLoc -> indexLoc.getPartitionName()));
 
-        // TODO: This is really complicated. Document it. Or, better yet, refactor it so that it's cleaner!
-        for (final List<Tuple<Long, IndexLocation>> startTimeWithFile : startTimeWithFileByStorageDirectory.values()) {
-            for (int i = 0; i < startTimeWithFile.size(); i++) {
-                final Tuple<Long, IndexLocation> tuple = startTimeWithFile.get(i);
-                final Long start = tuple.getKey();
-                if (endTime != null && start > endTime) {
+        for (final List<IndexLocation> locationList : startTimeWithFileByStorageDirectory.values()) {
+            selected.addAll(getDirectories(startTime, endTime, locationList));
+        }
+
+        return selected;
+    }
+
+    public synchronized List<File> getDirectories(final Long startTime, final Long endTime, final String partitionName) {
+        // An index cannot be expired if it is the latest index in the partition. As a result, we need to
+        // separate the indexes by partition so that we can easily determine if this is the case.
+        final Map<String, List<IndexLocation>> startTimeWithFileByStorageDirectory = flattenDirectoriesByTimestamp().stream()
+            .collect(Collectors.groupingBy(indexLoc -> indexLoc.getPartitionName()));
+
+        final List<IndexLocation> indexLocations = startTimeWithFileByStorageDirectory.get(partitionName);
+        if (indexLocations == null) {
+            return Collections.emptyList();
+        }
+
+        return getDirectories(startTime, endTime, indexLocations);
+    }
+
+    protected static List<File> getDirectories(final Long startTime, final Long endTime, final List<IndexLocation> locations) {
+        final List<File> selected = new ArrayList<>();
+
+        int overlapCount = 0;
+        for (int i = 0; i < locations.size(); i++) {
+            final IndexLocation indexLoc = locations.get(i);
+            final Long indexStartTimestamp = indexLoc.getIndexStartTimestamp();
+            if (endTime != null && indexStartTimestamp > endTime) {
+                if (overlapCount == 0) {
+                    // Because of how we handle index timestamps and the multi-threading, it is possible
+                    // the we could have some overlap where Thread T1 gets an Event with start time 1,000
+                    // for instance. Then T2 gets and Event with start time 1,002 and ends up creating a
+                    // new index directory with a start time of 1,002. Then T1 could end up writing events
+                    // with timestamp 1,000 to an index with a 'start time' of 1,002. Because of this,
+                    // the index start times are approximate. To address this, we include one extra Index
+                    // Directory based on start time, so that if we want index directories for Time Range
+                    // 1,000 - 1,001 and have indexes 999 and 1,002 we will include the 999 and the 'overlapping'
+                    // directory of 1,002 since it could potentially have an event with overlapping timestamp.
+                    overlapCount++;
+                } else {
                     continue;
                 }
+            }
 
-                if (startTime != null) {
-                    final Long end;
-                    if (i < startTimeWithFile.size() - 1) {
-                        final Tuple<Long, IndexLocation> nextTuple = startTimeWithFile.get(i + 1);
-                        end = nextTuple.getKey();
-                        if (end < startTime) {
-                            continue;
-                        }
+            if (startTime != null) {
+                final Long indexEndTimestamp;
+                if (i < locations.size() - 1) {
+                    final IndexLocation nextIndexLoc = locations.get(i + 1);
+                    indexEndTimestamp = nextIndexLoc.getIndexStartTimestamp();
+                    if (indexEndTimestamp < startTime) {
+                        continue;
                     }
                 }
-
-                selected.add(tuple.getValue().getIndexDirectory());
             }
+
+            selected.add(indexLoc.getIndexDirectory());
         }
 
         return selected;
@@ -222,7 +259,7 @@ public class IndexDirectoryManager {
                 }
 
                 if (partitionName == null) {
-                    logger.info("Size of Provenance Index at {} is now {}. However, was unable to find the appropriate Active Index to roll over.", indexDir, indexSize);
+                    logger.debug("Size of Provenance Index at {} is now {}. However, was unable to find the appropriate Active Index to roll over.", indexDir, indexSize);
                 } else {
                     logger.info("Size of Provenance Index at {} is now {}. Will close this index and roll over to a new one.", indexDir, indexSize);
                     activeIndices.remove(partitionName);
@@ -233,6 +270,17 @@ public class IndexDirectoryManager {
         }
 
         return false;
+    }
+
+    public Optional<File> getActiveIndexDirectory(final String partitionName) {
+        synchronized (this) {
+            final IndexLocation indexLocation = activeIndices.get(partitionName);
+            if (indexLocation == null) {
+                return Optional.empty();
+            }
+
+            return Optional.of(indexLocation.getIndexDirectory());
+        }
     }
 
     private long getSize(final File indexDir) {
@@ -257,11 +305,6 @@ public class IndexDirectoryManager {
         return sum;
     }
 
-    public synchronized File getActiveIndexDirectory(final String partitionName) {
-        final IndexLocation activeIndexLocation = activeIndices.get(partitionName);
-        return activeIndexLocation == null ? null : activeIndexLocation.getIndexDirectory();
-    }
-
     /**
      * Provides the File that is the directory for the index that should be written to. If there is no index yet
      * to be written to, or if the index has reached its max size, a new one will be created. The given {@code earliestTimestamp}
@@ -275,7 +318,7 @@ public class IndexDirectoryManager {
     public synchronized File getWritableIndexingDirectory(final long earliestTimestamp, final String partitionName) {
         IndexLocation indexLoc = activeIndices.get(partitionName);
         if (indexLoc == null || indexLoc.isIndexFull()) {
-            indexLoc = new IndexLocation(createIndex(earliestTimestamp, partitionName), partitionName, repoConfig.getDesiredIndexSize());
+            indexLoc = new IndexLocation(createIndex(earliestTimestamp, partitionName), earliestTimestamp, partitionName, repoConfig.getDesiredIndexSize());
             logger.debug("Created new Index Directory {}", indexLoc);
 
             indexLocationByTimestamp.computeIfAbsent(earliestTimestamp, t -> new ArrayList<>()).add(indexLoc);

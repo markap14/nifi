@@ -17,7 +17,9 @@
 
 package org.apache.nifi.provenance.store.iterator;
 
+import java.io.EOFException;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Iterator;
@@ -80,18 +82,31 @@ public class SequentialRecordReaderEventIterator implements EventIterator {
     }
 
     private boolean rotateReader() throws IOException {
-        if (!fileIterator.hasNext()) {
-            return false;
-        }
-
         final boolean readerExists = (reader != null);
         if (readerExists) {
             reader.close();
         }
 
-        final File eventFile = fileIterator.next();
-        reader = readerFactory.newRecordReader(eventFile, Collections.emptyList(), maxAttributeChars);
-        if (!readerExists) {
+        boolean multipleReadersOpened = false;
+        while (true) {
+            if (!fileIterator.hasNext()) {
+                return false;
+            }
+
+            final File eventFile = fileIterator.next();
+            try {
+                reader = readerFactory.newRecordReader(eventFile, Collections.emptyList(), maxAttributeChars);
+                break;
+            } catch (final FileNotFoundException | EOFException e) {
+                multipleReadersOpened = true;
+                // File may have aged off or was not fully written. Move to next file
+                continue;
+            }
+        }
+
+        // If this is the first file in our list, the event of interest may not be the first event,
+        // so skip to the event that we want.
+        if (!readerExists && !multipleReadersOpened) {
             reader.skipToEvent(minimumEventId);
         }
 

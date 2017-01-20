@@ -26,18 +26,24 @@ public class IndexLocation {
     private static final long SIZE_CHECK_MILLIS = TimeUnit.SECONDS.toMillis(30L);
 
     private final File indexDirectory;
+    private final long indexStartTimestamp;
     private final String partitionName;
     private final long desiredIndexSize;
     private volatile long lastSizeCheckTime = System.currentTimeMillis();
 
-    public IndexLocation(final File indexDirectory, final String partitionName, final long desiredIndexSize) {
+    public IndexLocation(final File indexDirectory, final long indexStartTimestamp, final String partitionName, final long desiredIndexSize) {
         this.indexDirectory = indexDirectory;
+        this.indexStartTimestamp = indexStartTimestamp;
         this.partitionName = partitionName;
         this.desiredIndexSize = desiredIndexSize;
     }
 
     public File getIndexDirectory() {
         return indexDirectory;
+    }
+
+    public long getIndexStartTimestamp() {
+        return indexStartTimestamp;
     }
 
     public String getPartitionName() {
@@ -75,5 +81,10 @@ public class IndexLocation {
 
         final IndexLocation other = (IndexLocation) obj;
         return indexDirectory.equals(other.getIndexDirectory());
+    }
+
+    @Override
+    public String toString() {
+        return "IndexLocation[directory=" + indexDirectory + "]";
     }
 }

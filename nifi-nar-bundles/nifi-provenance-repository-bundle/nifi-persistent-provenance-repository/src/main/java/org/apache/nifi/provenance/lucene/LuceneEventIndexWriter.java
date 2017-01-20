@@ -22,7 +22,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.lucene.document.Document;
@@ -35,7 +35,8 @@ public class LuceneEventIndexWriter implements EventIndexWriter {
     private final long maxCommitNanos;
 
     private final AtomicReference<CommitStats> commitStats = new AtomicReference<>();
-    private final AtomicInteger totalIndexed = new AtomicInteger(0);
+    private final AtomicLong totalIndexed = new AtomicLong(0L);
+    private final AtomicLong lastCommitTotalIndexed = new AtomicLong(0L);
 
     public LuceneEventIndexWriter(final IndexWriter indexWriter, final File directory) {
         this(indexWriter, directory, TimeUnit.SECONDS.toNanos(30L));
@@ -94,9 +95,13 @@ public class LuceneEventIndexWriter implements EventIndexWriter {
     }
 
     @Override
-    public void commit() throws IOException {
+    public long commit() throws IOException {
+        final long lastCommitCount = lastCommitTotalIndexed.get();
+        final long currentCommitCount = totalIndexed.get();
         indexWriter.commit();
         commitStats.set(new CommitStats(0, System.nanoTime() + maxCommitNanos));
+        lastCommitTotalIndexed.set(currentCommitCount);
+        return currentCommitCount - lastCommitCount;
     }
 
     @Override
@@ -105,13 +110,18 @@ public class LuceneEventIndexWriter implements EventIndexWriter {
     }
 
     @Override
-    public int getEventsIndexed() {
+    public long getEventsIndexed() {
         return totalIndexed.get();
     }
 
     @Override
     public IndexWriter getIndexWriter() {
         return indexWriter;
+    }
+
+    @Override
+    public String toString() {
+        return "LuceneEventIndexWriter[dir=" + directory + "]";
     }
 
     private static class CommitStats {

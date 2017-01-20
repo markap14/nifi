@@ -125,7 +125,7 @@ public class StandardQueryResult implements QueryResult, ProgressiveResult {
     public boolean isFinished() {
         readLock.lock();
         try {
-            return numCompletedSteps >= numSteps || canceled;
+            return numCompletedSteps >= numSteps || canceled || matchingRecords.size() >= query.getMaxResults();
         } finally {
             readLock.unlock();
         }
@@ -152,11 +152,16 @@ public class StandardQueryResult implements QueryResult, ProgressiveResult {
         }
     }
 
+    @Override
     public void update(final Collection<ProvenanceEventRecord> newEvents, final long totalHits) {
         boolean queryComplete = false;
 
         writeLock.lock();
         try {
+            if (isFinished()) {
+                return;
+            }
+
             this.matchingRecords.addAll(newEvents);
 
             // If we've added more records than the query's max, then remove the trailing elements.
@@ -177,11 +182,17 @@ public class StandardQueryResult implements QueryResult, ProgressiveResult {
             numCompletedSteps++;
             updateExpiration();
 
-            if (numCompletedSteps >= numSteps) {
+            if (numCompletedSteps >= numSteps || this.matchingRecords.size() >= query.getMaxResults()) {
                 final long searchNanos = System.nanoTime() - creationNanos;
                 queryTime = TimeUnit.MILLISECONDS.convert(searchNanos, TimeUnit.NANOSECONDS);
                 queryComplete = true;
-                logger.info("Completed {} comprised of {} steps in {} millis", query, numSteps, queryTime);
+
+                if (numCompletedSteps >= numSteps) {
+                    logger.info("Completed {} comprised of {} steps in {} millis", query, numSteps, queryTime);
+                } else {
+                    logger.info("Completed {} comprised of {} steps in {} millis (only completed {} steps because the maximum number of results was reached)",
+                        query, numSteps, queryTime, numCompletedSteps);
+                }
             }
         } finally {
             writeLock.unlock();

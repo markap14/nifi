@@ -108,8 +108,6 @@ public class QueryTask implements Runnable {
             logger.debug("Borrowing index searcher for {} took {} ms", indexDir, borrowMillis);
             final long startNanos = System.nanoTime();
 
-            final IndexReader indexReader = searcher.getIndexSearcher().getIndexReader();
-
             // If max number of results are retrieved, do not bother querying lucene
             if (queryResult.getTotalHitCount() >= maxResults) {
                 logger.debug("Will not query lucene index {} because maximum results have already been obtained", indexDir);
@@ -123,6 +121,7 @@ public class QueryTask implements Runnable {
             }
 
             // Query lucene
+            final IndexReader indexReader = searcher.getIndexSearcher().getIndexReader();
             final TopDocs topDocs;
             try {
                 topDocs = searcher.getIndexSearcher().search(query, maxResults);

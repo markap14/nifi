@@ -76,4 +76,9 @@ public class EmptyRecordReader implements RecordReader {
     public Optional<ProvenanceEventRecord> skipToEvent(long eventId) throws IOException {
         return Optional.empty();
     }
+
+    @Override
+    public boolean isData() {
+        return false;
+    }
 }

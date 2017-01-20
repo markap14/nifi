@@ -42,7 +42,7 @@ public class EventIndexTask implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(EventIndexTask.class);
     private static final String EVENT_CATEGORY = "Provenance Repository";
     public static final int MAX_DOCUMENTS_PER_THREAD = 100;
-    public static final int DEFAULT_MAX_EVENTS_PER_COMMIT = 500_000;
+    public static final int DEFAULT_MAX_EVENTS_PER_COMMIT = 1_000_000;
 
     private final BlockingQueue<IndexableDocument> documentQueue;
     private final IndexManager indexManager;
@@ -53,11 +53,11 @@ public class EventIndexTask implements Runnable {
     private final int commitThreshold;
 
     public EventIndexTask(final BlockingQueue<IndexableDocument> documentQueue, final RepositoryConfiguration repoConfig, final IndexManager indexManager,
-        final IndexDirectoryManager directoryManager, final int maxEventPerCommit, final EventReporter eventReporter) {
+        final IndexDirectoryManager directoryManager, final int maxEventsPerCommit, final EventReporter eventReporter) {
         this.documentQueue = documentQueue;
         this.indexManager = indexManager;
         this.directoryManager = directoryManager;
-        this.commitThreshold = maxEventPerCommit;
+        this.commitThreshold = maxEventsPerCommit;
         this.eventReporter = eventReporter;
     }
 
@@ -93,17 +93,8 @@ public class EventIndexTask implements Runnable {
                     continue;
                 }
 
-                // Write documents to the currently active index. If we fail to write the documents, then
-                // we will re-queue all of the documents into the error queue.
-                // We use a separate error queue instead of adding the events back to the documentQueue because
-                // if we use the document queue, we could have a condition where no thread is able to index and
-                // attempts to add documents back to the document queue. However, if the document queue is full,
-                // then all threads would be blocked trying to add the document back and so nothing would ever
-                // get indexed, which would result in a deadlock. Instead, we use a errorQueue that is local
-                // to only this "task." I.e., it is not shared by other threads. And since we always pull from
-                // the error queue first, we know that we can push events back onto the error queue if we fail
-                // to index the events.
-                index(toIndex, false, false);
+                // Write documents to the currently active index.
+                index(toIndex, CommitPreference.NO_PREFERENCE, false);
             } catch (final Exception e) {
                 logger.error("Failed to index Provenance Events", e);
                 eventReporter.reportEvent(Severity.ERROR, EVENT_CATEGORY, "Failed to index Provenance Events. See logs for more information.");
@@ -124,7 +115,7 @@ public class EventIndexTask implements Runnable {
         }
     }
 
-    void index(final List<IndexableDocument> toIndex, final boolean forceCommit, final boolean removeDocsInRange) throws IOException {
+    void index(final List<IndexableDocument> toIndex, final CommitPreference commitPreference, final boolean removeDocsInRange) throws IOException {
         if (toIndex.isEmpty()) {
             return;
         }
@@ -133,11 +124,11 @@ public class EventIndexTask implements Runnable {
         for (final Map.Entry<File, List<IndexableDocument>> entry : docsByIndexDir.entrySet()) {
             final File indexingDirectory = entry.getKey();
             final List<IndexableDocument> documentsForIndex = entry.getValue();
-            index(documentsForIndex, indexingDirectory, forceCommit, removeDocsInRange);
+            index(documentsForIndex, indexingDirectory, commitPreference, removeDocsInRange);
         }
     }
 
-    private void index(final List<IndexableDocument> toIndex, final File indexDirectory, final boolean forceCommit, final boolean removeDocsInRange) throws IOException {
+    private void index(final List<IndexableDocument> toIndex, final File indexDirectory, final CommitPreference commitPreference, final boolean removeDocsInRange) throws IOException {
         if (toIndex.isEmpty()) {
             return;
         }
@@ -148,6 +139,7 @@ public class EventIndexTask implements Runnable {
             .collect(Collectors.toList());
 
         boolean closeIndexWriter = false;
+        boolean requestCommit = false;
         final EventIndexWriter indexWriter = indexManager.borrowIndexWriter(indexDirectory);
         try {
             // If removeDocsInRange is true, we need to remove all documents in the Lucene Index that are between the min and max
@@ -173,23 +165,66 @@ public class EventIndexTask implements Runnable {
             }
 
             // Perform the actual indexing.
-            final boolean commitIndex = indexWriter.index(documents, commitThreshold);
+            boolean commitIndex = indexWriter.index(documents, commitThreshold);
 
-            if (forceCommit || commitIndex) {
+            final boolean commit;
+            if (CommitPreference.FORCE_COMMIT == commitPreference) {
+                commit = true;
+            } else if (CommitPreference.PREVENT_COMMIT == commitPreference) {
+                commit = false;
+            } else {
+                // If we don't need to commit index based on what index writer tells us, we will still want
+                // to commit the index if it's assigned to a partition and this is no longer the active index
+                // for that partition. This prevents the following case:
+                // Thread T1: pulls events from queue
+                //            Maps events to Index Directory D1
+                // Thread T2: pulls events from queue
+                //            Maps events to Index Directory D1, the active index for Partition P1.
+                //            Writes events to D1.
+                //            Commits Index Writer for D1.
+                //            Closes Index Writer for D1.
+                // Thread T1: Writes events to D1.
+                //            Determines that Index Writer for D1 does not need to be committed or closed.
+                //
+                // In the case outlined above, we would potentially lose those events from the index! To avoid this,
+                // we simply decide to commit the index if this writer is no longer the active writer for the index.
+                if (!commitIndex) {
+                    final Optional<String> partitionNameOption = toIndex.get(0).getPersistenceLocation().getPartitionName();
+                    if (partitionNameOption.isPresent()) {
+                        final String partitionName = partitionNameOption.get();
+                        final Optional<File> activeIndexDirOption = directoryManager.getActiveIndexDirectory(partitionName);
+                        if (activeIndexDirOption.isPresent() && !activeIndexDirOption.get().getAbsolutePath().equals(indexDirectory.getAbsolutePath())) {
+                            requestCommit = true;
+                            closeIndexWriter = true;
+                        }
+                    }
+                }
+
+                commit = commitIndex;
+            }
+
+            if (commit) {
                 commit(indexWriter);
                 closeIndexWriter = directoryManager.onIndexCommitted(indexDirectory);
-                logger.debug("Committed index {}", indexDirectory);
+
+                if (logger.isDebugEnabled()) {
+                    final long maxId = documents.stream()
+                        .mapToLong(doc -> doc.getField(SearchableFields.Identifier.getSearchableFieldName()).numericValue().longValue())
+                        .max()
+                        .orElse(-1L);
+                    logger.debug("Committed index {} after writing a max Event ID of {}", indexDirectory, maxId);
+                }
             }
         } finally {
-            indexManager.returnIndexWriter(indexWriter, false, closeIndexWriter);
+            indexManager.returnIndexWriter(indexWriter, requestCommit, closeIndexWriter);
         }
     }
 
 
     protected void commit(final EventIndexWriter indexWriter) throws IOException {
         final long start = System.nanoTime();
-        indexWriter.commit();
+        final long approximateCommitCount = indexWriter.commit();
         final long millis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
-        logger.debug("Successfully committed Index Writer {} in {} millis", indexWriter, millis);
+        logger.debug("Successfully committed approximately {} Events to {} in {} millis", approximateCommitCount, indexWriter, millis);
     }
 }

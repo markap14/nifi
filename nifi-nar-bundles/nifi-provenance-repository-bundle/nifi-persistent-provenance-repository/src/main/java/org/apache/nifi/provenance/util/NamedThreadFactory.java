@@ -26,15 +26,22 @@ public class NamedThreadFactory implements ThreadFactory {
     private final AtomicInteger counter = new AtomicInteger(0);
     private final ThreadFactory defaultThreadFactory = Executors.defaultThreadFactory();
     private final String namePrefix;
+    private final boolean daemon;
 
     public NamedThreadFactory(final String namePrefix) {
+        this(namePrefix, false);
+    }
+
+    public NamedThreadFactory(final String namePrefix, final boolean daemon) {
         this.namePrefix = namePrefix;
+        this.daemon = daemon;
     }
 
     @Override
     public Thread newThread(final Runnable r) {
         final Thread thread = defaultThreadFactory.newThread(r);
         thread.setName(namePrefix + "-" + counter.incrementAndGet());
+        thread.setDaemon(daemon);
         return thread;
     }
 }

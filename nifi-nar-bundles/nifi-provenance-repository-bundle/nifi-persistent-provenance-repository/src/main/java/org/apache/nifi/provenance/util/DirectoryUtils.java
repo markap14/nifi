@@ -33,8 +33,8 @@ public class DirectoryUtils {
     public static final FileFilter EVENT_FILE_FILTER = f -> f.getName().endsWith(".prov") || f.getName().endsWith(".prov.gz");
     public static final Comparator<File> SMALLEST_ID_FIRST = (a, b) -> Long.compare(getMinId(a), getMinId(b));
     public static final Comparator<File> LARGEST_ID_FIRST = SMALLEST_ID_FIRST.reversed();
-    public static final Comparator<File> NEWEST_INDEX_FIRST = (a, b) -> Long.compare(getIndexTimestamp(b), getIndexTimestamp(a));
-    public static final Comparator<File> OLDEST_INDEX_FIRST = NEWEST_INDEX_FIRST.reversed();
+    public static final Comparator<File> OLDEST_INDEX_FIRST = (a, b) -> Long.compare(getIndexTimestamp(a), getIndexTimestamp(b));
+    public static final Comparator<File> NEWEST_INDEX_FIRST = OLDEST_INDEX_FIRST.reversed();
 
     public static List<Path> getProvenanceEventFiles(final RepositoryConfiguration repoConfig) {
         return repoConfig.getStorageDirectories().values().stream()

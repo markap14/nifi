@@ -88,7 +88,7 @@ public class SelectiveRecordReaderEventIterator implements EventIterator {
             lastFile = file;
         }
 
-        if (files.isEmpty()) {
+        if (files.isEmpty() && lastFile != null) {
             files.add(lastFile);
         }
 

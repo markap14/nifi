@@ -21,8 +21,8 @@ import static org.junit.Assert.assertEquals;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -71,22 +71,21 @@ public class TestWriteAheadStorePartition {
             partition.addEvents(Collections.singleton(TestUtil.createEvent()));
         }
 
-        final List<Map<ProvenanceEventRecord, StorageSummary>> reindexedEvents = new ArrayList<>();
+        final Map<ProvenanceEventRecord, StorageSummary> reindexedEvents = new HashMap<>();
         final EventIndex eventIndex = Mockito.mock(EventIndex.class);
         Mockito.doAnswer(new Answer<Object>() {
             @Override
             public Object answer(final InvocationOnMock invocation) throws Throwable {
                 final Map<ProvenanceEventRecord, StorageSummary> events = invocation.getArgumentAt(0, Map.class);
-                reindexedEvents.add(events);
+                reindexedEvents.putAll(events);
                 return null;
             }
         }).when(eventIndex).reindexEvents(Mockito.anyMap());
 
-        Mockito.doReturn(18L).when(eventIndex).getMinimumEventIdToReindex();
+        Mockito.doReturn(18L).when(eventIndex).getMinimumEventIdToReindex("1");
         partition.reindexLatestEvents(eventIndex);
 
-        final List<Long> eventIdsReindexed = reindexedEvents.stream()
-            .flatMap(map -> map.values().stream())
+        final List<Long> eventIdsReindexed = reindexedEvents.values().stream()
             .map(StorageSummary::getEventId)
             .sorted()
             .collect(Collectors.toList());
