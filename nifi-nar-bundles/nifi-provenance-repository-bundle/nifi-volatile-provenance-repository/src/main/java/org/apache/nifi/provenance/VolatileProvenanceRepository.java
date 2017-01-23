@@ -124,7 +124,8 @@ public class VolatileProvenanceRepository implements ProvenanceRepository {
     }
 
     @Override
-    public void initialize(final EventReporter eventReporter, final Authorizer authorizer, final ProvenanceAuthorizableFactory resourceFactory) throws IOException {
+    public void initialize(final EventReporter eventReporter, final Authorizer authorizer, final ProvenanceAuthorizableFactory resourceFactory,
+        final IdentifierLookup idLookup) throws IOException {
         if (initialized.getAndSet(true)) {
             return;
         }

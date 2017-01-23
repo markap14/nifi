@@ -165,7 +165,7 @@ public class EventIndexTask implements Runnable {
             }
 
             // Perform the actual indexing.
-            boolean commitIndex = indexWriter.index(documents, commitThreshold);
+            boolean writerIndicatesCommit = indexWriter.index(documents, commitThreshold);
 
             final boolean commit;
             if (CommitPreference.FORCE_COMMIT == commitPreference) {
@@ -188,7 +188,11 @@ public class EventIndexTask implements Runnable {
                 //
                 // In the case outlined above, we would potentially lose those events from the index! To avoid this,
                 // we simply decide to commit the index if this writer is no longer the active writer for the index.
-                if (!commitIndex) {
+                // However, if we have 10 threads, we don't want all 10 threads trying to commit the index after each
+                // update. We want to commit when they've all finished. This is what the IndexManager will do if we request
+                // that it commit the index. It will also close the index if requested, once all writers have finished.
+                // So when this is the case, we will request that the Index Manager both commit and close the writer.
+                if (!writerIndicatesCommit) {
                     final Optional<String> partitionNameOption = toIndex.get(0).getPersistenceLocation().getPartitionName();
                     if (partitionNameOption.isPresent()) {
                         final String partitionName = partitionNameOption.get();
@@ -200,7 +204,7 @@ public class EventIndexTask implements Runnable {
                     }
                 }
 
-                commit = commitIndex;
+                commit = writerIndicatesCommit;
             }
 
             if (commit) {

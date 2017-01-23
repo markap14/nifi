@@ -32,6 +32,7 @@ import java.util.stream.Collectors;
 
 import org.apache.nifi.events.EventReporter;
 import org.apache.nifi.provenance.EventIdFirstSchemaRecordWriter;
+import org.apache.nifi.provenance.IdentifierLookup;
 import org.apache.nifi.provenance.ProvenanceEventRecord;
 import org.apache.nifi.provenance.RepositoryConfiguration;
 import org.apache.nifi.provenance.TestUtil;
@@ -59,7 +60,7 @@ public class TestWriteAheadStorePartition {
 
         final RecordWriterFactory recordWriterFactory = (file, idGenerator, compressed, createToc) -> {
             final TocWriter tocWriter = createToc ? new StandardTocWriter(TocUtil.getTocFile(file), false, false) : null;
-            return new EventIdFirstSchemaRecordWriter(file, idGenerator, tocWriter, compressed, 32 * 1024);
+            return new EventIdFirstSchemaRecordWriter(file, idGenerator, tocWriter, compressed, 32 * 1024, IdentifierLookup.EMPTY);
         };
 
         final RecordReaderFactory recordReaderFactory = (file, logs, maxChars) -> RecordReaders.newRecordReader(file, logs, maxChars);

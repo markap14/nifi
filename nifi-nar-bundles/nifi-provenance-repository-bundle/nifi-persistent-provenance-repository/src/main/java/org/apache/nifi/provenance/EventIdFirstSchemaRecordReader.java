@@ -21,9 +21,11 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
-import org.apache.nifi.provenance.schema.EventRecord;
+import org.apache.nifi.provenance.schema.LookupTableEventRecord;
 import org.apache.nifi.provenance.serialization.CompressableRecordReader;
 import org.apache.nifi.provenance.toc.TocReader;
 import org.apache.nifi.repository.schema.Record;
@@ -35,6 +37,13 @@ import org.apache.nifi.stream.io.StreamUtils;
 public class EventIdFirstSchemaRecordReader extends CompressableRecordReader {
     private RecordSchema schema; // effectively final
     private SchemaRecordReader recordReader;  // effectively final
+
+    private List<String> componentIds;
+    private List<String> componentTypes;
+    private List<String> queueIds;
+    private List<String> eventTypes;
+    private long firstEventId;
+    private long systemTimeOffset;
 
     public EventIdFirstSchemaRecordReader(final InputStream in, final String filename, final TocReader tocReader, final int maxAttributeChars) throws IOException {
         super(in, filename, tocReader, maxAttributeChars);
@@ -48,7 +57,7 @@ public class EventIdFirstSchemaRecordReader extends CompressableRecordReader {
     }
 
     @Override
-    protected void readHeader(final DataInputStream in, final int serializationVersion) throws IOException {
+    protected synchronized void readHeader(final DataInputStream in, final int serializationVersion) throws IOException {
         verifySerializationVersion(serializationVersion);
         final int schemaLength = in.readInt();
         final byte[] buffer = new byte[schemaLength];
@@ -59,6 +68,23 @@ public class EventIdFirstSchemaRecordReader extends CompressableRecordReader {
         }
 
         recordReader = SchemaRecordReader.fromSchema(schema);
+
+        componentIds = readLookups(in);
+        componentTypes = readLookups(in);
+        queueIds = readLookups(in);
+        eventTypes = readLookups(in);
+        firstEventId = in.readLong();
+        systemTimeOffset = in.readLong();
+    }
+
+    private List<String> readLookups(final DataInputStream in) throws IOException {
+        final int listSize = in.readInt();
+        final List<String> values = new ArrayList<>(listSize);
+        for (int i = 0; i < listSize; i++) {
+            values.add(in.readUTF());
+        }
+
+        return values;
     }
 
     @Override
@@ -66,7 +92,7 @@ public class EventIdFirstSchemaRecordReader extends CompressableRecordReader {
         verifySerializationVersion(serializationVersion);
 
         final long byteOffset = getBytesConsumed();
-        final long eventId = in.readLong();
+        final long eventId = in.readInt() + firstEventId;
         final int recordLength = in.readInt();
 
         return readRecord(in, eventId, byteOffset, recordLength);
@@ -80,7 +106,8 @@ public class EventIdFirstSchemaRecordReader extends CompressableRecordReader {
             return null;
         }
 
-        final StandardProvenanceEventRecord deserializedEvent = EventRecord.getEvent(eventRecord, getFilename(), startOffset, getMaxAttributeLength());
+        final StandardProvenanceEventRecord deserializedEvent = LookupTableEventRecord.getEvent(eventRecord, getFilename(), startOffset, getMaxAttributeLength(),
+            firstEventId, systemTimeOffset, componentIds, componentTypes, queueIds, eventTypes);
         deserializedEvent.setEventId(eventId);
         return deserializedEvent;
     }
@@ -99,7 +126,7 @@ public class EventIdFirstSchemaRecordReader extends CompressableRecordReader {
 
         while (isData(dis)) {
             final long startOffset = getBytesConsumed();
-            final long id = dis.readLong();
+            final long id = dis.readInt() + firstEventId;
             final int recordLength = dis.readInt();
 
             if (id >= eventId) {
@@ -107,7 +134,6 @@ public class EventIdFirstSchemaRecordReader extends CompressableRecordReader {
                 return Optional.ofNullable(event);
             } else {
                 // This is not the record we want. Skip over it instead of deserializing it.
-                //                logger.info("Skipping {} bytes because current event ID is {} and looking for event ID {}", recordLength, id, eventId);
                 StreamUtils.skip(dis, recordLength);
             }
         }

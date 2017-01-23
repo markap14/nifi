@@ -178,13 +178,6 @@ public class WriteAheadStorePartition implements EventStorePartition {
                     if (compressed.exists()) {
                         compressed.delete();
                     }
-
-                    try {
-                        filesToCompress.put(file);
-                    } catch (final InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        throw new IOException("Interrupted while initializing repository");
-                    }
                 }
             }
         }

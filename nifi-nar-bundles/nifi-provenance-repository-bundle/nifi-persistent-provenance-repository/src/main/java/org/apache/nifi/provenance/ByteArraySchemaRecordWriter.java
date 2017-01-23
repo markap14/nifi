@@ -24,8 +24,8 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.nifi.provenance.schema.EventFieldNames;
 import org.apache.nifi.provenance.schema.EventRecord;
-import org.apache.nifi.provenance.schema.EventRecordFields;
 import org.apache.nifi.provenance.schema.ProvenanceEventSchema;
 import org.apache.nifi.provenance.serialization.CompressableRecordWriter;
 import org.apache.nifi.provenance.toc.TocWriter;
@@ -35,7 +35,7 @@ import org.apache.nifi.repository.schema.SchemaRecordWriter;
 
 public class ByteArraySchemaRecordWriter extends CompressableRecordWriter {
     private static final RecordSchema eventSchema = ProvenanceEventSchema.PROVENANCE_EVENT_SCHEMA_V1;
-    private static final RecordSchema contentClaimSchema = new RecordSchema(eventSchema.getField(EventRecordFields.Names.CONTENT_CLAIM).getSubFields());
+    private static final RecordSchema contentClaimSchema = new RecordSchema(eventSchema.getField(EventFieldNames.CONTENT_CLAIM).getSubFields());
     public static final int SERIALIZATION_VERSION = 1;
     public static final String SERIALIZATION_NAME = "ByteArraySchemaRecordWriter";
 

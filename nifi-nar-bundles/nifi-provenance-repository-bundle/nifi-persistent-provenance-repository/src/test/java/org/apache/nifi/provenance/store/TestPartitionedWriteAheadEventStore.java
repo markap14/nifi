@@ -38,6 +38,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.apache.nifi.authorization.AccessDeniedException;
 import org.apache.nifi.events.EventReporter;
 import org.apache.nifi.provenance.EventIdFirstSchemaRecordWriter;
+import org.apache.nifi.provenance.IdentifierLookup;
 import org.apache.nifi.provenance.ProvenanceEventRecord;
 import org.apache.nifi.provenance.ProvenanceEventType;
 import org.apache.nifi.provenance.RepositoryConfiguration;
@@ -76,7 +77,7 @@ public class TestPartitionedWriteAheadEventStore {
     public void testPerformanceOfAccessingEvents() throws Exception {
         final RecordWriterFactory recordWriterFactory = (file, idGenerator, compressed, createToc) -> {
             final TocWriter tocWriter = createToc ? new StandardTocWriter(TocUtil.getTocFile(file), false, false) : null;
-            return new EventIdFirstSchemaRecordWriter(file, idGenerator, tocWriter, compressed, 1024 * 1024);
+            return new EventIdFirstSchemaRecordWriter(file, idGenerator, tocWriter, compressed, 1024 * 1024, IdentifierLookup.EMPTY);
         };
 
         final RecordReaderFactory recordReaderFactory = (file, logs, maxChars) -> RecordReaders.newRecordReader(file, logs, maxChars);

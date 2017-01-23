@@ -40,6 +40,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
+import org.apache.nifi.provenance.schema.EventFieldNames;
 import org.apache.nifi.provenance.schema.EventRecord;
 import org.apache.nifi.provenance.schema.EventRecordFields;
 import org.apache.nifi.provenance.schema.ProvenanceEventSchema;
@@ -165,8 +166,8 @@ public class TestSchemaRecordReaderWriter extends AbstractTestRecordReaderWriter
             // Create a schema that has the fields modified
             final RecordSchema schemaV1 = ProvenanceEventSchema.PROVENANCE_EVENT_SCHEMA_V1;
             final List<RecordField> fields = new ArrayList<>(schemaV1.getFields());
-            fields.remove(new SimpleRecordField(EventRecordFields.Names.UPDATED_ATTRIBUTES, FieldType.STRING, Repetition.EXACTLY_ONE));
-            fields.remove(new SimpleRecordField(EventRecordFields.Names.PREVIOUS_ATTRIBUTES, FieldType.STRING, Repetition.EXACTLY_ONE));
+            fields.remove(new SimpleRecordField(EventFieldNames.UPDATED_ATTRIBUTES, FieldType.STRING, Repetition.EXACTLY_ONE));
+            fields.remove(new SimpleRecordField(EventFieldNames.PREVIOUS_ATTRIBUTES, FieldType.STRING, Repetition.EXACTLY_ONE));
             final RecordSchema recordSchema = new RecordSchema(fields);
 
             // Create a record writer whose schema does not contain updated attributes or previous attributes.
@@ -184,7 +185,7 @@ public class TestSchemaRecordReaderWriter extends AbstractTestRecordReaderWriter
 
                 @Override
                 protected Record createRecord(final ProvenanceEventRecord event, final long eventId) {
-                    final RecordSchema contentClaimSchema = new RecordSchema(recordSchema.getField(EventRecordFields.Names.CONTENT_CLAIM).getSubFields());
+                    final RecordSchema contentClaimSchema = new RecordSchema(recordSchema.getField(EventFieldNames.CONTENT_CLAIM).getSubFields());
                     return new EventRecord(event, eventId, recordSchema, contentClaimSchema);
                 }
             };
@@ -260,7 +261,7 @@ public class TestSchemaRecordReaderWriter extends AbstractTestRecordReaderWriter
         fieldModifier.accept(fields);
 
         final RecordSchema recordSchema = new RecordSchema(fields);
-        final RecordSchema contentClaimSchema = new RecordSchema(recordSchema.getField(EventRecordFields.Names.CONTENT_CLAIM).getSubFields());
+        final RecordSchema contentClaimSchema = new RecordSchema(recordSchema.getField(EventFieldNames.CONTENT_CLAIM).getSubFields());
 
         final ByteArraySchemaRecordWriter writer = new ByteArraySchemaRecordWriter(journalFile, idGenerator, tocWriter, false, 0) {
             @Override

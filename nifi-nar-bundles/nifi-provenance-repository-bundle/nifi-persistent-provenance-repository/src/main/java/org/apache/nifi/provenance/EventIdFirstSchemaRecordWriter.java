@@ -22,12 +22,16 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
-import org.apache.nifi.provenance.schema.EventRecord;
-import org.apache.nifi.provenance.schema.EventRecordFields;
-import org.apache.nifi.provenance.schema.ProvenanceEventSchema;
+import org.apache.nifi.provenance.schema.EventFieldNames;
+import org.apache.nifi.provenance.schema.LookupTableEventRecord;
+import org.apache.nifi.provenance.schema.LookupTableEventSchema;
 import org.apache.nifi.provenance.serialization.CompressableRecordWriter;
 import org.apache.nifi.provenance.serialization.StorageSummary;
 import org.apache.nifi.provenance.toc.TocWriter;
@@ -37,21 +41,54 @@ import org.apache.nifi.repository.schema.SchemaRecordWriter;
 
 public class EventIdFirstSchemaRecordWriter extends CompressableRecordWriter {
 
-    private static final RecordSchema eventSchema = ProvenanceEventSchema.PROVENANCE_EVENT_SCHEMA_V1_WITHOUT_EVENT_ID;
-    private static final RecordSchema contentClaimSchema = new RecordSchema(eventSchema.getField(EventRecordFields.Names.CONTENT_CLAIM).getSubFields());
+    private static final RecordSchema eventSchema = LookupTableEventSchema.EVENT_SCHEMA;
+    private static final RecordSchema contentClaimSchema = new RecordSchema(eventSchema.getField(EventFieldNames.CONTENT_CLAIM).getSubFields());
+    private static final RecordSchema previousContentClaimSchema = new RecordSchema(eventSchema.getField(EventFieldNames.PREVIOUS_CONTENT_CLAIM).getSubFields());
     public static final int SERIALIZATION_VERSION = 1;
     public static final String SERIALIZATION_NAME = "EventIdFirstSchemaRecordWriter";
+    private final IdentifierLookup idLookup;
 
     private final SchemaRecordWriter schemaRecordWriter = new SchemaRecordWriter();
     private final AtomicInteger recordCount = new AtomicInteger(0);
 
-    public EventIdFirstSchemaRecordWriter(final File file, final AtomicLong idGenerator, final TocWriter writer, final boolean compressed, final int uncompressedBlockSize) throws IOException {
+    private final Map<String, Integer> componentIdMap;
+    private final Map<String, Integer> componentTypeMap;
+    private final Map<String, Integer> queueIdMap;
+    private static final Map<String, Integer> eventTypeMap;
+    private static final List<String> eventTypeNames;
+
+    private long firstEventId;
+    private long systemTimeOffset;
+
+    static {
+        eventTypeMap = new HashMap<>();
+        eventTypeNames = new ArrayList<>();
+
+        int count = 0;
+        for (final ProvenanceEventType eventType : ProvenanceEventType.values()) {
+            eventTypeMap.put(eventType.name(), count++);
+            eventTypeNames.add(eventType.name());
+        }
+    }
+
+    public EventIdFirstSchemaRecordWriter(final File file, final AtomicLong idGenerator, final TocWriter writer, final boolean compressed,
+        final int uncompressedBlockSize, final IdentifierLookup idLookup) throws IOException {
         super(file, idGenerator, writer, compressed, uncompressedBlockSize);
+
+        this.idLookup = idLookup;
+        componentIdMap = idLookup.invertComponentIdentifiers();
+        componentTypeMap = idLookup.invertComponentTypes();
+        queueIdMap = idLookup.invertQueueIdentifiers();
     }
 
     public EventIdFirstSchemaRecordWriter(final OutputStream out, final AtomicLong idGenerator, final TocWriter tocWriter, final boolean compressed,
-        final int uncompressedBlockSize) throws IOException {
+        final int uncompressedBlockSize, final IdentifierLookup idLookup) throws IOException {
         super(out, idGenerator, tocWriter, compressed, uncompressedBlockSize);
+
+        this.idLookup = idLookup;
+        componentIdMap = idLookup.invertComponentIdentifiers();
+        componentTypeMap = idLookup.invertComponentTypes();
+        queueIdMap = idLookup.invertQueueIdentifiers();
     }
 
     @Override
@@ -76,8 +113,10 @@ public class EventIdFirstSchemaRecordWriter extends CompressableRecordWriter {
                 startBytes = getBytesWritten();
 
                 ensureStreamState(recordIdentifier, startBytes);
+
                 final DataOutputStream out = getBufferedOutputStream();
-                out.writeLong(recordIdentifier);
+                final int recordIdOffset = (int) (recordIdentifier - firstEventId);
+                out.writeInt(recordIdOffset);
                 out.writeInt(serialized.length);
                 out.write(serialized);
 
@@ -103,7 +142,8 @@ public class EventIdFirstSchemaRecordWriter extends CompressableRecordWriter {
     }
 
     protected Record createRecord(final ProvenanceEventRecord event, final long eventId) {
-        return new EventRecord(event, eventId, eventSchema, contentClaimSchema);
+        return new LookupTableEventRecord(event, eventId, eventSchema, contentClaimSchema, previousContentClaimSchema, firstEventId, systemTimeOffset,
+            componentIdMap, componentTypeMap, queueIdMap, eventTypeMap);
     }
 
     @Override
@@ -113,12 +153,29 @@ public class EventIdFirstSchemaRecordWriter extends CompressableRecordWriter {
     }
 
     @Override
-    protected void writeHeader(final long firstEventId, final DataOutputStream out) throws IOException {
+    protected synchronized void writeHeader(final long firstEventId, final DataOutputStream out) throws IOException {
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
         eventSchema.writeTo(baos);
 
         out.writeInt(baos.size());
         baos.writeTo(out);
+
+        // TODO: Should this be schema-tized??
+        this.firstEventId = firstEventId;
+        this.systemTimeOffset = System.currentTimeMillis();
+        writeLookups(idLookup.getComponentIdentifiers(), out);
+        writeLookups(idLookup.getComponentTypes(), out);
+        writeLookups(idLookup.getQueueIdentifiers(), out);
+        writeLookups(eventTypeNames, out);
+        out.writeLong(firstEventId);
+        out.writeLong(systemTimeOffset);
+    }
+
+    private void writeLookups(final List<String> lookupValues, final DataOutputStream out) throws IOException {
+        out.writeInt(lookupValues.size());
+        for (final String value : lookupValues) {
+            out.writeUTF(value);
+        }
     }
 
     @Override

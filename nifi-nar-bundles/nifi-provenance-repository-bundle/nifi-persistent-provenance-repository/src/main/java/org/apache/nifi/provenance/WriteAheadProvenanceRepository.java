@@ -79,15 +79,15 @@ public class WriteAheadProvenanceRepository implements ProvenanceRepository {
     }
 
     public WriteAheadProvenanceRepository(final RepositoryConfiguration config) {
-        //        config.setMergeSegmentsOnIndexClose(true);
         this.config = config;
     }
 
     @Override
-    public synchronized void initialize(final EventReporter eventReporter, final Authorizer authorizer, final ProvenanceAuthorizableFactory resourceFactory) throws IOException {
+    public synchronized void initialize(final EventReporter eventReporter, final Authorizer authorizer, final ProvenanceAuthorizableFactory resourceFactory,
+        final IdentifierLookup idLookup) throws IOException {
         final RecordWriterFactory recordWriterFactory = (file, idGenerator, compressed, createToc) -> {
             final TocWriter tocWriter = createToc ? new StandardTocWriter(TocUtil.getTocFile(file), false, false) : null;
-            return new EventIdFirstSchemaRecordWriter(file, idGenerator, tocWriter, compressed, BLOCK_SIZE);
+            return new EventIdFirstSchemaRecordWriter(file, idGenerator, tocWriter, compressed, BLOCK_SIZE, idLookup);
         };
 
         final RecordReaderFactory recordReaderFactory = (file, logs, maxChars) -> RecordReaders.newRecordReader(file, logs, maxChars);

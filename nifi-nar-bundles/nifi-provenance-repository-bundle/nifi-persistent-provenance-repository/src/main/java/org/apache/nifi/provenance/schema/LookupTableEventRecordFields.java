@@ -25,22 +25,30 @@ import org.apache.nifi.repository.schema.ComplexRecordField;
 import org.apache.nifi.repository.schema.FieldType;
 import org.apache.nifi.repository.schema.MapRecordField;
 import org.apache.nifi.repository.schema.RecordField;
+import org.apache.nifi.repository.schema.Repetition;
 import org.apache.nifi.repository.schema.SimpleRecordField;
+import org.apache.nifi.repository.schema.UnionRecordField;
 
-public class EventRecordFields {
+public class LookupTableEventRecordFields {
 
     // General Event fields.
-    public static final RecordField RECORD_IDENTIFIER = new SimpleRecordField(EventFieldNames.EVENT_IDENTIFIER, FieldType.LONG, EXACTLY_ONE);
-    public static final RecordField EVENT_TYPE = new SimpleRecordField(EventFieldNames.EVENT_TYPE, FieldType.STRING, EXACTLY_ONE);
-    public static final RecordField EVENT_TIME = new SimpleRecordField(EventFieldNames.EVENT_TIME, FieldType.LONG, EXACTLY_ONE);
-    public static final RecordField FLOWFILE_ENTRY_DATE = new SimpleRecordField(EventFieldNames.FLOWFILE_ENTRY_DATE, FieldType.LONG, EXACTLY_ONE);
-    public static final RecordField EVENT_DURATION = new SimpleRecordField(EventFieldNames.EVENT_DURATION, FieldType.LONG, EXACTLY_ONE);
-    public static final RecordField LINEAGE_START_DATE = new SimpleRecordField(EventFieldNames.LINEAGE_START_DATE, FieldType.LONG, EXACTLY_ONE);
-    public static final RecordField COMPONENT_ID = new SimpleRecordField(EventFieldNames.COMPONENT_ID, FieldType.STRING, ZERO_OR_ONE);
-    public static final RecordField COMPONENT_TYPE = new SimpleRecordField(EventFieldNames.COMPONENT_TYPE, FieldType.STRING, ZERO_OR_ONE);
-    public static final RecordField FLOWFILE_UUID = new SimpleRecordField(EventFieldNames.FLOWFILE_UUID, FieldType.STRING, EXACTLY_ONE);
+    public static final RecordField RECORD_IDENTIFIER_OFFSET = new SimpleRecordField(EventFieldNames.EVENT_IDENTIFIER, FieldType.INT, EXACTLY_ONE);
+    public static final RecordField EVENT_TYPE_ORDINAL = new SimpleRecordField(EventFieldNames.EVENT_TYPE, FieldType.INT, EXACTLY_ONE);
+    public static final RecordField EVENT_TIME_OFFSET = new SimpleRecordField(EventFieldNames.EVENT_TIME, FieldType.INT, EXACTLY_ONE);
+    public static final RecordField FLOWFILE_ENTRY_DATE_OFFSET = new SimpleRecordField(EventFieldNames.FLOWFILE_ENTRY_DATE, FieldType.INT, EXACTLY_ONE);
+    public static final RecordField EVENT_DURATION = new SimpleRecordField(EventFieldNames.EVENT_DURATION, FieldType.INT, EXACTLY_ONE);
+    public static final RecordField LINEAGE_START_DATE_OFFSET = new SimpleRecordField(EventFieldNames.LINEAGE_START_DATE, FieldType.INT, EXACTLY_ONE);
     public static final RecordField EVENT_DETAILS = new SimpleRecordField(EventFieldNames.EVENT_DETAILS, FieldType.STRING, ZERO_OR_ONE);
-    public static final RecordField SOURCE_QUEUE_IDENTIFIER = new SimpleRecordField(EventFieldNames.SOURCE_QUEUE_IDENTIFIER, FieldType.STRING, ZERO_OR_ONE);
+
+    // Make lookup id or a string, depending on whether or not available in header.
+    public static final RecordField NO_VALUE = new SimpleRecordField(EventFieldNames.NO_VALUE, FieldType.STRING, Repetition.EXACTLY_ONE);
+    public static final RecordField EXPLICIT_STRING = new SimpleRecordField(EventFieldNames.EXPLICIT_VALUE, FieldType.STRING, Repetition.EXACTLY_ONE);
+    public static final RecordField LOOKUP_VALUE = new SimpleRecordField(EventFieldNames.LOOKUP_VALUE, FieldType.INT, Repetition.EXACTLY_ONE);
+    public static final RecordField UNCHANGED_VALUE = new SimpleRecordField(EventFieldNames.UNCHANGED_VALUE, FieldType.STRING, Repetition.EXACTLY_ONE);
+
+    public static final RecordField COMPONENT_ID = new UnionRecordField(EventFieldNames.COMPONENT_ID, Repetition.EXACTLY_ONE, NO_VALUE, EXPLICIT_STRING, LOOKUP_VALUE);
+    public static final RecordField SOURCE_QUEUE_ID = new UnionRecordField(EventFieldNames.SOURCE_QUEUE_IDENTIFIER, Repetition.EXACTLY_ONE, NO_VALUE, EXPLICIT_STRING, LOOKUP_VALUE);
+    public static final RecordField COMPONENT_TYPE = new UnionRecordField(EventFieldNames.COMPONENT_TYPE, Repetition.EXACTLY_ONE, EXPLICIT_STRING, LOOKUP_VALUE);
 
     // Attributes
     public static final RecordField ATTRIBUTE_NAME = new SimpleRecordField(EventFieldNames.ATTRIBUTE_NAME, FieldType.LONG_STRING, EXACTLY_ONE);
@@ -56,10 +64,15 @@ public class EventRecordFields {
     public static final RecordField CONTENT_CLAIM_IDENTIFIER = new SimpleRecordField(EventFieldNames.CONTENT_CLAIM_IDENTIFIER, FieldType.STRING, EXACTLY_ONE);
     public static final RecordField CONTENT_CLAIM_OFFSET = new SimpleRecordField(EventFieldNames.CONTENT_CLAIM_OFFSET, FieldType.LONG, EXACTLY_ONE);
     public static final RecordField CONTENT_CLAIM_SIZE = new SimpleRecordField(EventFieldNames.CONTENT_CLAIM_SIZE, FieldType.LONG, EXACTLY_ONE);
-    public static final RecordField CURRENT_CONTENT_CLAIM = new ComplexRecordField(EventFieldNames.CONTENT_CLAIM, ZERO_OR_ONE,
-        CONTENT_CLAIM_CONTAINER, CONTENT_CLAIM_SECTION, CONTENT_CLAIM_IDENTIFIER, CONTENT_CLAIM_OFFSET, CONTENT_CLAIM_SIZE);
+
     public static final RecordField PREVIOUS_CONTENT_CLAIM = new ComplexRecordField(EventFieldNames.PREVIOUS_CONTENT_CLAIM, ZERO_OR_ONE,
         CONTENT_CLAIM_CONTAINER, CONTENT_CLAIM_SECTION, CONTENT_CLAIM_IDENTIFIER, CONTENT_CLAIM_OFFSET, CONTENT_CLAIM_SIZE);
+
+    public static final RecordField CURRENT_CONTENT_CLAIM_EXPLICIT = new ComplexRecordField(EventFieldNames.EXPLICIT_VALUE, EXACTLY_ONE,
+        CONTENT_CLAIM_CONTAINER, CONTENT_CLAIM_SECTION, CONTENT_CLAIM_IDENTIFIER, CONTENT_CLAIM_OFFSET, CONTENT_CLAIM_SIZE);
+    public static final RecordField CURRENT_CONTENT_CLAIM = new UnionRecordField(EventFieldNames.CONTENT_CLAIM,
+        Repetition.EXACTLY_ONE, NO_VALUE, UNCHANGED_VALUE, CURRENT_CONTENT_CLAIM_EXPLICIT);
+
 
     // EventType-Specific fields
     // for FORK, JOIN, CLONE, REPLAY
