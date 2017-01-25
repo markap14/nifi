@@ -36,6 +36,8 @@ import org.slf4j.LoggerFactory;
 public class RepositoryConfiguration {
     private static final Logger logger = LoggerFactory.getLogger(RepositoryConfiguration.class);
 
+    public static final String CONCURRENT_MERGE_THREADS = "nifi.provenance.repository.concurrent.merge.threads";
+
     private final Map<String, File> storageDirectories = new LinkedHashMap<>();
     private long recordLifeMillis = TimeUnit.MILLISECONDS.convert(24, TimeUnit.HOURS);
     private long storageCapacity = 1024L * 1024L * 1024L;   // 1 GB
@@ -54,6 +56,7 @@ public class RepositoryConfiguration {
     private int queryThreadPoolSize = 2;
     private int indexThreadPoolSize = 1;
     private boolean allowRollover = true;
+    private int concurrentMergeThreads = 4;
 
     public void setAllowRollover(final boolean allow) {
         this.allowRollover = allow;
@@ -246,6 +249,14 @@ public class RepositoryConfiguration {
         this.indexThreadPoolSize = indexThreadPoolSize;
     }
 
+    public void setConcurrentMergeThreads(final int mergeThreads) {
+        this.concurrentMergeThreads = mergeThreads;
+    }
+
+    public int getConcurrentMergeThreads() {
+        return concurrentMergeThreads;
+    }
+
     /**
      * <p>
      * Specifies the desired size of each Provenance Event index shard, in
@@ -351,6 +362,7 @@ public class RepositoryConfiguration {
         final int queryThreads = nifiProperties.getIntegerProperty(NiFiProperties.PROVENANCE_QUERY_THREAD_POOL_SIZE, 2);
         final int indexThreads = nifiProperties.getIntegerProperty(NiFiProperties.PROVENANCE_INDEX_THREAD_POOL_SIZE, 1);
         final int journalCount = nifiProperties.getIntegerProperty(NiFiProperties.PROVENANCE_JOURNAL_COUNT, 16);
+        final int concurrentMergeThreads = nifiProperties.getIntegerProperty(CONCURRENT_MERGE_THREADS, 4);
 
         final long storageMillis = FormatUtils.getTimeDuration(storageTime, TimeUnit.MILLISECONDS);
         final long maxStorageBytes = DataUnit.parseDataSize(storageSize, DataUnit.B).longValue();
@@ -401,6 +413,7 @@ public class RepositoryConfiguration {
         config.setIndexThreadPoolSize(indexThreads);
         config.setJournalCount(journalCount);
         config.setMaxAttributeChars(maxAttrChars);
+        config.setConcurrentMergeThreads(concurrentMergeThreads);
 
         if (shardSize != null) {
             config.setDesiredIndexSize(DataUnit.parseDataSize(shardSize, DataUnit.B).longValue());

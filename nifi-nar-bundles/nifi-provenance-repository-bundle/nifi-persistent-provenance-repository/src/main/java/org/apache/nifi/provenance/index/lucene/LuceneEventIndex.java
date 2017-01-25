@@ -154,6 +154,9 @@ public class LuceneEventIndex implements EventIndex {
         maintenanceExecutor = Executors.newScheduledThreadPool(1, new NamedThreadFactory("Provenance Repository Maintenance"));
         maintenanceExecutor.scheduleWithFixedDelay(() -> performMaintenance(), 1, 1, TimeUnit.MINUTES);
         maintenanceExecutor.scheduleWithFixedDelay(new RemoveExpiredQueryResults(), 30, 30, TimeUnit.SECONDS);
+
+        cachedQueries.add(new LatestEventsQuery());
+        cachedQueries.add(new LatestEventsPerProcessorQuery());
     }
 
     @Override

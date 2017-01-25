@@ -545,7 +545,7 @@ public class WriteAheadStorePartition implements EventStorePartition {
 
         final long minEventIdToReindex = eventIndex.getMinimumEventIdToReindex(partitionName);
         final long maxEventId = getMaxEventId();
-        final long eventsToReindex = getMaxEventId() - minEventIdToReindex;
+        final long eventsToReindex = maxEventId - minEventIdToReindex;
 
         logger.info("The last Provenance Event indexed for partition {} is {}, but the last event written to partition has ID {}. "
             + "Re-indexing up to the last {} events to ensure that the Event Index is accurate and up-to-date",
