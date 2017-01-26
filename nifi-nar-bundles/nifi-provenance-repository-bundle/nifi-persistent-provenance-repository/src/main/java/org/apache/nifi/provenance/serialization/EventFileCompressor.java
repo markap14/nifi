@@ -26,6 +26,7 @@ import java.io.OutputStream;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.nifi.provenance.store.EventFileManager;
 import org.apache.nifi.provenance.toc.StandardTocReader;
 import org.apache.nifi.provenance.toc.StandardTocWriter;
 import org.apache.nifi.provenance.toc.TocReader;
@@ -43,10 +44,12 @@ import org.slf4j.LoggerFactory;
 public class EventFileCompressor implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(EventFileCompressor.class);
     private final BlockingQueue<File> filesToCompress;
+    private final EventFileManager eventFileManager;
     private volatile boolean shutdown = false;
 
-    public EventFileCompressor(final BlockingQueue<File> filesToCompress) {
+    public EventFileCompressor(final BlockingQueue<File> filesToCompress, final EventFileManager eventFileManager) {
         this.filesToCompress = filesToCompress;
+        this.eventFileManager = eventFileManager;
     }
 
     public void shutdown() {
@@ -65,33 +68,57 @@ public class EventFileCompressor implements Runnable {
                     continue;
                 }
 
-                StandardTocReader tocReader = null;
-                StandardTocWriter tocWriter = null;
                 File outputFile = null;
+                long bytesBefore = 0L;
+                StandardTocReader tocReader = null;
 
-                final File tocFile = TocUtil.getTocFile(file);
+                eventFileManager.obtainReadLock(file);
                 try {
-                    tocReader = new StandardTocReader(tocFile);
-                } catch (final IOException e) {
-                    logger.error("Failed to read TOC File {}", tocFile, e);
-                    continue;
-                }
+                    StandardTocWriter tocWriter = null;
 
-                final long bytesBefore = file.length();
-
-                try {
-                    outputFile = new File(file.getParentFile(), file.getName() + ".gz");
+                    final File tocFile = TocUtil.getTocFile(file);
                     try {
-                        final File tmpFile = new File(tocFile.getParentFile(), tocFile.getName() + ".tmp");
-                        tocWriter = new StandardTocWriter(tmpFile, true, false);
-                        compress(file, tocReader, outputFile, tocWriter);
-                        tocWriter.close();
-                        tmpFile.renameTo(tocFile);
-                    } catch (final IOException ioe) {
-                        logger.error("Failed to compress {} on rollover", file, ioe);
+                        tocReader = new StandardTocReader(tocFile);
+                    } catch (final IOException e) {
+                        logger.error("Failed to read TOC File {}", tocFile, e);
+                        continue;
+                    }
+
+                    bytesBefore = file.length();
+
+                    try {
+                        outputFile = new File(file.getParentFile(), file.getName() + ".gz");
+                        try {
+                            final File tmpFile = new File(tocFile.getParentFile(), tocFile.getName() + ".tmp");
+                            tocWriter = new StandardTocWriter(tmpFile, true, false);
+                            compress(file, tocReader, outputFile, tocWriter);
+                            tocWriter.close();
+                            tmpFile.renameTo(tocFile);
+                        } catch (final IOException ioe) {
+                            logger.error("Failed to compress {} on rollover", file, ioe);
+                        }
+                    } finally {
+                        CloseableUtil.closeQuietly(tocReader, tocWriter);
                     }
                 } finally {
-                    CloseableUtil.closeQuietly(tocReader, tocWriter);
+                    eventFileManager.releaseReadLock(file);
+                }
+
+                eventFileManager.obtainWriteLock(file);
+                try {
+                    // Attempt to delete the input file and associated toc file
+                    if (file.delete()) {
+                        if (tocReader != null) {
+                            final File tocFile = tocReader.getFile();
+                            if (!tocFile.delete()) {
+                                logger.warn("Failed to delete {}; this file should be cleaned up manually", tocFile);
+                            }
+                        }
+                    } else {
+                        logger.warn("Failed to delete {}; this file should be cleaned up manually", file);
+                    }
+                } finally {
+                    eventFileManager.releaseWriteLock(file);
                 }
 
                 final long millis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
@@ -142,15 +169,5 @@ public class EventFileCompressor implements Runnable {
 
         // Close the TOC Reader and TOC Writer
         CloseableUtil.closeQuietly(tocReader, tocWriter);
-
-        // Attempt to delete the input file and associated toc file
-        if (input.delete()) {
-            final File tocFile = tocReader.getFile();
-            if (!tocFile.delete()) {
-                logger.warn("Failed to delete {}; this file should be cleaned up manually", tocFile);
-            }
-        } else {
-            logger.warn("Failed to delete {}; this file should be cleaned up manually", input);
-        }
     }
 }

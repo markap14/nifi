@@ -81,7 +81,8 @@ public class TestPartitionedWriteAheadEventStore {
         };
 
         final RecordReaderFactory recordReaderFactory = (file, logs, maxChars) -> RecordReaders.newRecordReader(file, logs, maxChars);
-        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(createConfig(), recordWriterFactory, recordReaderFactory, EventReporter.NO_OP);
+        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(createConfig(),
+            recordWriterFactory, recordReaderFactory, EventReporter.NO_OP, new EventFileManager());
         store.initialize();
 
         assertEquals(-1, store.getMaxEventId());
@@ -111,7 +112,7 @@ public class TestPartitionedWriteAheadEventStore {
 
     @Test
     public void testSingleWriteThenRead() throws IOException {
-        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(createConfig(), writerFactory, readerFactory, EventReporter.NO_OP);
+        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(createConfig(), writerFactory, readerFactory, EventReporter.NO_OP, new EventFileManager());
         store.initialize();
 
         assertEquals(-1, store.getMaxEventId());
@@ -130,7 +131,7 @@ public class TestPartitionedWriteAheadEventStore {
 
     @Test
     public void testMultipleWritesThenReads() throws IOException {
-        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(createConfig(), writerFactory, readerFactory, EventReporter.NO_OP);
+        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(createConfig(), writerFactory, readerFactory, EventReporter.NO_OP, new EventFileManager());
         store.initialize();
         assertEquals(-1, store.getMaxEventId());
 
@@ -153,7 +154,7 @@ public class TestPartitionedWriteAheadEventStore {
 
     @Test()
     public void testMultipleWritesThenGetAllInSingleRead() throws IOException {
-        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(createConfig(), writerFactory, readerFactory, EventReporter.NO_OP);
+        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(createConfig(), writerFactory, readerFactory, EventReporter.NO_OP, new EventFileManager());
         store.initialize();
         assertEquals(-1, store.getMaxEventId());
 
@@ -197,7 +198,7 @@ public class TestPartitionedWriteAheadEventStore {
 
     @Test
     public void testGetSize() throws IOException {
-        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(createConfig(), writerFactory, readerFactory, EventReporter.NO_OP);
+        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(createConfig(), writerFactory, readerFactory, EventReporter.NO_OP, new EventFileManager());
         store.initialize();
 
         long storeSize = 0L;
@@ -214,7 +215,7 @@ public class TestPartitionedWriteAheadEventStore {
     @Test
     public void testMaxEventIdRestored() throws IOException {
         final RepositoryConfiguration config = createConfig();
-        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP);
+        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP, new EventFileManager());
         store.initialize();
 
         final int numEvents = 20;
@@ -226,7 +227,7 @@ public class TestPartitionedWriteAheadEventStore {
         assertEquals(19, store.getMaxEventId());
         store.close();
 
-        final PartitionedWriteAheadEventStore recoveredStore = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP);
+        final PartitionedWriteAheadEventStore recoveredStore = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP, new EventFileManager());
         recoveredStore.initialize();
         assertEquals(19, recoveredStore.getMaxEventId());
     }
@@ -234,7 +235,7 @@ public class TestPartitionedWriteAheadEventStore {
     @Test
     public void testGetEvent() throws IOException {
         final RepositoryConfiguration config = createConfig();
-        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP);
+        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP, new EventFileManager());
         store.initialize();
 
         final int numEvents = 20;
@@ -258,7 +259,7 @@ public class TestPartitionedWriteAheadEventStore {
     @Test
     public void testGetEventsWithMinIdAndCount() throws IOException {
         final RepositoryConfiguration config = createConfig();
-        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP);
+        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP, new EventFileManager());
         store.initialize();
 
         final int numEvents = 20;
@@ -279,7 +280,7 @@ public class TestPartitionedWriteAheadEventStore {
     @Test
     public void testGetEventsWithMinIdAndCountWithAuthorizer() throws IOException {
         final RepositoryConfiguration config = createConfig();
-        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP);
+        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP, new EventFileManager());
         store.initialize();
 
         final int numEvents = 20;
@@ -315,7 +316,7 @@ public class TestPartitionedWriteAheadEventStore {
     @Test
     public void testGetEventsWithStartOffsetAndCountWithNothingAuthorized() throws IOException {
         final RepositoryConfiguration config = createConfig();
-        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP);
+        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP, new EventFileManager());
         store.initialize();
 
         final int numEvents = 20;
@@ -334,7 +335,7 @@ public class TestPartitionedWriteAheadEventStore {
     @Test
     public void testGetSpecificEventIds() throws IOException {
         final RepositoryConfiguration config = createConfig();
-        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP);
+        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP, new EventFileManager());
         store.initialize();
 
         final int numEvents = 20;
@@ -389,7 +390,7 @@ public class TestPartitionedWriteAheadEventStore {
     @Test
     public void testWriteAfterRecoveringRepo() throws IOException {
         final RepositoryConfiguration config = createConfig();
-        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP);
+        final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP, new EventFileManager());
         store.initialize();
 
         for (int i = 0; i < 4; i++) {
@@ -398,7 +399,7 @@ public class TestPartitionedWriteAheadEventStore {
 
         store.close();
 
-        final PartitionedWriteAheadEventStore recoveredStore = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP);
+        final PartitionedWriteAheadEventStore recoveredStore = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP, new EventFileManager());
         recoveredStore.initialize();
 
         List<ProvenanceEventRecord> recoveredEvents = recoveredStore.getEvents(0, 10);
@@ -441,6 +442,7 @@ public class TestPartitionedWriteAheadEventStore {
             .setEventId(eventId)
             .build();
     }
+
 
     private ProvenanceEventRecord createEvent() {
         final String uuid = UUID.randomUUID().toString();

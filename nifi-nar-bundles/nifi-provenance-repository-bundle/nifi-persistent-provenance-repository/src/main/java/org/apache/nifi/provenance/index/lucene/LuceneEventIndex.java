@@ -106,6 +106,7 @@ public class LuceneEventIndex implements EventIndex {
     private final List<CachedQuery> cachedQueries = new ArrayList<>();
 
     private ScheduledExecutorService maintenanceExecutor; // effectively final
+    private ScheduledExecutorService cacheWarmerExecutor;
     private EventStore eventStore;
 
     public LuceneEventIndex(final RepositoryConfiguration config, final IndexManager indexManager, final EventReporter eventReporter) {
@@ -116,6 +117,7 @@ public class LuceneEventIndex implements EventIndex {
         this.eventReporter = eventReporter;
         queryExecutor = Executors.newFixedThreadPool(config.getQueryThreadPoolSize(), new NamedThreadFactory("Provenance Query"));
         indexExecutor = Executors.newFixedThreadPool(config.getIndexThreadPoolSize(), new NamedThreadFactory("Index Provenance Events"));
+        cacheWarmerExecutor = Executors.newScheduledThreadPool(config.getStorageDirectories().size(), new NamedThreadFactory("Warm Lucene Index", true));
         directoryManager = new IndexDirectoryManager(config);
 
         // Limit number of indexing threads to 100. When we restore the repository on restart,
@@ -157,6 +159,14 @@ public class LuceneEventIndex implements EventIndex {
 
         cachedQueries.add(new LatestEventsQuery());
         cachedQueries.add(new LatestEventsPerProcessorQuery());
+
+        final Optional<Integer> warmCacheMinutesOption = config.getWarmCacheFrequencyMinutes();
+        if (warmCacheMinutesOption.isPresent() && warmCacheMinutesOption.get() > 0) {
+            for (final File storageDir : config.getStorageDirectories().values()) {
+                final int minutes = warmCacheMinutesOption.get();
+                cacheWarmerExecutor.scheduleWithFixedDelay(new LuceneCacheWarmer(storageDir, indexManager), 1, minutes, TimeUnit.MINUTES);
+            }
+        }
     }
 
     @Override
@@ -173,6 +183,7 @@ public class LuceneEventIndex implements EventIndex {
         closed = true;
         queryExecutor.shutdownNow();
         indexExecutor.shutdown();
+        cacheWarmerExecutor.shutdown();
 
         if (maintenanceExecutor != null) {
             maintenanceExecutor.shutdown();

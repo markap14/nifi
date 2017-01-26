@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.nifi.processor.DataUnit;
@@ -37,6 +38,7 @@ public class RepositoryConfiguration {
     private static final Logger logger = LoggerFactory.getLogger(RepositoryConfiguration.class);
 
     public static final String CONCURRENT_MERGE_THREADS = "nifi.provenance.repository.concurrent.merge.threads";
+    public static final String WARM_CACHE_FREQUENCY = "nifi.provenance.repository.warm.cache.frequency";
 
     private final Map<String, File> storageDirectories = new LinkedHashMap<>();
     private long recordLifeMillis = TimeUnit.MILLISECONDS.convert(24, TimeUnit.HOURS);
@@ -57,6 +59,7 @@ public class RepositoryConfiguration {
     private int indexThreadPoolSize = 1;
     private boolean allowRollover = true;
     private int concurrentMergeThreads = 4;
+    private Integer warmCacheFrequencyMinutes = null;
 
     public void setAllowRollover(final boolean allow) {
         this.allowRollover = allow;
@@ -349,6 +352,14 @@ public class RepositoryConfiguration {
         this.maxAttributeChars = maxAttributeChars;
     }
 
+    public void setWarmCacheFrequencyMinutes(Integer frequencyMinutes) {
+        this.warmCacheFrequencyMinutes = frequencyMinutes;
+    }
+
+    public Optional<Integer> getWarmCacheFrequencyMinutes() {
+        return Optional.ofNullable(warmCacheFrequencyMinutes);
+    }
+
     public static RepositoryConfiguration create(final NiFiProperties nifiProperties) {
         final Map<String, Path> storageDirectories = nifiProperties.getProvenanceRepositoryPaths();
         if (storageDirectories.isEmpty()) {
@@ -363,6 +374,7 @@ public class RepositoryConfiguration {
         final int indexThreads = nifiProperties.getIntegerProperty(NiFiProperties.PROVENANCE_INDEX_THREAD_POOL_SIZE, 1);
         final int journalCount = nifiProperties.getIntegerProperty(NiFiProperties.PROVENANCE_JOURNAL_COUNT, 16);
         final int concurrentMergeThreads = nifiProperties.getIntegerProperty(CONCURRENT_MERGE_THREADS, 4);
+        final String warmCacheFrequency = nifiProperties.getProperty(WARM_CACHE_FREQUENCY);
 
         final long storageMillis = FormatUtils.getTimeDuration(storageTime, TimeUnit.MILLISECONDS);
         final long maxStorageBytes = DataUnit.parseDataSize(storageSize, DataUnit.B).longValue();
@@ -415,6 +427,9 @@ public class RepositoryConfiguration {
         config.setMaxAttributeChars(maxAttrChars);
         config.setConcurrentMergeThreads(concurrentMergeThreads);
 
+        if (warmCacheFrequency != null) {
+            config.setWarmCacheFrequencyMinutes((int) FormatUtils.getTimeDuration(warmCacheFrequency, TimeUnit.MINUTES));
+        }
         if (shardSize != null) {
             config.setDesiredIndexSize(DataUnit.parseDataSize(shardSize, DataUnit.B).longValue());
         }

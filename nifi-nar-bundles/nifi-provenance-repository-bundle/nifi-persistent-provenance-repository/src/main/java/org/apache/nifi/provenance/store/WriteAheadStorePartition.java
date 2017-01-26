@@ -142,30 +142,6 @@ public class WriteAheadStorePartition implements EventStorePartition {
 
         this.maxEventId.set(maxEventId);
 
-
-        // file and re-queue the file for compression. Saw the following error on startup:
-        /*
-         * 2017-01-13 17:00:36,310 ERROR [main] o.a.n.p.store.WriteAheadStorePartition Failed to index Provenance Events found in /nifi/repos/sdb/provenance/23894739130.prov.gz
-         * java.util.zip.ZipException: Not in GZIP format
-         * at java.util.zip.GZIPInputStream.readHeader(GZIPInputStream.java:165) ~[na:1.8.0_111]
-         * at java.util.zip.GZIPInputStream.<init>(GZIPInputStream.java:79) ~[na:1.8.0_111]
-         * at java.util.zip.GZIPInputStream.<init>(GZIPInputStream.java:91) ~[na:1.8.0_111]
-         * at org.apache.nifi.provenance.serialization.CompressableRecordReader.resetStreamForNextBlock(CompressableRecordReader.java:147)
-         * ~[nifi-persistent-provenance-repository-1.2.0-SNAPSHOT.jar:1.2.0-SNAPSHOT]
-         * at org.apache.nifi.provenance.serialization.CompressableRecordReader.isData(CompressableRecordReader.java:188) ~[nifi-persistent-provenance-repository-1.2.0-SNAPSHOT.jar:1.2.0-SNAPSHOT]
-         * at org.apache.nifi.provenance.serialization.CompressableRecordReader.nextRecord(CompressableRecordReader.java:278) ~[nifi-persistent-provenance-repository-1.2.0-SNAPSHOT.jar:1.2.0-SNAPSHOT]
-         * at org.apache.nifi.provenance.store.WriteAheadStorePartition.reindexLatestEvents(WriteAheadStorePartition.java:537)
-         * ~[nifi-persistent-provenance-repository-1.2.0-SNAPSHOT.jar:1.2.0-SNAPSHOT]
-         * at org.apache.nifi.provenance.store.PartitionedWriteAheadEventStore.reindexLatestEvents(PartitionedWriteAheadEventStore.java:113)
-         * [nifi-persistent-provenance-repository-1.2.0-SNAPSHOT.jar:1.2.0-SNAPSHOT]
-         * at org.apache.nifi.provenance.WriteAheadProvenanceRepository.initialize(WriteAheadProvenanceRepository.java:106) [nifi-persistent-provenance-repository-1.2.0-SNAPSHOT.jar:1.2.0-SNAPSHOT]
-         * at org.apache.nifi.controller.FlowController.<init>(FlowController.java:457) [nifi-framework-core-1.2.0-SNAPSHOT.jar:1.2.0-SNAPSHOT]
-         * at org.apache.nifi.controller.FlowController.createStandaloneInstance(FlowController.java:375) [nifi-framework-core-1.2.0-SNAPSHOT.jar:1.2.0-SNAPSHOT]
-         * at org.apache.nifi.spring.FlowControllerFactoryBean.getObject(FlowControllerFactoryBean.java:74) [nifi-framework-core-1.2.0-SNAPSHOT.jar:1.2.0-SNAPSHOT]
-         *
-         * If we have both .prov.gz and a .prov file, need to ensure that whichever one we are using doesn't get deleted until we are finished reading it.
-         */
-
         // If configured to compress, compress any files that are not yet compressed.
         if (config.isCompressOnRollover()) {
             final File[] uncompressedFiles = partitionDirectory.listFiles(f -> f.getName().endsWith(".prov"));

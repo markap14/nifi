@@ -21,10 +21,10 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import org.apache.nifi.provenance.schema.EventIdFirstHeaderSchema;
 import org.apache.nifi.provenance.schema.LookupTableEventRecord;
 import org.apache.nifi.provenance.serialization.CompressableRecordReader;
 import org.apache.nifi.provenance.toc.TocReader;
@@ -57,10 +57,11 @@ public class EventIdFirstSchemaRecordReader extends CompressableRecordReader {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     protected synchronized void readHeader(final DataInputStream in, final int serializationVersion) throws IOException {
         verifySerializationVersion(serializationVersion);
-        final int schemaLength = in.readInt();
-        final byte[] buffer = new byte[schemaLength];
+        final int eventSchemaLength = in.readInt();
+        final byte[] buffer = new byte[eventSchemaLength];
         StreamUtils.fillBuffer(in, buffer);
 
         try (final ByteArrayInputStream bais = new ByteArrayInputStream(buffer)) {
@@ -69,22 +70,23 @@ public class EventIdFirstSchemaRecordReader extends CompressableRecordReader {
 
         recordReader = SchemaRecordReader.fromSchema(schema);
 
-        componentIds = readLookups(in);
-        componentTypes = readLookups(in);
-        queueIds = readLookups(in);
-        eventTypes = readLookups(in);
-        firstEventId = in.readLong();
-        systemTimeOffset = in.readLong();
-    }
+        final int headerSchemaLength = in.readInt();
+        final byte[] headerSchemaBuffer = new byte[headerSchemaLength];
+        StreamUtils.fillBuffer(in, headerSchemaBuffer);
 
-    private List<String> readLookups(final DataInputStream in) throws IOException {
-        final int listSize = in.readInt();
-        final List<String> values = new ArrayList<>(listSize);
-        for (int i = 0; i < listSize; i++) {
-            values.add(in.readUTF());
+        final RecordSchema headerSchema;
+        try (final ByteArrayInputStream bais = new ByteArrayInputStream(headerSchemaBuffer)) {
+            headerSchema = RecordSchema.readFrom(bais);
         }
 
-        return values;
+        final SchemaRecordReader headerReader = SchemaRecordReader.fromSchema(headerSchema);
+        final Record headerRecord = headerReader.readRecord(in);
+        componentIds = (List<String>) headerRecord.getFieldValue(EventIdFirstHeaderSchema.FieldNames.COMPONENT_IDS);
+        componentTypes = (List<String>) headerRecord.getFieldValue(EventIdFirstHeaderSchema.FieldNames.COMPONENT_TYPES);
+        queueIds = (List<String>) headerRecord.getFieldValue(EventIdFirstHeaderSchema.FieldNames.QUEUE_IDS);
+        eventTypes = (List<String>) headerRecord.getFieldValue(EventIdFirstHeaderSchema.FieldNames.EVENT_TYPES);
+        firstEventId = (Long) headerRecord.getFieldValue(EventIdFirstHeaderSchema.FieldNames.FIRST_EVENT_ID);
+        systemTimeOffset = (Long) headerRecord.getFieldValue(EventIdFirstHeaderSchema.FieldNames.TIMESTAMP_OFFSET);
     }
 
     @Override

@@ -106,7 +106,8 @@
         <nifi.provenance.repository.always.sync>false</nifi.provenance.repository.always.sync>
         <nifi.provenance.repository.journal.count>16</nifi.provenance.repository.journal.count>
         <nifi.provenance.repository.max.attribute.length>65536</nifi.provenance.repository.max.attribute.length>
-        <nifi.provenance.repository.concurrent.merge.threads>4</nifi.provenance.repository.concurrent.merge.threads>
+        <nifi.provenance.repository.concurrent.merge.threads>2</nifi.provenance.repository.concurrent.merge.threads>
+        <nifi.provenance.repository.warm.cache.frequency>1 hour</nifi.provenance.repository.warm.cache.frequency>
 
         <!-- volatile provenance repository properties -->
         <nifi.provenance.repository.buffer.size>100000</nifi.provenance.repository.buffer.size>

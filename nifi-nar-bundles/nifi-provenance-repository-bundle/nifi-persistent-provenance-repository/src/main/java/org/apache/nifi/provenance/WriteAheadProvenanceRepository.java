@@ -39,6 +39,7 @@ import org.apache.nifi.provenance.search.QuerySubmission;
 import org.apache.nifi.provenance.search.SearchableField;
 import org.apache.nifi.provenance.serialization.RecordReaders;
 import org.apache.nifi.provenance.serialization.StorageSummary;
+import org.apache.nifi.provenance.store.EventFileManager;
 import org.apache.nifi.provenance.store.EventStore;
 import org.apache.nifi.provenance.store.PartitionedWriteAheadEventStore;
 import org.apache.nifi.provenance.store.RecordReaderFactory;
@@ -90,8 +91,17 @@ public class WriteAheadProvenanceRepository implements ProvenanceRepository {
             return new EventIdFirstSchemaRecordWriter(file, idGenerator, tocWriter, compressed, BLOCK_SIZE, idLookup);
         };
 
-        final RecordReaderFactory recordReaderFactory = (file, logs, maxChars) -> RecordReaders.newRecordReader(file, logs, maxChars);
-        eventStore = new PartitionedWriteAheadEventStore(config, recordWriterFactory, recordReaderFactory, eventReporter);
+        final EventFileManager fileManager = new EventFileManager();
+        final RecordReaderFactory recordReaderFactory = (file, logs, maxChars) -> {
+            fileManager.obtainReadLock(file);
+            try {
+                return RecordReaders.newRecordReader(file, logs, maxChars);
+            } finally {
+                fileManager.releaseReadLock(file);
+            }
+        };
+
+        eventStore = new PartitionedWriteAheadEventStore(config, recordWriterFactory, recordReaderFactory, eventReporter, fileManager);
 
         final IndexManager indexManager = new SimpleIndexManager(config);
         eventIndex = new LuceneEventIndex(config, indexManager, eventReporter);

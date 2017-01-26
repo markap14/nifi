@@ -45,24 +45,21 @@ public class PartitionedWriteAheadEventStore extends PartitionedEventStore {
     private final ExecutorService compressionExecutor;
     private final List<EventFileCompressor> fileCompressors = Collections.synchronizedList(new ArrayList<>());
     private final EventReporter eventReporter;
+    private final EventFileManager fileManager;
 
     public PartitionedWriteAheadEventStore(final RepositoryConfiguration repoConfig, final RecordWriterFactory recordWriterFactory,
-        final RecordReaderFactory recordReaderFactory, final EventReporter eventReporter) {
+        final RecordReaderFactory recordReaderFactory, final EventReporter eventReporter, final EventFileManager fileManager) {
         super(repoConfig, eventReporter);
         this.repoConfig = repoConfig;
         this.eventReporter = eventReporter;
         this.filesToCompress = new LinkedBlockingQueue<>(100);
         final AtomicLong idGenerator = new AtomicLong(0L);
         this.partitions = createPartitions(repoConfig, recordWriterFactory, recordReaderFactory, idGenerator);
+        this.fileManager = fileManager;
 
         // Creates tasks to compress data on rollover
         if (repoConfig.isCompressOnRollover()) {
             compressionExecutor = Executors.newFixedThreadPool(repoConfig.getIndexThreadPoolSize(), new NamedThreadFactory("Compress Provenance Logs"));
-            for (int i = 0; i < repoConfig.getIndexThreadPoolSize(); i++) {
-                final EventFileCompressor compressor = new EventFileCompressor(filesToCompress);
-                compressionExecutor.submit(compressor);
-                fileCompressors.add(compressor);
-            }
         } else {
             compressionExecutor = null;
         }
@@ -91,7 +88,7 @@ public class PartitionedWriteAheadEventStore extends PartitionedEventStore {
     public void initialize() throws IOException {
         if (repoConfig.isCompressOnRollover()) {
             for (int i = 0; i < repoConfig.getIndexThreadPoolSize(); i++) {
-                final EventFileCompressor compressor = new EventFileCompressor(filesToCompress);
+                final EventFileCompressor compressor = new EventFileCompressor(filesToCompress, fileManager);
                 compressionExecutor.submit(compressor);
                 fileCompressors.add(compressor);
             }

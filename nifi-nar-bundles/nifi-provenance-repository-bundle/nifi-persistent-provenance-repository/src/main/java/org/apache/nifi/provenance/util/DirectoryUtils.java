@@ -31,6 +31,7 @@ import org.apache.nifi.provenance.RepositoryConfiguration;
 public class DirectoryUtils {
 
     public static final FileFilter EVENT_FILE_FILTER = f -> f.getName().endsWith(".prov") || f.getName().endsWith(".prov.gz");
+    public static final FileFilter INDEX_FILE_FILTER = f -> f.getName().startsWith("index-");
     public static final Comparator<File> SMALLEST_ID_FIRST = (a, b) -> Long.compare(getMinId(a), getMinId(b));
     public static final Comparator<File> LARGEST_ID_FIRST = SMALLEST_ID_FIRST.reversed();
     public static final Comparator<File> OLDEST_INDEX_FIRST = (a, b) -> Long.compare(getIndexTimestamp(a), getIndexTimestamp(b));
