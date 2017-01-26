@@ -84,7 +84,7 @@ public class SimpleIndexManager implements IndexManager {
             if (writerCount != null) {
                 // Increment writer count and create an Index Searcher based on the writer
                 writerCounts.put(absoluteFile, new IndexWriterCount(writerCount.getWriter(), writerCount.getAnalyzer(),
-                    writerCount.getDirectory(), writerCount.getCount() + 1));
+                    writerCount.getDirectory(), writerCount.getCount() + 1, writerCount.isCloseableWhenUnused()));
             }
         }
 
@@ -131,7 +131,7 @@ public class SimpleIndexManager implements IndexManager {
         }
 
         try {
-            writerCount.close();
+            close(writerCount);
         } catch (final Exception e) {
             logger.error("Failed to close Index Writer for {} while removing Index from the repository;"
                 + "this directory may need to be cleaned up manually.", e);
@@ -160,7 +160,7 @@ public class SimpleIndexManager implements IndexManager {
             final IndexWriter indexWriter = new IndexWriter(directory, config);
             final EventIndexWriter eventIndexWriter = new LuceneEventIndexWriter(indexWriter, indexDirectory);
 
-            final IndexWriterCount writerCount = new IndexWriterCount(eventIndexWriter, analyzer, directory, 1);
+            final IndexWriterCount writerCount = new IndexWriterCount(eventIndexWriter, analyzer, directory, 1, false);
             logger.debug("Providing new index writer for {}", indexDirectory);
             return writerCount;
         } catch (final IOException ioe) {
@@ -221,7 +221,7 @@ public class SimpleIndexManager implements IndexManager {
                     // synchronize on 'this' so that we can update the writerCounts map.
                     synchronized (writerCounts) {
                         writerCounts.put(absoluteFile, new IndexWriterCount(writerCount.getWriter(),
-                            writerCount.getAnalyzer(), writerCount.getDirectory(), writerCount.getCount() + 1));
+                            writerCount.getAnalyzer(), writerCount.getDirectory(), writerCount.getCount() + 1, writerCount.isCloseableWhenUnused()));
                     }
                 }
             }
@@ -255,16 +255,20 @@ public class SimpleIndexManager implements IndexManager {
                     // we are finished with this writer.
                     unused = true;
                     logger.debug("Decrementing count for Index Writer for {} to {}{}", indexDirectory, count.getCount() - 1, isCloseable ? "; closing writer" : "");
-                    if (isCloseable) {
+                    if (isCloseable || count.isCloseableWhenUnused()) {
                         writerCounts.remove(absoluteFile);
                     } else {
                         // If writer is not closeable, then we need to decrement its count.
-                        writerCounts.put(absoluteFile, new IndexWriterCount(count.getWriter(), count.getAnalyzer(), count.getDirectory(), count.getCount() - 1));
+                        writerCounts.put(absoluteFile, new IndexWriterCount(count.getWriter(), count.getAnalyzer(), count.getDirectory(),
+                            count.getCount() - 1, count.isCloseableWhenUnused()));
                     }
                 } else {
                     // decrement the count.
-                    logger.debug("Decrementing count for Index Writer for {} to {}", indexDirectory, count.getCount() - 1);
-                    writerCounts.put(absoluteFile, new IndexWriterCount(count.getWriter(), count.getAnalyzer(), count.getDirectory(), count.getCount() - 1));
+                    logger.debug("Decrementing count for Index Writer for {} to {}{}", indexDirectory, count.getCount() - 1,
+                        isCloseable ? " and marking as closeable when no longer in use" : "");
+
+                    writerCounts.put(absoluteFile, new IndexWriterCount(count.getWriter(), count.getAnalyzer(),
+                        count.getDirectory(), count.getCount() - 1, count.isCloseableWhenUnused() || isCloseable));
                 }
             }
 
@@ -276,9 +280,9 @@ public class SimpleIndexManager implements IndexManager {
                         writer.commit();
                     }
                 } finally {
-                    if (isCloseable) {
+                    if (isCloseable || count.isCloseableWhenUnused()) {
                         logger.info("Index Writer for {} has been returned to Index Manager and is no longer in use. Closing Index Writer", indexDirectory);
-                        count.close();
+                        close(count);
                     }
                 }
             }
@@ -287,6 +291,17 @@ public class SimpleIndexManager implements IndexManager {
             if (logger.isDebugEnabled()) {
                 logger.warn("", ioe);
             }
+        }
+    }
+
+    // This method exists solely for unit testing purposes.
+    protected void close(final IndexWriterCount count) throws IOException {
+        count.close();
+    }
+
+    protected int getWriterCount() {
+        synchronized (writerCounts) {
+            return writerCounts.size();
         }
     }
 
@@ -305,17 +320,23 @@ public class SimpleIndexManager implements IndexManager {
     }
 
 
-    private static class IndexWriterCount implements Closeable {
+    protected static class IndexWriterCount implements Closeable {
         private final EventIndexWriter writer;
         private final Analyzer analyzer;
         private final Directory directory;
         private final int count;
+        private final boolean closeableWhenUnused;
 
-        public IndexWriterCount(final EventIndexWriter writer, final Analyzer analyzer, final Directory directory, final int count) {
+        public IndexWriterCount(final EventIndexWriter writer, final Analyzer analyzer, final Directory directory, final int count, final boolean closeableWhenUnused) {
             this.writer = writer;
             this.analyzer = analyzer;
             this.directory = directory;
             this.count = count;
+            this.closeableWhenUnused = closeableWhenUnused;
+        }
+
+        public boolean isCloseableWhenUnused() {
+            return closeableWhenUnused;
         }
 
         public Analyzer getAnalyzer() {
