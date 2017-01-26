@@ -25,7 +25,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -287,6 +289,124 @@ public class TestEventIdFirstSchemaRecordReaderWriter extends AbstractTestRecord
 
             assertEquals(1L, recovered.getPreviousFileSize().longValue());
             assertEquals(2L, recovered.getContentClaimOffset().longValue());
+
+            assertNull(reader.nextRecord());
+        }
+
+        FileUtils.deleteFile(journalFile.getParentFile(), true);
+    }
+
+    @Test
+    public void testEventIdAndTimestampCorrect() throws IOException {
+        final File journalFile = new File("target/storage/" + UUID.randomUUID().toString() + "/testSimpleWrite.gz");
+        final File tocFile = TocUtil.getTocFile(journalFile);
+        final TocWriter tocWriter = new StandardTocWriter(tocFile, false, false);
+        final RecordWriter writer = createWriter(journalFile, tocWriter, true, 8192);
+
+        final Map<String, String> attributes = new HashMap<>();
+        attributes.put("filename", "1.txt");
+        attributes.put("uuid", UUID.randomUUID().toString());
+
+        final long timestamp = System.currentTimeMillis() - 10000L;
+
+        final StandardProvenanceEventRecord.Builder builder = new StandardProvenanceEventRecord.Builder();
+        builder.setEventId(1_000_000);
+        builder.setEventTime(timestamp);
+        builder.setEventType(ProvenanceEventType.RECEIVE);
+        builder.setTransitUri("nifi://unit-test");
+        builder.fromFlowFile(TestUtil.createFlowFile(3L, 3000L, attributes));
+        builder.setComponentId("1234");
+        builder.setComponentType("dummy processor");
+        builder.setPreviousContentClaim("container-1", "section-1", "identifier-1", 1L, 1L);
+        builder.setCurrentContentClaim("container-2", "section-2", "identifier-2", 2L, 2L);
+        final ProvenanceEventRecord record = builder.build();
+
+        writer.writeHeader(500_000L);
+        writer.writeRecord(record);
+        writer.close();
+
+        final TocReader tocReader = new StandardTocReader(tocFile);
+
+        try (final FileInputStream fis = new FileInputStream(journalFile);
+            final RecordReader reader = createReader(fis, journalFile.getName(), tocReader, 2048)) {
+
+            final ProvenanceEventRecord event = reader.nextRecord();
+            assertNotNull(event);
+            assertEquals(1_000_000L, event.getEventId());
+            assertEquals(timestamp, event.getEventTime());
+            assertNull(reader.nextRecord());
+        }
+
+        FileUtils.deleteFile(journalFile.getParentFile(), true);
+    }
+
+
+    @Test
+    public void testComponentIdInlineAndLookup() throws IOException {
+        final File journalFile = new File("target/storage/" + UUID.randomUUID().toString() + "/testSimpleWrite.prov");
+        final File tocFile = TocUtil.getTocFile(journalFile);
+        final TocWriter tocWriter = new StandardTocWriter(tocFile, false, false);
+
+        final IdentifierLookup lookup = new IdentifierLookup() {
+            @Override
+            public List<String> getQueueIdentifiers() {
+                return Collections.emptyList();
+            }
+
+            @Override
+            public List<String> getComponentTypes() {
+                return Collections.singletonList("unit-test-component-1");
+            }
+
+            @Override
+            public List<String> getComponentIdentifiers() {
+                return Collections.singletonList("1234");
+            }
+        };
+
+        final RecordWriter writer = new EventIdFirstSchemaRecordWriter(journalFile, idGenerator, tocWriter, false, 1024 * 32, lookup);
+
+        final Map<String, String> attributes = new HashMap<>();
+        attributes.put("filename", "1.txt");
+        attributes.put("uuid", UUID.randomUUID().toString());
+
+        final StandardProvenanceEventRecord.Builder builder = new StandardProvenanceEventRecord.Builder();
+        builder.setEventId(1_000_000);
+        builder.setEventTime(System.currentTimeMillis());
+        builder.setEventType(ProvenanceEventType.RECEIVE);
+        builder.setTransitUri("nifi://unit-test");
+        builder.fromFlowFile(TestUtil.createFlowFile(3L, 3000L, attributes));
+        builder.setComponentId("1234");
+        builder.setComponentType("unit-test-component-2");
+        builder.setPreviousContentClaim("container-1", "section-1", "identifier-1", 1L, 1L);
+        builder.setCurrentContentClaim("container-2", "section-2", "identifier-2", 2L, 2L);
+
+        writer.writeHeader(500_000L);
+        writer.writeRecord(builder.build());
+
+        builder.setEventId(1_000_001L);
+        builder.setComponentId("4444");
+        builder.setComponentType("unit-test-component-1");
+        writer.writeRecord(builder.build());
+
+        writer.close();
+
+        final TocReader tocReader = new StandardTocReader(tocFile);
+
+        try (final FileInputStream fis = new FileInputStream(journalFile);
+            final RecordReader reader = createReader(fis, journalFile.getName(), tocReader, 2048)) {
+
+            ProvenanceEventRecord event = reader.nextRecord();
+            assertNotNull(event);
+            assertEquals(1_000_000L, event.getEventId());
+            assertEquals("1234", event.getComponentId());
+            assertEquals("unit-test-component-2", event.getComponentType());
+
+            event = reader.nextRecord();
+            assertNotNull(event);
+            assertEquals(1_000_001L, event.getEventId());
+            assertEquals("4444", event.getComponentId());
+            assertEquals("unit-test-component-1", event.getComponentType());
 
             assertNull(reader.nextRecord());
         }

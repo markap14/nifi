@@ -81,7 +81,7 @@ public interface ProvenanceEventRecord {
 
     /**
      * Returns the attribute with the given name
-     * 
+     *
      * @param attributeName the name of the attribute to get
      * @return the attribute with the given name or <code>null</code> if no attribute exists with the given name
      */

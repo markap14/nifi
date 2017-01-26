@@ -17,7 +17,7 @@
 
 package org.apache.nifi.provenance.schema;
 
-import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.*;
+import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.ALTERNATE_IDENTIFIER;
 import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.CHILD_UUIDS;
 import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.COMPONENT_ID;
 import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.COMPONENT_TYPE;
@@ -26,8 +26,11 @@ import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.EVE
 import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.EVENT_DURATION;
 import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.EVENT_TIME_OFFSET;
 import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.EVENT_TYPE_ORDINAL;
+import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.EXPLICIT_STRING;
 import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.FLOWFILE_ENTRY_DATE_OFFSET;
 import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.LINEAGE_START_DATE_OFFSET;
+import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.LOOKUP_VALUE;
+import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.NO_VALUE;
 import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.PARENT_UUIDS;
 import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.PREVIOUS_ATTRIBUTES;
 import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.PREVIOUS_CONTENT_CLAIM;
@@ -36,6 +39,7 @@ import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.REL
 import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.SOURCE_QUEUE_ID;
 import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.SOURCE_SYSTEM_FLOWFILE_IDENTIFIER;
 import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.TRANSIT_URI;
+import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.UNCHANGED_VALUE;
 import static org.apache.nifi.provenance.schema.LookupTableEventRecordFields.UPDATED_ATTRIBUTES;
 
 import java.util.ArrayList;

@@ -42,7 +42,6 @@ import java.util.function.Consumer;
 
 import org.apache.nifi.provenance.schema.EventFieldNames;
 import org.apache.nifi.provenance.schema.EventRecord;
-import org.apache.nifi.provenance.schema.EventRecordFields;
 import org.apache.nifi.provenance.schema.ProvenanceEventSchema;
 import org.apache.nifi.provenance.serialization.RecordReader;
 import org.apache.nifi.provenance.serialization.RecordWriter;
