@@ -642,6 +642,8 @@ public class LuceneEventIndex implements EventIndex {
 
             final ProvenanceEventRecord firstEvent = firstEvents.get(0);
             final long earliestEventTime = firstEvent.getEventTime();
+            logger.debug("First Event Time is {} ({}) with Event ID {}; will delete any Lucene Index that is older than this",
+                earliestEventTime, new Date(earliestEventTime), firstEvent.getEventId());
             final List<File> indicesBeforeEarliestEvent = directoryManager.getDirectoriesBefore(earliestEventTime);
 
             for (final File index : indicesBeforeEarliestEvent) {

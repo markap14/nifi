@@ -301,11 +301,6 @@ public abstract class CompressableRecordReader implements RecordReader {
 
     @Override
     public Optional<ProvenanceEventRecord> skipToEvent(final long eventId) throws IOException {
-        final Optional<Integer> blockIndex = getBlockIndex(eventId);
-        if (!blockIndex.isPresent()) {
-            return Optional.empty();
-        }
-
         if (pushbackEvent != null) {
             final StandardProvenanceEventRecord previousPushBack = pushbackEvent;
             if (previousPushBack.getEventId() >= eventId) {
@@ -315,9 +310,12 @@ public abstract class CompressableRecordReader implements RecordReader {
             }
         }
 
-        // Skip to the appropriate block index and then read until we've found an Event
-        // that has an ID >= the event id.
-        skipToBlock(blockIndex.get());
+        final Optional<Integer> blockIndex = getBlockIndex(eventId);
+        if (blockIndex.isPresent()) {
+            // Skip to the appropriate block index and then read until we've found an Event
+            // that has an ID >= the event id.
+            skipToBlock(blockIndex.get());
+        }
 
         try {
             boolean read = true;

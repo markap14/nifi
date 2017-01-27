@@ -259,22 +259,25 @@ public class TestPartitionedWriteAheadEventStore {
     @Test
     public void testGetEventsWithMinIdAndCount() throws IOException {
         final RepositoryConfiguration config = createConfig();
+        config.setMaxEventFileCount(100);
         final PartitionedWriteAheadEventStore store = new PartitionedWriteAheadEventStore(config, writerFactory, readerFactory, EventReporter.NO_OP, new EventFileManager());
         store.initialize();
 
-        final int numEvents = 20;
+        final int numEvents = 50_000;
         final List<ProvenanceEventRecord> events = new ArrayList<>(numEvents);
         for (int i = 0; i < numEvents; i++) {
             final ProvenanceEventRecord event = createEvent();
             store.addEvents(Collections.singleton(event));
-            events.add(event);
+            if (i < 1000) {
+                events.add(event);
+            }
         }
 
         assertTrue(store.getEvents(-1000L, 1000).isEmpty());
-        assertEquals(events, store.getEvents(0, 20));
-        assertEquals(events, store.getEvents(-30, 60));
-        assertEquals(events.subList(10, events.size()), store.getEvents(10L, 1000));
-        assertTrue(store.getEvents(20L, 100).isEmpty());
+        assertEquals(events, store.getEvents(0, events.size()));
+        assertEquals(events, store.getEvents(-30, events.size()));
+        assertEquals(events.subList(10, events.size()), store.getEvents(10L, events.size() - 10));
+        assertTrue(store.getEvents(numEvents, 100).isEmpty());
     }
 
     @Test
@@ -429,10 +432,9 @@ public class TestPartitionedWriteAheadEventStore {
         final File storageDir = new File("target/storage/" + unitTestName + "/" + UUID.randomUUID().toString());
 
         for (int i = 1; i <= numStorageDirs; i++) {
-            config.addStorageDirectory(String.valueOf(1), new File(storageDir, String.valueOf(i)));
+            config.addStorageDirectory(String.valueOf(i), new File(storageDir, String.valueOf(i)));
         }
 
-        config.setJournalCount(4);
         return config;
     }
 

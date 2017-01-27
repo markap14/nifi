@@ -59,12 +59,12 @@ public class EventFileCompressor implements Runnable {
     @Override
     public void run() {
         while (!shutdown) {
-            File file = null;
+            File uncompressedEventFile = null;
 
             try {
                 final long start = System.nanoTime();
-                file = filesToCompress.poll(1, TimeUnit.SECONDS);
-                if (file == null || shutdown) {
+                uncompressedEventFile = filesToCompress.poll(1, TimeUnit.SECONDS);
+                if (uncompressedEventFile == null || shutdown) {
                     continue;
                 }
 
@@ -72,11 +72,12 @@ public class EventFileCompressor implements Runnable {
                 long bytesBefore = 0L;
                 StandardTocReader tocReader = null;
 
-                eventFileManager.obtainReadLock(file);
+                File tmpTocFile = null;
+                eventFileManager.obtainReadLock(uncompressedEventFile);
                 try {
                     StandardTocWriter tocWriter = null;
 
-                    final File tocFile = TocUtil.getTocFile(file);
+                    final File tocFile = TocUtil.getTocFile(uncompressedEventFile);
                     try {
                         tocReader = new StandardTocReader(tocFile);
                     } catch (final IOException e) {
@@ -84,41 +85,44 @@ public class EventFileCompressor implements Runnable {
                         continue;
                     }
 
-                    bytesBefore = file.length();
+                    bytesBefore = uncompressedEventFile.length();
 
                     try {
-                        outputFile = new File(file.getParentFile(), file.getName() + ".gz");
+                        outputFile = new File(uncompressedEventFile.getParentFile(), uncompressedEventFile.getName() + ".gz");
                         try {
-                            final File tmpFile = new File(tocFile.getParentFile(), tocFile.getName() + ".tmp");
-                            tocWriter = new StandardTocWriter(tmpFile, true, false);
-                            compress(file, tocReader, outputFile, tocWriter);
+                            tmpTocFile = new File(tocFile.getParentFile(), tocFile.getName() + ".tmp");
+                            tocWriter = new StandardTocWriter(tmpTocFile, true, false);
+                            compress(uncompressedEventFile, tocReader, outputFile, tocWriter);
                             tocWriter.close();
-                            tmpFile.renameTo(tocFile);
                         } catch (final IOException ioe) {
-                            logger.error("Failed to compress {} on rollover", file, ioe);
+                            logger.error("Failed to compress {} on rollover", uncompressedEventFile, ioe);
                         }
                     } finally {
                         CloseableUtil.closeQuietly(tocReader, tocWriter);
                     }
                 } finally {
-                    eventFileManager.releaseReadLock(file);
+                    eventFileManager.releaseReadLock(uncompressedEventFile);
                 }
 
-                eventFileManager.obtainWriteLock(file);
+                eventFileManager.obtainWriteLock(uncompressedEventFile);
                 try {
                     // Attempt to delete the input file and associated toc file
-                    if (file.delete()) {
+                    if (uncompressedEventFile.delete()) {
                         if (tocReader != null) {
                             final File tocFile = tocReader.getFile();
                             if (!tocFile.delete()) {
                                 logger.warn("Failed to delete {}; this file should be cleaned up manually", tocFile);
                             }
+
+                            if (tmpTocFile != null) {
+                                tmpTocFile.renameTo(tocFile);
+                            }
                         }
                     } else {
-                        logger.warn("Failed to delete {}; this file should be cleaned up manually", file);
+                        logger.warn("Failed to delete {}; this file should be cleaned up manually", uncompressedEventFile);
                     }
                 } finally {
-                    eventFileManager.releaseWriteLock(file);
+                    eventFileManager.releaseWriteLock(uncompressedEventFile);
                 }
 
                 final long millis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
@@ -126,12 +130,12 @@ public class EventFileCompressor implements Runnable {
                 final double reduction = 100 * (1 - (double) bytesAfter / (double) bytesBefore);
                 final String reductionTwoDecimals = String.format("%.2f", reduction);
                 logger.debug("Successfully compressed Provenance Event File {} in {} millis from {} to {}, a reduction of {}%",
-                    file, millis, FormatUtils.formatDataSize(bytesBefore), FormatUtils.formatDataSize(bytesAfter), reductionTwoDecimals);
+                    uncompressedEventFile, millis, FormatUtils.formatDataSize(bytesBefore), FormatUtils.formatDataSize(bytesAfter), reductionTwoDecimals);
             } catch (final InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return;
             } catch (final Exception e) {
-                logger.error("Failed to compress {}", file, e);
+                logger.error("Failed to compress {}", uncompressedEventFile, e);
             }
         }
     }
