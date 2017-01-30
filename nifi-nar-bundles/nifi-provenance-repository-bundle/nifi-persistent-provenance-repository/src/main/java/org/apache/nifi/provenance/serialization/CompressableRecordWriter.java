@@ -146,7 +146,7 @@ public abstract class CompressableRecordWriter extends AbstractRecordWriter {
         }
     }
 
-    protected void ensureStreamState(final long recordIdentifier, final long startBytes) throws IOException {
+    protected synchronized void ensureStreamState(final long recordIdentifier, final long startBytes) throws IOException {
         // add a new block to the TOC if needed.
         if (getTocWriter() != null && (startBytes - blockStartOffset >= uncompressedBlockSize)) {
             blockStartOffset = startBytes;

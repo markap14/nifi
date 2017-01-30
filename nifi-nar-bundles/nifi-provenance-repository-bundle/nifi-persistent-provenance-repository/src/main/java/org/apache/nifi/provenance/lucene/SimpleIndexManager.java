@@ -37,7 +37,6 @@ import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
-import org.apache.lucene.store.LockObtainFailedException;
 import org.apache.nifi.provenance.RepositoryConfiguration;
 import org.apache.nifi.provenance.index.EventIndexSearcher;
 import org.apache.nifi.provenance.index.EventIndexWriter;
@@ -51,7 +50,6 @@ public class SimpleIndexManager implements IndexManager {
     private final Map<File, IndexWriterCount> writerCounts = new HashMap<>(); // guarded by synchronizing on map itself
     private final ExecutorService searchExecutor;
     private final RepositoryConfiguration repoConfig;
-    private final Object writerCreationMonitor = new Object();
 
     public SimpleIndexManager(final RepositoryConfiguration repoConfig) {
         this.repoConfig = repoConfig;
@@ -182,48 +180,16 @@ public class SimpleIndexManager implements IndexManager {
         logger.trace("Borrowing index writer for {}", indexDirectory);
 
         IndexWriterCount writerCount = null;
-        boolean writerObtained = false;
+        synchronized (writerCounts) {
+            writerCount = writerCounts.get(absoluteFile);
 
-        // Synchronize on writerCreationMonitor so that we know that no other thread is creating
-        // an Index Writer. This is important because we will get IOExceptions if we have multiple
-        // threads attempting to create a writer for the same index. However, we don't want to do
-        // this while synchronizing on writerCounts because we want other threads to have the ability
-        // to obtain index searchers & return index writers and searchers. Because creating a new
-        // Index Writer can be relatively expensive due to disk/IO operations, we would prefer to
-        // not block any more than we have to while this is occurring.
-        // In addition to synchronizing on the writerCreationMonitor, we must also synchronize on
-        // 'writerCounts' in order to modify the map, since it is not a Concurrent Map.
-        // We avoid using a ConcurrentMap because some operations require several steps
-        // be taken atomically, so synchronization would be required anyway.
-        while (!writerObtained) {
-            synchronized (writerCreationMonitor) {
-                synchronized (writerCounts) {
-                    writerCount = writerCounts.get(absoluteFile);
-                }
-
-                if (writerCount == null) {
-                    try {
-                        writerCount = createWriter(indexDirectory);
-                        writerObtained = true;
-                    } catch (final LockObtainFailedException lofe) {
-                        // Another thread locked the directory. Check if there is a writer now.
-                        continue;
-                    }
-
-                    // synchronize on 'this' so that we can update the writerCounts map.
-                    synchronized (writerCounts) {
-                        writerCounts.put(absoluteFile, writerCount);
-                    }
-                } else {
-                    logger.debug("Providing existing index writer for {} and incrementing count to {}", indexDirectory, writerCount.getCount() + 1);
-                    writerObtained = true;
-
-                    // synchronize on 'this' so that we can update the writerCounts map.
-                    synchronized (writerCounts) {
-                        writerCounts.put(absoluteFile, new IndexWriterCount(writerCount.getWriter(),
-                            writerCount.getAnalyzer(), writerCount.getDirectory(), writerCount.getCount() + 1, writerCount.isCloseableWhenUnused()));
-                    }
-                }
+            if (writerCount == null) {
+                writerCount = createWriter(indexDirectory);
+                writerCounts.put(absoluteFile, writerCount);
+            } else {
+                logger.debug("Providing existing index writer for {} and incrementing count to {}", indexDirectory, writerCount.getCount() + 1);
+                writerCounts.put(absoluteFile, new IndexWriterCount(writerCount.getWriter(),
+                    writerCount.getAnalyzer(), writerCount.getDirectory(), writerCount.getCount() + 1, writerCount.isCloseableWhenUnused()));
             }
         }
 
@@ -243,9 +209,13 @@ public class SimpleIndexManager implements IndexManager {
 
         boolean unused = false;
         IndexWriterCount count = null;
+        boolean close = isCloseable;
         try {
             synchronized (writerCounts) {
                 count = writerCounts.get(absoluteFile);
+                if (count != null && count.isCloseableWhenUnused()) {
+                    close = true;
+                }
 
                 if (count == null) {
                     logger.warn("Index Writer {} was returned to IndexManager for {}, but this writer is not known. "
@@ -254,21 +224,21 @@ public class SimpleIndexManager implements IndexManager {
                 } else if (count.getCount() <= 1) {
                     // we are finished with this writer.
                     unused = true;
-                    logger.debug("Decrementing count for Index Writer for {} to {}{}", indexDirectory, count.getCount() - 1, isCloseable ? "; closing writer" : "");
-                    if (isCloseable || count.isCloseableWhenUnused()) {
+                    logger.debug("Decrementing count for Index Writer for {} to {}{}", indexDirectory, count.getCount() - 1, close ? "; closing writer" : "");
+                    if (close) {
                         writerCounts.remove(absoluteFile);
                     } else {
                         // If writer is not closeable, then we need to decrement its count.
                         writerCounts.put(absoluteFile, new IndexWriterCount(count.getWriter(), count.getAnalyzer(), count.getDirectory(),
-                            count.getCount() - 1, count.isCloseableWhenUnused()));
+                            count.getCount() - 1, close));
                     }
                 } else {
                     // decrement the count.
                     logger.debug("Decrementing count for Index Writer for {} to {}{}", indexDirectory, count.getCount() - 1,
-                        isCloseable ? " and marking as closeable when no longer in use" : "");
+                        close ? " and marking as closeable when no longer in use" : "");
 
                     writerCounts.put(absoluteFile, new IndexWriterCount(count.getWriter(), count.getAnalyzer(),
-                        count.getDirectory(), count.getCount() - 1, count.isCloseableWhenUnused() || isCloseable));
+                        count.getDirectory(), count.getCount() - 1, close));
                 }
             }
 
@@ -280,17 +250,14 @@ public class SimpleIndexManager implements IndexManager {
                         writer.commit();
                     }
                 } finally {
-                    if (isCloseable || count.isCloseableWhenUnused()) {
+                    if (close) {
                         logger.info("Index Writer for {} has been returned to Index Manager and is no longer in use. Closing Index Writer", indexDirectory);
                         close(count);
                     }
                 }
             }
-        } catch (final IOException ioe) {
-            logger.warn("Failed to close Index Writer {} due to {}", writer, ioe);
-            if (logger.isDebugEnabled()) {
-                logger.warn("", ioe);
-            }
+        } catch (final Exception e) {
+            logger.warn("Failed to close Index Writer {} due to {}", writer, e.toString(), e);
         }
     }
 

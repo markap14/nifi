@@ -176,6 +176,7 @@ public class EventIndexTask implements Runnable {
                 // If we don't need to commit index based on what index writer tells us, we will still want
                 // to commit the index if it's assigned to a partition and this is no longer the active index
                 // for that partition. This prevents the following case:
+                //
                 // Thread T1: pulls events from queue
                 //            Maps events to Index Directory D1
                 // Thread T2: pulls events from queue
@@ -192,15 +193,13 @@ public class EventIndexTask implements Runnable {
                 // update. We want to commit when they've all finished. This is what the IndexManager will do if we request
                 // that it commit the index. It will also close the index if requested, once all writers have finished.
                 // So when this is the case, we will request that the Index Manager both commit and close the writer.
-                if (!writerIndicatesCommit) {
-                    final Optional<String> partitionNameOption = toIndex.get(0).getPersistenceLocation().getPartitionName();
-                    if (partitionNameOption.isPresent()) {
-                        final String partitionName = partitionNameOption.get();
-                        final Optional<File> activeIndexDirOption = directoryManager.getActiveIndexDirectory(partitionName);
-                        if (activeIndexDirOption.isPresent() && !activeIndexDirOption.get().getAbsolutePath().equals(indexDirectory.getAbsolutePath())) {
-                            requestCommit = true;
-                            closeIndexWriter = true;
-                        }
+                final Optional<String> partitionNameOption = toIndex.get(0).getPersistenceLocation().getPartitionName();
+                if (partitionNameOption.isPresent()) {
+                    final String partitionName = partitionNameOption.get();
+                    final Optional<File> activeIndexDirOption = directoryManager.getActiveIndexDirectory(partitionName);
+                    if (activeIndexDirOption.isPresent() && !activeIndexDirOption.get().equals(indexDirectory)) {
+                        requestCommit = true;
+                        closeIndexWriter = true;
                     }
                 }
 
@@ -209,7 +208,9 @@ public class EventIndexTask implements Runnable {
 
             if (commit) {
                 commit(indexWriter);
-                closeIndexWriter = directoryManager.onIndexCommitted(indexDirectory);
+                requestCommit = false; // we've already committed the index writer so no need to request that the index manager do so also.
+                final boolean directoryManagerIndicatesClose = directoryManager.onIndexCommitted(indexDirectory);
+                closeIndexWriter = closeIndexWriter || directoryManagerIndicatesClose;
 
                 if (logger.isDebugEnabled()) {
                     final long maxId = documents.stream()
