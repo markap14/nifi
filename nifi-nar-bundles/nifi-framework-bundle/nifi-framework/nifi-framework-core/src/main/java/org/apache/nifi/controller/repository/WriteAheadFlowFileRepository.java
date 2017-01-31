@@ -158,6 +158,7 @@ public class WriteAheadFlowFileRepository implements FlowFileRepository, SyncLis
         // delete backup. On restore, if no files exist in partition's directory, would have to check backup directory
         serdeFactory = new RepositoryRecordSerdeFactory(claimManager);
         wal = new MinimalLockingWriteAheadLog<>(flowFileRepositoryPaths, numPartitions, serdeFactory, this);
+        logger.info("Initialized FlowFile Repository using {} partitions", numPartitions);
     }
 
     @Override

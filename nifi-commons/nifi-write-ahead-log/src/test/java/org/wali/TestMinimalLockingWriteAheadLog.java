@@ -54,6 +54,63 @@ public class TestMinimalLockingWriteAheadLog {
 
 
     @Test
+    public void testUpdatePerformance() throws IOException, InterruptedException {
+        final int numPartitions = 4;
+
+        final Path path = Paths.get("target/minimal-locking-repo");
+        deleteRecursively(path.toFile());
+        assertTrue(path.toFile().mkdirs());
+
+        final DummyRecordSerde serde = new DummyRecordSerde();
+        final WriteAheadRepository<DummyRecord> repo = new MinimalLockingWriteAheadLog<>(path, numPartitions, serde, null);
+        final Collection<DummyRecord> initialRecs = repo.recoverRecords();
+        assertTrue(initialRecs.isEmpty());
+
+        final int updateCountPerThread = 1_000_000;
+        final int numThreads = 16;
+
+        final Thread[] threads = new Thread[numThreads];
+
+        for (int j = 0; j < 2; j++) {
+            for (int i = 0; i < numThreads; i++) {
+                final Thread t = new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        for (int i = 0; i < updateCountPerThread; i++) {
+                            final DummyRecord record = new DummyRecord(String.valueOf(i), UpdateType.CREATE);
+                            try {
+                                repo.update(Collections.singleton(record), false);
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                                Assert.fail(e.toString());
+                            }
+                        }
+                    }
+                });
+
+                threads[i] = t;
+            }
+
+            final long start = System.nanoTime();
+            for (final Thread t : threads) {
+                t.start();
+            }
+            for (final Thread t : threads) {
+                t.join();
+            }
+
+            final long millis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+            if (j == 0) {
+                System.out.println(millis + " ms to insert " + updateCountPerThread * numThreads + " updates using " + numPartitions + " partitions and " + numThreads + " threads, *as a warmup!*");
+            } else {
+                System.out.println(millis + " ms to insert " + updateCountPerThread * numThreads + " updates using " + numPartitions + " partitions and " + numThreads + " threads");
+            }
+        }
+    }
+
+
+
+    @Test
     public void testRepoDoesntContinuallyGrowOnOutOfMemoryError() throws IOException, InterruptedException {
         final int numPartitions = 8;
 
