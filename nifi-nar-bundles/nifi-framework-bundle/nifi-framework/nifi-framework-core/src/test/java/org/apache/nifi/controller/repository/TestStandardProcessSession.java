@@ -85,6 +85,7 @@ import org.apache.nifi.util.NiFiProperties;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
@@ -986,6 +987,7 @@ public class TestStandardProcessSession {
     }
 
     @Test
+    @Ignore
     public void testManyFilesOpened() throws IOException {
 
         StandardProcessSession[] standardProcessSessions = new StandardProcessSession[100000];
@@ -1595,9 +1597,9 @@ public class TestStandardProcessSession {
 
         @Override
         public int incrementClaimaintCount(ContentClaim claim) {
-            final AtomicInteger count = claimantCounts.get(claim);
+            AtomicInteger count = claimantCounts.get(claim);
             if (count == null) {
-                throw new IllegalArgumentException("Unknown Claim: " + claim);
+                count = new AtomicInteger(0);
             }
             return count.incrementAndGet();
         }
@@ -1757,6 +1759,11 @@ public class TestStandardProcessSession {
                 public void write(byte[] b) throws IOException {
                     fos.write(b);
                     ((StandardContentClaim) claim).setLength(claim.getLength() + b.length);
+                }
+
+                @Override
+                public void close() throws IOException {
+                    super.close();
                 }
             };
         }

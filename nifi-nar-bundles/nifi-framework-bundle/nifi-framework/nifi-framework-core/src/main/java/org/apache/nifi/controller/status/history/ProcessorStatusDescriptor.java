@@ -80,12 +80,12 @@ public enum ProcessorStatusDescriptor {
         Formatter.COUNT,
         s -> Long.valueOf(s.getInvocations()))),
 
-    TASK_MILLIS(new StandardMetricDescriptor<ProcessorStatus>(
-        "taskMillis",
+    TASK_NANOS(new StandardMetricDescriptor<ProcessorStatus>(
+        "taskNanos",
         "Total Task Duration (5 mins)",
-        "The total number of thread-milliseconds that the Processor has used to complete its tasks in the past 5 minutes",
+        "The total number of thread-nanoseconds that the Processor has used to complete its tasks in the past 5 minutes",
         Formatter.DURATION,
-        s -> TimeUnit.MILLISECONDS.convert(s.getProcessingNanos(), TimeUnit.NANOSECONDS))),
+        s -> s.getProcessingNanos())),
 
     FLOWFILES_REMOVED(new StandardMetricDescriptor<ProcessorStatus>(
         "flowFilesRemoved",
@@ -122,20 +122,20 @@ public enum ProcessorStatusDescriptor {
         }
     )),
 
-    AVERAGE_TASK_MILLIS(new StandardMetricDescriptor<ProcessorStatus>(
-        "averageTaskMillis",
+    AVERAGE_TASK_NANOS(new StandardMetricDescriptor<ProcessorStatus>(
+        "averageTaskNanos",
         "Average Task Duration",
         "The average duration it took this Processor to complete a task, as averaged over the past 5 minutes",
         Formatter.DURATION,
-        s -> s.getInvocations() == 0 ? 0 : TimeUnit.MILLISECONDS.convert(s.getProcessingNanos(), TimeUnit.NANOSECONDS) / s.getInvocations(),
+        s -> s.getInvocations() == 0 ? 0 : s.getProcessingNanos() / s.getInvocations(),
         new ValueReducer<StatusSnapshot, Long>() {
             @Override
             public Long reduce(final List<StatusSnapshot> values) {
-                long procMillis = 0L;
+                long procNanos = 0L;
                 int invocations = 0;
 
                 for (final StatusSnapshot snapshot : values) {
-                    procMillis += snapshot.getStatusMetrics().get(TASK_MILLIS.getDescriptor()).longValue();
+                    procNanos += snapshot.getStatusMetrics().get(TASK_NANOS.getDescriptor()).longValue();
                     invocations += snapshot.getStatusMetrics().get(TASK_COUNT.getDescriptor()).intValue();
                 }
 
@@ -143,7 +143,7 @@ public enum ProcessorStatusDescriptor {
                     return 0L;
                 }
 
-                return procMillis / invocations;
+                return procNanos / invocations;
             }
         }));
 
