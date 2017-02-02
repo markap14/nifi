@@ -248,39 +248,41 @@ public class IndexDirectoryManager {
      */
     public boolean onIndexCommitted(final File indexDir) {
         final long indexSize = getSize(indexDir);
-        if (indexSize >= repoConfig.getDesiredIndexSize()) {
-            synchronized (this) {
-                String partitionName = null;
-                for (final Map.Entry<String, IndexLocation> entry : activeIndices.entrySet()) {
-                    if (indexDir.equals(entry.getValue().getIndexDirectory())) {
-                        partitionName = entry.getKey();
-                        break;
-                    }
-                }
-
-                if (partitionName == null) {
-                    logger.debug("Size of Provenance Index at {} is now {}. However, was unable to find the appropriate Active Index to roll over.", indexDir, indexSize);
-                } else {
-                    logger.info("Size of Provenance Index at {} is now {}. Will close this index and roll over to a new one.", indexDir, indexSize);
-                    activeIndices.remove(partitionName);
+        synchronized (this) {
+            String partitionName = null;
+            for (final Map.Entry<String, IndexLocation> entry : activeIndices.entrySet()) {
+                if (indexDir.equals(entry.getValue().getIndexDirectory())) {
+                    partitionName = entry.getKey();
+                    break;
                 }
             }
 
-            return true;
-        }
+            // If the index is not the active index directory, it should no longer be written to.
+            if (partitionName == null) {
+                logger.debug("Size of Provenance Index at {} is now {}. However, was unable to find the appropriate Active Index to roll over.", indexDir, indexSize);
+                return true;
+            }
 
-        return false;
+            // If the index size >= desired index size, it should no longer be written to.
+            if (indexSize >= repoConfig.getDesiredIndexSize()) {
+                logger.info("Size of Provenance Index at {} is now {}. Will close this index and roll over to a new one.", indexDir, indexSize);
+                activeIndices.remove(partitionName);
+
+                return true;
+            }
+
+            // Index directory is the active index directory and has not yet exceeded the desired size.
+            return false;
+        }
     }
 
-    public Optional<File> getActiveIndexDirectory(final String partitionName) {
-        synchronized (this) {
-            final IndexLocation indexLocation = activeIndices.get(partitionName);
-            if (indexLocation == null) {
-                return Optional.empty();
-            }
-
-            return Optional.of(indexLocation.getIndexDirectory());
+    public synchronized Optional<File> getActiveIndexDirectory(final String partitionName) {
+        final IndexLocation indexLocation = activeIndices.get(partitionName);
+        if (indexLocation == null) {
+            return Optional.empty();
         }
+
+        return Optional.of(indexLocation.getIndexDirectory());
     }
 
     private long getSize(final File indexDir) {

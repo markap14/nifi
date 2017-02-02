@@ -85,9 +85,9 @@ public class EventIdFirstSchemaRecordWriter extends CompressableRecordWriter {
         queueIdMap = idLookup.invertQueueIdentifiers();
     }
 
-    public EventIdFirstSchemaRecordWriter(final OutputStream out, final AtomicLong idGenerator, final TocWriter tocWriter, final boolean compressed,
+    public EventIdFirstSchemaRecordWriter(final OutputStream out, final String storageLocation, final AtomicLong idGenerator, final TocWriter tocWriter, final boolean compressed,
         final int uncompressedBlockSize, final IdentifierLookup idLookup) throws IOException {
-        super(out, idGenerator, tocWriter, compressed, uncompressedBlockSize);
+        super(out, storageLocation, idGenerator, tocWriter, compressed, uncompressedBlockSize);
 
         this.idLookup = idLookup;
         componentIdMap = idLookup.invertComponentIdentifiers();

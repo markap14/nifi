@@ -303,14 +303,13 @@ public class TestSchemaRecordReaderWriter extends AbstractTestRecordReaderWriter
         final int numEvents = 10_000_000;
         final long startNanos = System.nanoTime();
         try (final OutputStream nullOut = new NullOutputStream();
-            final RecordWriter writer = new ByteArraySchemaRecordWriter(nullOut, idGenerator, tocWriter, false, 0)) {
+            final RecordWriter writer = new ByteArraySchemaRecordWriter(nullOut, "out", idGenerator, tocWriter, false, 0)) {
 
             writer.writeHeader(0L);
 
             for (int i = 0; i < numEvents; i++) {
                 writer.writeRecord(event);
             }
-
         }
 
         final long nanos = System.nanoTime() - startNanos;
@@ -333,7 +332,7 @@ public class TestSchemaRecordReaderWriter extends AbstractTestRecordReaderWriter
         try (final ByteArrayOutputStream headerOut = new ByteArrayOutputStream();
             final DataOutputStream out = new DataOutputStream(headerOut)) {
 
-            final RecordWriter schemaWriter = new ByteArraySchemaRecordWriter(out, idGenerator, null, false, 0);
+            final RecordWriter schemaWriter = new ByteArraySchemaRecordWriter(out, "out", idGenerator, null, false, 0);
             schemaWriter.writeHeader(1L);
 
             header = headerOut.toByteArray();
@@ -341,7 +340,7 @@ public class TestSchemaRecordReaderWriter extends AbstractTestRecordReaderWriter
 
         final byte[] serializedRecord;
         try (final ByteArrayOutputStream headerOut = new ByteArrayOutputStream();
-            final RecordWriter writer = new ByteArraySchemaRecordWriter(headerOut, idGenerator, null, false, 0)) {
+            final RecordWriter writer = new ByteArraySchemaRecordWriter(headerOut, "out", idGenerator, null, false, 0)) {
 
             writer.writeHeader(1L);
             headerOut.reset();

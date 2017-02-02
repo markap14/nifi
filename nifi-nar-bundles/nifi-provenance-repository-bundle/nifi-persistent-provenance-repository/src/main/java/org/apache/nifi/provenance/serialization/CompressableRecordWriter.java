@@ -61,9 +61,9 @@ public abstract class CompressableRecordWriter extends AbstractRecordWriter {
         this.idGenerator = idGenerator;
     }
 
-    public CompressableRecordWriter(final OutputStream out, final AtomicLong idGenerator, final TocWriter tocWriter, final boolean compressed,
+    public CompressableRecordWriter(final OutputStream out, final String storageLocation, final AtomicLong idGenerator, final TocWriter tocWriter, final boolean compressed,
         final int uncompressedBlockSize) throws IOException {
-        super(null, tocWriter);
+        super(storageLocation, tocWriter);
         this.fos = null;
 
         this.compressed = compressed;
@@ -172,8 +172,7 @@ public abstract class CompressableRecordWriter extends AbstractRecordWriter {
             final long serializedLength = bytesWritten - startBytes;
             final TocWriter tocWriter = getTocWriter();
             final Integer blockIndex = tocWriter == null ? null : tocWriter.getCurrentBlockIndex();
-            final File file = getFile();
-            final String storageLocation = file.getName();
+            final String storageLocation = getStorageLocation();
             return new StorageSummary(recordIdentifier, storageLocation, blockIndex, serializedLength, bytesWritten);
         } catch (final IOException ioe) {
             markDirty();

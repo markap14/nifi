@@ -16,7 +16,11 @@
  */
 package org.apache.nifi.provenance;
 
+import static org.apache.nifi.provenance.TestUtil.createFlowFile;
+import static org.junit.Assert.assertTrue;
+
 import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -33,14 +37,10 @@ import org.apache.nifi.provenance.serialization.RecordWriter;
 import org.apache.nifi.provenance.toc.NopTocWriter;
 import org.apache.nifi.provenance.toc.TocReader;
 import org.apache.nifi.provenance.toc.TocWriter;
-import org.apache.nifi.stream.io.DataOutputStream;
 import org.apache.nifi.stream.io.NullOutputStream;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
-
-import static org.apache.nifi.provenance.TestUtil.createFlowFile;
-import static org.junit.Assert.assertTrue;
 
 public class TestStandardRecordReaderWriter extends AbstractTestRecordReaderWriter {
     private AtomicLong idGenerator = new AtomicLong(0L);
@@ -63,7 +63,7 @@ public class TestStandardRecordReaderWriter extends AbstractTestRecordReaderWrit
         final int numEvents = 10_000_000;
         final long startNanos = System.nanoTime();
         try (final OutputStream nullOut = new NullOutputStream();
-            final RecordWriter writer = new StandardRecordWriter(nullOut, idGenerator, tocWriter, false, 100000)) {
+            final RecordWriter writer = new StandardRecordWriter(nullOut, "devnull", idGenerator, tocWriter, false, 100000)) {
 
             writer.writeHeader(0L);
 
@@ -97,7 +97,7 @@ public class TestStandardRecordReaderWriter extends AbstractTestRecordReaderWrit
 
         final byte[] serializedRecord;
         try (final ByteArrayOutputStream headerOut = new ByteArrayOutputStream();
-            final StandardRecordWriter writer = new StandardRecordWriter(headerOut, idGenerator, null, false, 0)) {
+            final StandardRecordWriter writer = new StandardRecordWriter(headerOut, "devnull", idGenerator, null, false, 0)) {
 
             writer.writeHeader(1L);
             headerOut.reset();
@@ -149,12 +149,12 @@ public class TestStandardRecordReaderWriter extends AbstractTestRecordReaderWrit
         }
 
         try (final ByteArrayOutputStream recordOut = new ByteArrayOutputStream();
-            final StandardRecordWriter writer = new StandardRecordWriter(recordOut, null, false, 0)) {
+            final StandardRecordWriter writer = new StandardRecordWriter(recordOut, "devnull", idGenerator, null, false, 0)) {
 
             writer.writeHeader(1L);
             recordOut.reset();
 
-            writer.writeRecord(record, 1L);
+            writer.writeRecord(record);
         }
     }
 

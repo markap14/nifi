@@ -88,7 +88,7 @@ public class SimpleIndexManager implements IndexManager {
 
         final DirectoryReader directoryReader;
         if (writerCount == null) {
-            logger.debug("Creating index searcher for {}", indexDir);
+            logger.trace("Creating index searcher for {}", indexDir);
             final Directory directory = FSDirectory.open(indexDir);
             directoryReader = DirectoryReader.open(directory);
         } else {
@@ -98,7 +98,7 @@ public class SimpleIndexManager implements IndexManager {
 
         final IndexSearcher searcher = new IndexSearcher(directoryReader, this.searchExecutor);
 
-        logger.debug("Created index searcher {} for {}", searcher, indexDir);
+        logger.trace("Created index searcher {} for {}", searcher, indexDir);
         return new LuceneEventIndexSearcher(searcher, indexDir, null, directoryReader);
     }
 
@@ -108,12 +108,48 @@ public class SimpleIndexManager implements IndexManager {
         logger.debug("Closing index searcher {} for {}", searcher, indexDirectory);
         closeQuietly(searcher);
         logger.debug("Closed index searcher {}", searcher);
+
+        final IndexWriterCount count;
+        boolean closeWriter = false;
+        synchronized (writerCounts) {
+            final File absoluteFile = searcher.getIndexDirectory().getAbsoluteFile();
+            count = writerCounts.get(absoluteFile);
+            if (count == null) {
+                logger.debug("Returning EventIndexSearcher for {}; there is no active writer for this searcher so will not decrement writerCounts", absoluteFile);
+                return;
+            }
+
+            if (count.getCount() <= 1) {
+                // we are finished with this writer.
+                final boolean close = count.isCloseableWhenUnused();
+                logger.debug("Decrementing count for Index Writer for {} to {}{}", indexDirectory, count.getCount() - 1, close ? "; closing writer" : "");
+
+                if (close) {
+                    writerCounts.remove(absoluteFile);
+                    closeWriter = true;
+                } else {
+                    writerCounts.put(absoluteFile, new IndexWriterCount(count.getWriter(), count.getAnalyzer(), count.getDirectory(),
+                        count.getCount() - 1, count.isCloseableWhenUnused()));
+                }
+            } else {
+                writerCounts.put(absoluteFile, new IndexWriterCount(count.getWriter(), count.getAnalyzer(), count.getDirectory(),
+                    count.getCount() - 1, count.isCloseableWhenUnused()));
+            }
+        }
+
+        if (closeWriter) {
+            try {
+                close(count);
+            } catch (final Exception e) {
+                logger.warn("Failed to close Index Writer {} due to {}", count.getWriter(), e.toString(), e);
+            }
+        }
     }
 
     @Override
     public boolean removeIndex(final File indexDirectory) {
         final File absoluteFile = indexDirectory.getAbsoluteFile();
-        logger.debug("Closing index writer for {}", indexDirectory);
+        logger.debug("Closing index writer for {} because it is being removed", indexDirectory);
 
         IndexWriterCount writerCount;
         synchronized (writerCounts) {
@@ -187,9 +223,14 @@ public class SimpleIndexManager implements IndexManager {
                 writerCount = createWriter(indexDirectory);
                 writerCounts.put(absoluteFile, writerCount);
             } else {
-                logger.debug("Providing existing index writer for {} and incrementing count to {}", indexDirectory, writerCount.getCount() + 1);
+                logger.trace("Providing existing index writer for {} and incrementing count to {}", indexDirectory, writerCount.getCount() + 1);
                 writerCounts.put(absoluteFile, new IndexWriterCount(writerCount.getWriter(),
                     writerCount.getAnalyzer(), writerCount.getDirectory(), writerCount.getCount() + 1, writerCount.isCloseableWhenUnused()));
+            }
+
+            if (writerCounts.size() > repoConfig.getStorageDirectories().size() * 2) {
+                logger.debug("Index Writer returned; writer count map now has size {}; writerCount = {}; full writerCounts map = {}",
+                    writerCounts.size(), writerCount, writerCounts);
             }
         }
 
@@ -224,21 +265,31 @@ public class SimpleIndexManager implements IndexManager {
                 } else if (count.getCount() <= 1) {
                     // we are finished with this writer.
                     unused = true;
-                    logger.debug("Decrementing count for Index Writer for {} to {}{}", indexDirectory, count.getCount() - 1, close ? "; closing writer" : "");
                     if (close) {
+                        logger.debug("Decrementing count for Index Writer for {} to {}; closing writer", indexDirectory, count.getCount() - 1);
                         writerCounts.remove(absoluteFile);
                     } else {
+                        logger.trace("Decrementing count for Index Writer for {} to {}", indexDirectory, count.getCount() - 1);
+
                         // If writer is not closeable, then we need to decrement its count.
                         writerCounts.put(absoluteFile, new IndexWriterCount(count.getWriter(), count.getAnalyzer(), count.getDirectory(),
                             count.getCount() - 1, close));
                     }
                 } else {
                     // decrement the count.
-                    logger.debug("Decrementing count for Index Writer for {} to {}{}", indexDirectory, count.getCount() - 1,
-                        close ? " and marking as closeable when no longer in use" : "");
+                    if (close) {
+                        logger.debug("Decrementing count for Index Writer for {} to {} and marking as closeable when no longer in use", indexDirectory, count.getCount() - 1);
+                    } else {
+                        logger.trace("Decrementing count for Index Writer for {} to {}", indexDirectory, count.getCount() - 1);
+                    }
 
                     writerCounts.put(absoluteFile, new IndexWriterCount(count.getWriter(), count.getAnalyzer(),
                         count.getDirectory(), count.getCount() - 1, close));
+                }
+
+                if (writerCounts.size() > repoConfig.getStorageDirectories().size() * 2) {
+                    logger.debug("Index Writer returned; writer count map now has size {}; writer = {}, commit = {}, isCloseable = {}, writerCount = {}; full writerCounts Map = {}",
+                        writerCounts.size(), writer, commit, isCloseable, count, writerCounts);
                 }
             }
 
@@ -325,6 +376,11 @@ public class SimpleIndexManager implements IndexManager {
         @Override
         public void close() throws IOException {
             closeQuietly(writer, analyzer, directory);
+        }
+
+        @Override
+        public String toString() {
+            return "IndexWriterCount[count=" + count + ", writer=" + writer + ", closeableWhenUnused=" + closeableWhenUnused + "]";
         }
     }
 }

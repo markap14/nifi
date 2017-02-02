@@ -46,9 +46,9 @@ public class ByteArraySchemaRecordWriter extends CompressableRecordWriter {
         super(file, idGenerator, tocWriter, compressed, uncompressedBlockSize);
     }
 
-    public ByteArraySchemaRecordWriter(final OutputStream out, final AtomicLong idGenerator, final TocWriter tocWriter, final boolean compressed,
+    public ByteArraySchemaRecordWriter(final OutputStream out, final String storageLocation, final AtomicLong idGenerator, final TocWriter tocWriter, final boolean compressed,
         final int uncompressedBlockSize) throws IOException {
-        super(out, idGenerator, tocWriter, compressed, uncompressedBlockSize);
+        super(out, storageLocation, idGenerator, tocWriter, compressed, uncompressedBlockSize);
     }
 
     @Override

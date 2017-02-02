@@ -49,7 +49,7 @@ public class TestEventIndexTask {
 
     @Test(timeout = 5000)
     public void testIndexWriterCommittedWhenAppropriate() throws IOException, InterruptedException {
-        final BlockingQueue<IndexableDocument> docQueue = new LinkedBlockingQueue<>();
+        final BlockingQueue<StoredDocument> docQueue = new LinkedBlockingQueue<>();
         final RepositoryConfiguration repoConfig = new RepositoryConfiguration();
         final File storageDir = new File("target/storage/TestEventIndexTask/1");
         repoConfig.addStorageDirectory("1", storageDir);
@@ -89,8 +89,8 @@ public class TestEventIndexTask {
             document.add(new LongField(SearchableFields.EventTime.getSearchableFieldName(), System.currentTimeMillis(), Store.NO));
 
             final StorageSummary location = new StorageSummary(1L, "0.0.prov", "1", 0, 1000L, 1000L);
-            final IndexableDocument indexableDoc = new IndexableDocument(document, location);
-            docQueue.add(indexableDoc);
+            final StoredDocument storedDoc = new StoredDocument(document, location);
+            docQueue.add(storedDoc);
         }
         assertEquals(0, commitCount.get());
 
@@ -100,8 +100,8 @@ public class TestEventIndexTask {
             document.add(new LongField(SearchableFields.EventTime.getSearchableFieldName(), System.currentTimeMillis(), Store.NO));
 
             final StorageSummary location = new StorageSummary(1L, "0.0.prov", "1", 0, 1000L, 1000L);
-            final IndexableDocument indexableDoc = new IndexableDocument(document, location);
-            docQueue.add(indexableDoc);
+            final StoredDocument storedDoc = new StoredDocument(document, location);
+            docQueue.add(storedDoc);
         }
 
         // Wait until we've indexed all 200 events
@@ -118,8 +118,8 @@ public class TestEventIndexTask {
         document.add(new LongField(SearchableFields.EventTime.getSearchableFieldName(), System.currentTimeMillis(), Store.NO));
         final StorageSummary location = new StorageSummary(1L, "0.0.prov", "1", 0, 1000L, 1000L);
 
-        IndexableDocument indexableDoc = new IndexableDocument(document, location);
-        docQueue.add(indexableDoc);
+        StoredDocument storedDoc = new StoredDocument(document, location);
+        docQueue.add(storedDoc);
 
         // Wait until index writer is committed.
         while (commitCount.get() == 0) {
@@ -128,14 +128,14 @@ public class TestEventIndexTask {
         assertEquals(1, commitCount.get());
 
         // Add a new IndexableDocument with a count of 1 to ensure that the writer is committed again.
-        indexableDoc = new IndexableDocument(document, location);
-        docQueue.add(indexableDoc);
+        storedDoc = new StoredDocument(document, location);
+        docQueue.add(storedDoc);
         Thread.sleep(100L);
         assertEquals(1, commitCount.get());
 
         // Add a new IndexableDocument with a count of 3. Index writer should not be committed again.
-        indexableDoc = new IndexableDocument(document, location);
-        docQueue.add(indexableDoc);
+        storedDoc = new StoredDocument(document, location);
+        docQueue.add(storedDoc);
         Thread.sleep(100L);
         assertEquals(1, commitCount.get());
     }

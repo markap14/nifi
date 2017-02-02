@@ -32,6 +32,7 @@ public abstract class AbstractRecordWriter implements RecordWriter {
     private static final Logger logger = LoggerFactory.getLogger(AbstractRecordWriter.class);
 
     private final File file;
+    private final String storageLocation;
     private final TocWriter tocWriter;
     private final Lock lock = new ReentrantLock();
 
@@ -42,6 +43,15 @@ public abstract class AbstractRecordWriter implements RecordWriter {
         logger.trace("Creating Record Writer for {}", file);
 
         this.file = file;
+        this.storageLocation = file.getName();
+        this.tocWriter = writer;
+    }
+
+    public AbstractRecordWriter(final String storageLocation, final TocWriter writer) throws IOException {
+        logger.trace("Creating Record Writer for {}", storageLocation);
+
+        this.file = null;
+        this.storageLocation = storageLocation;
         this.tocWriter = writer;
     }
 
@@ -49,7 +59,7 @@ public abstract class AbstractRecordWriter implements RecordWriter {
     public synchronized void close() throws IOException {
         closed = true;
 
-        logger.trace("Closing Record Writer for {}", file == null ? null : file.getName());
+        logger.trace("Closing Record Writer for {}", getStorageLocation());
 
         lock();
         try {
@@ -90,6 +100,10 @@ public abstract class AbstractRecordWriter implements RecordWriter {
         } finally {
             unlock();
         }
+    }
+
+    protected String getStorageLocation() {
+        return storageLocation;
     }
 
     @Override

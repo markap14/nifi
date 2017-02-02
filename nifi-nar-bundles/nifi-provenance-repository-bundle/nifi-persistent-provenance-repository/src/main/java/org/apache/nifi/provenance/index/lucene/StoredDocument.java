@@ -17,31 +17,23 @@
 
 package org.apache.nifi.provenance.index.lucene;
 
-import java.io.File;
-
 import org.apache.lucene.document.Document;
 import org.apache.nifi.provenance.serialization.StorageSummary;
 
-public class IndexableDocument {
+public class StoredDocument {
     private final Document document;
-    private final StorageSummary persistenceLocation;
-    private final File indexDirectory;
+    private final StorageSummary storageSummary;
 
-    public IndexableDocument(final Document document, final StorageSummary location, final File indexDirectory) {
+    public StoredDocument(final Document document, final StorageSummary summary) {
         this.document = document;
-        this.persistenceLocation = location;
-        this.indexDirectory = indexDirectory;
+        this.storageSummary = summary;
     }
 
     public Document getDocument() {
         return document;
     }
 
-    public StorageSummary getPersistenceLocation() {
-        return persistenceLocation;
-    }
-
-    public File getIndexDirectory() {
-        return indexDirectory;
+    public StorageSummary getStorageSummary() {
+        return storageSummary;
     }
 }

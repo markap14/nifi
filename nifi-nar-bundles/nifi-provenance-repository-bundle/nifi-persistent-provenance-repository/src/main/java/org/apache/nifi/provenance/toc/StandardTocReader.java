@@ -49,7 +49,7 @@ public class StandardTocReader implements TocReader {
         }
 
         try (final FileInputStream fis = new FileInputStream(file)) {
-            final byte[] buffer = new byte[(int) file.length()];
+            final byte[] buffer = new byte[(int) fileLength];
             StreamUtils.fillBuffer(fis, buffer);
 
             final int version = buffer[0];
@@ -60,7 +60,8 @@ public class StandardTocReader implements TocReader {
             } else if ( compressionFlag == 1 ) {
                 compressed = true;
             } else {
-                throw new IOException("Table of Contents appears to be corrupt: could not read 'compression flag' from header; expected value of 0 or 1 but got " + compressionFlag);
+                throw new IOException("Table of Contents file " + file + " appears to be corrupt: could not read 'compression flag' from header; "
+                    + "expected value of 0 or 1 but got " + compressionFlag);
             }
 
             final int blockInfoBytes;

@@ -88,7 +88,7 @@ public class LuceneEventIndex implements EventIndex {
 
     private final ConcurrentMap<String, AsyncQuerySubmission> querySubmissionMap = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, AsyncLineageSubmission> lineageSubmissionMap = new ConcurrentHashMap<>();
-    private final BlockingQueue<IndexableDocument> documentQueue = new LinkedBlockingQueue<>(1000);
+    private final BlockingQueue<StoredDocument> documentQueue = new LinkedBlockingQueue<>(1000);
     private final List<EventIndexTask> indexTasks = Collections.synchronizedList(new ArrayList<>());
     private final ExecutorService queryExecutor;
     private final ExecutorService indexExecutor;
@@ -263,7 +263,7 @@ public class LuceneEventIndex implements EventIndex {
         }
 
         try {
-            indexTask.index(indexableDocs, CommitPreference.PREVENT_COMMIT, true);
+            indexTask.reIndex(indexableDocs, CommitPreference.PREVENT_COMMIT);
         } catch (final IOException ioe) {
             logger.error("Failed to reindex some Provenance Events", ioe);
             eventReporter.reportEvent(Severity.ERROR, EVENT_CATEGORY, "Failed to re-index some Provenance Events. "
@@ -293,7 +293,7 @@ public class LuceneEventIndex implements EventIndex {
         if (document == null) {
             logger.debug("Received Provenance Event {} to index but it contained no information that should be indexed, so skipping it", event);
         } else {
-            final IndexableDocument doc = new IndexableDocument(document, location);
+            final StoredDocument doc = new StoredDocument(document, location);
             boolean added = false;
             while (!added && !closed) {
 
