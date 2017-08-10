@@ -73,21 +73,6 @@ public class AffectedComponentDTO {
     }
 
     /**
-     * @return scheduled state of the processor referencing a controller service. If this component is another service, this field represents the controller service state
-     */
-    @ApiModelProperty(
-            value = "The scheduled state of a processor or reporting task referencing a controller service. If this component is another controller "
-                    + "service, this field represents the controller service state."
-    )
-    public String getState() {
-        return state;
-    }
-
-    public void setState(String state) {
-        this.state = state;
-    }
-
-    /**
      * @return active thread count for the referencing component
      */
     @ApiModelProperty(
@@ -113,5 +98,15 @@ public class AffectedComponentDTO {
 
     public void setValidationErrors(Collection<String> validationErrors) {
         this.validationErrors = validationErrors;
+    }
+
+    @ApiModelProperty("The scheduled state of a processor or reporting task referencing a controller service. If this component is another controller "
+        + "service, this field represents the controller service state.")
+    public String getState() {
+        return state;
+    }
+
+    public void setState(String state) {
+        this.state = state;
     }
 }

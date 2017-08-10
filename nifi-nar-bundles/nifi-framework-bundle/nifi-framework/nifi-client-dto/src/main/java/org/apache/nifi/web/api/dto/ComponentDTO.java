@@ -26,6 +26,7 @@ import javax.xml.bind.annotation.XmlType;
 public class ComponentDTO {
 
     private String id;
+    private String versionedComponentId;
 
     private String parentGroupId;
     private PositionDTO position;
@@ -44,6 +45,15 @@ public class ComponentDTO {
 
     public void setId(final String id) {
         this.id = id;
+    }
+
+    @ApiModelProperty("The ID of the corresponding component that is under version control")
+    public String getVersionedComponentId() {
+        return versionedComponentId;
+    }
+
+    public void setVersionedComponentId(final String id) {
+        this.versionedComponentId = id;
     }
 
     /**

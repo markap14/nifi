@@ -16,7 +16,30 @@
  */
 package org.apache.nifi.groups;
 
-import com.google.common.collect.Sets;
+import static java.util.Objects.requireNonNull;
+
+import java.io.IOException;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.apache.commons.lang3.builder.ToStringBuilder;
@@ -29,6 +52,7 @@ import org.apache.nifi.authorization.Resource;
 import org.apache.nifi.authorization.resource.Authorizable;
 import org.apache.nifi.authorization.resource.ResourceFactory;
 import org.apache.nifi.authorization.resource.ResourceType;
+import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.state.StateManager;
 import org.apache.nifi.components.state.StateManagerProvider;
@@ -40,6 +64,7 @@ import org.apache.nifi.connectable.LocalPort;
 import org.apache.nifi.connectable.Port;
 import org.apache.nifi.connectable.Position;
 import org.apache.nifi.connectable.Positionable;
+import org.apache.nifi.connectable.Size;
 import org.apache.nifi.controller.ConfigurationContext;
 import org.apache.nifi.controller.ConfiguredComponent;
 import org.apache.nifi.controller.ControllerService;
@@ -49,45 +74,62 @@ import org.apache.nifi.controller.ScheduledState;
 import org.apache.nifi.controller.Snippet;
 import org.apache.nifi.controller.Template;
 import org.apache.nifi.controller.exception.ComponentLifeCycleException;
+import org.apache.nifi.controller.exception.ProcessorInstantiationException;
 import org.apache.nifi.controller.label.Label;
+import org.apache.nifi.controller.queue.FlowFileQueue;
 import org.apache.nifi.controller.scheduling.StandardProcessScheduler;
 import org.apache.nifi.controller.service.ControllerServiceNode;
 import org.apache.nifi.controller.service.ControllerServiceProvider;
 import org.apache.nifi.controller.service.ControllerServiceReference;
 import org.apache.nifi.controller.service.StandardConfigurationContext;
 import org.apache.nifi.encrypt.StringEncryptor;
+import org.apache.nifi.logging.LogLevel;
 import org.apache.nifi.logging.LogRepositoryFactory;
 import org.apache.nifi.nar.ExtensionManager;
 import org.apache.nifi.nar.NarCloseable;
+import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.StandardProcessContext;
 import org.apache.nifi.registry.ComponentVariableRegistry;
 import org.apache.nifi.registry.VariableDescriptor;
+import org.apache.nifi.registry.flow.Bundle;
+import org.apache.nifi.registry.flow.ConnectableComponent;
+import org.apache.nifi.registry.flow.FlowRegistry;
+import org.apache.nifi.registry.flow.FlowRegistryClient;
+import org.apache.nifi.registry.flow.StandardVersionControlInformation;
+import org.apache.nifi.registry.flow.UnknownResourceException;
+import org.apache.nifi.registry.flow.VersionControlInformation;
+import org.apache.nifi.registry.flow.VersionedConnection;
+import org.apache.nifi.registry.flow.VersionedControllerService;
+import org.apache.nifi.registry.flow.VersionedFlowSnapshot;
+import org.apache.nifi.registry.flow.VersionedFunnel;
+import org.apache.nifi.registry.flow.VersionedLabel;
+import org.apache.nifi.registry.flow.VersionedPort;
+import org.apache.nifi.registry.flow.VersionedProcessGroup;
+import org.apache.nifi.registry.flow.VersionedProcessor;
+import org.apache.nifi.registry.flow.VersionedRemoteGroupPort;
+import org.apache.nifi.registry.flow.VersionedRemoteProcessGroup;
+import org.apache.nifi.registry.flow.diff.ComparableDataFlow;
+import org.apache.nifi.registry.flow.diff.DifferenceType;
+import org.apache.nifi.registry.flow.diff.FlowComparator;
+import org.apache.nifi.registry.flow.diff.FlowComparison;
+import org.apache.nifi.registry.flow.diff.FlowDifference;
+import org.apache.nifi.registry.flow.diff.StandardComparableDataFlow;
+import org.apache.nifi.registry.flow.diff.StandardFlowComparator;
+import org.apache.nifi.registry.flow.mapping.NiFiRegistryFlowMapper;
 import org.apache.nifi.registry.variable.MutableVariableRegistry;
 import org.apache.nifi.remote.RemoteGroupPort;
 import org.apache.nifi.remote.RootGroupPort;
+import org.apache.nifi.remote.StandardRemoteProcessGroupPortDescriptor;
+import org.apache.nifi.remote.protocol.SiteToSiteTransportProtocol;
+import org.apache.nifi.scheduling.ExecutionNode;
+import org.apache.nifi.scheduling.SchedulingStrategy;
+import org.apache.nifi.util.ComponentIdGenerator;
 import org.apache.nifi.util.NiFiProperties;
 import org.apache.nifi.util.ReflectionUtils;
 import org.apache.nifi.web.Revision;
 import org.apache.nifi.web.api.dto.TemplateDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
-
-import static java.util.Objects.requireNonNull;
 
 public final class StandardProcessGroup implements ProcessGroup {
 
@@ -96,6 +138,8 @@ public final class StandardProcessGroup implements ProcessGroup {
     private final AtomicReference<String> name;
     private final AtomicReference<Position> position;
     private final AtomicReference<String> comments;
+    private final AtomicReference<String> versionedComponentId = new AtomicReference<>();
+    private final AtomicReference<StandardVersionControlInformation> versionControlInfo = new AtomicReference<>();
 
     private final StandardProcessScheduler scheduler;
     private final ControllerServiceProvider controllerServiceProvider;
@@ -782,7 +826,6 @@ public final class StandardProcessGroup implements ProcessGroup {
 
             removed = true;
             LOG.info("{} removed from flow", processor);
-
         } finally {
             if (removed) {
                 try {
@@ -1935,7 +1978,6 @@ public final class StandardProcessGroup implements ProcessGroup {
 
             removed = true;
             LOG.info("{} removed from {}", service, this);
-
         } finally {
             if (removed) {
                 try {
@@ -2234,7 +2276,7 @@ public final class StandardProcessGroup implements ProcessGroup {
 
     @Override
     public Set<Positionable> findAllPositionables() {
-        Set<Positionable> positionables = Sets.newHashSet();
+        final Set<Positionable> positionables = new HashSet<>();
         positionables.addAll(findAllConnectables(this, true));
         List<ProcessGroup> allProcessGroups = findAllProcessGroups();
         positionables.addAll(allProcessGroups);
@@ -2371,7 +2413,7 @@ public final class StandardProcessGroup implements ProcessGroup {
                 connection.verifyCanDelete();
             }
 
-            for(final ControllerServiceNode cs : controllerServices.values()) {
+            for (final ControllerServiceNode cs : controllerServices.values()) {
                 cs.verifyCanDelete();
             }
 
@@ -2647,6 +2689,31 @@ public final class StandardProcessGroup implements ProcessGroup {
     }
 
     @Override
+    public Optional<String> getVersionedComponentId() {
+        return Optional.ofNullable(versionedComponentId.get());
+    }
+
+    @Override
+    public void setVersionedComponentId(final String componentId) {
+        writeLock.lock();
+        try {
+            final String currentId = versionedComponentId.get();
+
+            if (currentId == null) {
+                versionedComponentId.set(componentId);
+            } else if (currentId.equals(componentId)) {
+                return;
+            } else if (componentId == null) {
+                versionedComponentId.set(null);
+            } else {
+                throw new IllegalStateException(this + " is already under version control with a different Versioned Component ID");
+            }
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    @Override
     public Set<ConfiguredComponent> getComponentsAffectedByVariable(final String variableName) {
         final Set<ConfiguredComponent> affected = new HashSet<>();
 
@@ -2736,4 +2803,969 @@ public final class StandardProcessGroup implements ProcessGroup {
         }
     }
 
+    @Override
+    public VersionControlInformation getVersionControlInformation() {
+        return versionControlInfo.get();
+    }
+
+    @Override
+    public void setVersionControlInformation(final VersionControlInformation versionControlInformation, final Map<String, String> versionedComponentIds) {
+        final StandardVersionControlInformation svci = new StandardVersionControlInformation(versionControlInformation.getRegistryIdentifier(),
+            versionControlInformation.getBucketIdentifier(),
+            versionControlInformation.getFlowIdentifier(),
+            versionControlInformation.getVersion(),
+            versionControlInformation.getFlowSnapshot(),
+            versionControlInformation.getModified().orElse(null),
+            versionControlInformation.getCurrent().orElse(null)) {
+
+            @Override
+            public Optional<Boolean> getModified() {
+                return StandardProcessGroup.this.isModified();
+            }
+
+            @Override
+            public Optional<Boolean> getCurrent() {
+                // TODO: Implement! Need to periodically poll Flow Registry.
+                return super.getCurrent();
+            }
+        };
+
+        writeLock.lock();
+        try {
+            this.versionControlInfo.set(svci);
+            updateVersionedComponentIds(this, versionedComponentIds);
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    private void updateVersionedComponentIds(final ProcessGroup processGroup, final Map<String, String> versionedComponentIds) {
+        if (versionedComponentIds == null || versionedComponentIds.isEmpty()) {
+            return;
+        }
+
+        processGroup.setVersionedComponentId(versionedComponentIds.get(processGroup.getIdentifier()));
+
+        processGroup.getConnections().stream()
+            .forEach(component -> component.setVersionedComponentId(versionedComponentIds.get(component.getIdentifier())));
+        processGroup.getProcessors().stream()
+            .forEach(component -> component.setVersionedComponentId(versionedComponentIds.get(component.getIdentifier())));
+        processGroup.getInputPorts().stream()
+            .forEach(component -> component.setVersionedComponentId(versionedComponentIds.get(component.getIdentifier())));
+        processGroup.getOutputPorts().stream()
+            .forEach(component -> component.setVersionedComponentId(versionedComponentIds.get(component.getIdentifier())));
+        processGroup.getLabels().stream()
+            .forEach(component -> component.setVersionedComponentId(versionedComponentIds.get(component.getIdentifier())));
+        processGroup.getFunnels().stream()
+            .forEach(component -> component.setVersionedComponentId(versionedComponentIds.get(component.getIdentifier())));
+        processGroup.getControllerServices(false).stream()
+            .forEach(component -> component.setVersionedComponentId(versionedComponentIds.get(component.getIdentifier())));
+
+        processGroup.getRemoteProcessGroups().stream()
+            .forEach(rpg -> {
+                rpg.setVersionedComponentId(versionedComponentIds.get(rpg.getIdentifier()));
+
+                rpg.getInputPorts().stream()
+                    .forEach(port -> port.setVersionedComponentId(versionedComponentIds.get(port.getIdentifier())));
+
+                rpg.getOutputPorts().stream()
+                    .forEach(port -> port.setVersionedComponentId(versionedComponentIds.get(port.getIdentifier())));
+            });
+
+        processGroup.getProcessGroups().stream()
+            .forEach(childGroup -> updateVersionedComponentIds(childGroup, versionedComponentIds));
+    }
+
+
+    @Override
+    public void synchronizeWithFlowRegistry(final FlowRegistryClient flowRegistryClient) {
+        final StandardVersionControlInformation vci = versionControlInfo.get();
+        if (vci == null) {
+            return;
+        }
+
+        final String registryId = vci.getRegistryIdentifier();
+        final FlowRegistry flowRegistry = flowRegistryClient.getFlowRegistry(registryId);
+        if (flowRegistry == null) {
+            LOG.error("Unable to synchronize {} with Flow Registry because Process Group was placed under Version Control using Flow Registry "
+                + "with identifier {} but cannot find any Flow Registry with this identifier", this, registryId);
+            return;
+        }
+
+        try {
+            final int latestVersion = flowRegistry.getLatestVersion(vci.getBucketIdentifier(), vci.getFlowIdentifier());
+
+            if (latestVersion == vci.getVersion()) {
+                LOG.debug("{} is currently at the most recent version ({}) of the flow that is under Version Control", this, latestVersion);
+                vci.setCurrent(true);
+            } else {
+                vci.setCurrent(false);
+                LOG.info("{} is not the most recent version of the flow that is under Version Control; current version is {}; most recent version is {}",
+                    new Object[] {this, vci.getVersion(), latestVersion});
+            }
+        } catch (final IOException | UnknownResourceException e) {
+            LOG.error("Failed to synchronize {} with Flow Registry because could not determine the most recent version of the Flow in the Flow Registry", this, e);
+        }
+
+        final VersionedProcessGroup snapshot = vci.getFlowSnapshot();
+        if (snapshot == null) {
+            // We have not yet obtained the snapshot from the Flow Registry, so we need to request the snapshot of our local version of the flow from the Flow Registry.
+            // This allows us to know whether or not the flow has been modified since it was last synced with the Flow Registry.
+            try {
+                final VersionedFlowSnapshot registrySnapshot = flowRegistry.getFlowContents(vci.getBucketIdentifier(), vci.getFlowIdentifier(), vci.getVersion());
+                final VersionedProcessGroup registryFlow = registrySnapshot.getFlowContents();
+                vci.setFlowSnapshot(registryFlow);
+            } catch (final IOException | UnknownResourceException e) {
+                LOG.error("Failed to synchronize {} with Flow Registry because could not retrieve version {} of flow with identifier {} in bucket {}",
+                    new Object[] {this, vci.getVersion(), vci.getFlowIdentifier(), vci.getBucketIdentifier()}, e);
+                return;
+            }
+        }
+    }
+
+
+    @Override
+    public void updateFlow(final VersionedFlowSnapshot proposedSnapshot, final String componentIdSeed) {
+        writeLock.lock();
+        try {
+            verifyCanUpdate(proposedSnapshot); // TODO: Should perform more verification... verifyCanDelete, verifyCanUpdate, etc.
+
+            final NiFiRegistryFlowMapper mapper = new NiFiRegistryFlowMapper();
+            final VersionedProcessGroup versionedGroup = mapper.mapProcessGroup(this);
+
+            final ComparableDataFlow localFlow = new StandardComparableDataFlow("Local Flow", versionedGroup);
+            final ComparableDataFlow remoteFlow = new StandardComparableDataFlow("Remote Flow", proposedSnapshot.getFlowContents());
+
+            final FlowComparator flowComparator = new StandardFlowComparator(localFlow, remoteFlow);
+            final FlowComparison flowComparison = flowComparator.compare();
+
+            final Set<String> updatedVersionedComponentIds = flowComparison.getDifferences().stream()
+                .filter(diff -> diff.getDifferenceType() != DifferenceType.POSITION_CHANGED)
+                .map(diff -> diff.getComponentA() == null ? diff.getComponentB().getIdentifier() : diff.getComponentA().getIdentifier())
+                .collect(Collectors.toSet());
+
+            if (LOG.isDebugEnabled()) {
+                LOG.info("Updating {} to {}; there are {} differences to take into account: {}", this, proposedSnapshot, flowComparison.getDifferences().size(), flowComparison.getDifferences());
+            } else {
+                LOG.info("Updating {} to {}; there are {} differences to take into account", this, proposedSnapshot, flowComparison.getDifferences().size());
+            }
+
+            updateProcessGroup(this, proposedSnapshot.getFlowContents(), componentIdSeed, updatedVersionedComponentIds, false);
+        } catch (final ProcessorInstantiationException pie) {
+            throw new RuntimeException(pie);
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+
+    private void updateProcessGroup(final ProcessGroup group, final VersionedProcessGroup proposed, final String componentIdSeed,
+        final Set<String> updatedVersionedComponentIds, final boolean updatePosition) throws ProcessorInstantiationException {
+        // TODO: Verify the update. ... Recursively??
+
+        // TODO: Need to discover compatible bundles... See ProcessGroupResource#instantiateTemplate
+
+        group.setComments(proposed.getComments());
+        group.setName(proposed.getName());
+        if (updatePosition && proposed.getPosition() != null) {
+            group.setPosition(new Position(proposed.getPosition().getX(), proposed.getPosition().getY()));
+        }
+
+        // Child groups
+        final Map<String, ProcessGroup> childGroupsByVersionedId = group.getProcessGroups().stream()
+            .collect(Collectors.toMap(component -> component.getVersionedComponentId().orElse(component.getIdentifier()), Function.identity()));
+        final Set<String> childGroupsRemoved = new HashSet<>(childGroupsByVersionedId.keySet());
+
+        for (final VersionedProcessGroup proposedChildGroup : proposed.getProcessGroups()) {
+            final ProcessGroup childGroup = childGroupsByVersionedId.get(proposedChildGroup.getIdentifier());
+            if (childGroup == null) {
+                final ProcessGroup added = addProcessGroup(proposedChildGroup, componentIdSeed);
+                LOG.info("Added {} to {}", added, this);
+            } else {
+                updateProcessGroup(childGroup, proposedChildGroup, componentIdSeed, updatedVersionedComponentIds, true);
+                LOG.info("Updated {}", childGroup);
+            }
+
+            childGroupsRemoved.remove(proposedChildGroup.getIdentifier());
+        }
+
+
+        // Controller Services
+        final Map<String, ControllerServiceNode> servicesByVersionedId = group.getControllerServices(false).stream()
+            .collect(Collectors.toMap(component -> component.getVersionedComponentId().orElse(component.getIdentifier()), Function.identity()));
+        final Set<String> controllerServicesRemoved = new HashSet<>(servicesByVersionedId.keySet());
+
+        for (final VersionedControllerService proposedService : proposed.getControllerServices()) {
+            final ControllerServiceNode service = servicesByVersionedId.get(proposedService.getIdentifier());
+            if (service == null) {
+                final ControllerServiceNode added = addControllerService(proposedService, componentIdSeed);
+                LOG.info("Added {} to {}", added, this);
+            } else if (updatedVersionedComponentIds.contains(proposedService.getIdentifier())) {
+                updateControllerService(service, proposedService);
+                LOG.info("Updated {}", service);
+            }
+
+            controllerServicesRemoved.remove(proposedService.getIdentifier());
+        }
+
+
+        // Funnels
+        final Map<String, Funnel> funnelsByVersionedId = group.getFunnels().stream()
+            .collect(Collectors.toMap(component -> component.getVersionedComponentId().orElse(component.getIdentifier()), Function.identity()));
+        final Set<String> funnelsRemoved = new HashSet<>(funnelsByVersionedId.keySet());
+
+        for (final VersionedFunnel proposedFunnel : proposed.getFunnels()) {
+            final Funnel funnel = funnelsByVersionedId.get(proposedFunnel.getIdentifier());
+            if (funnel == null) {
+                final Funnel added = addFunnel(proposedFunnel, componentIdSeed);
+                LOG.info("Added {} to {}", added, this);
+            } else if (updatedVersionedComponentIds.contains(proposedFunnel.getIdentifier())) {
+                updateFunnel(funnel, proposedFunnel);
+                LOG.info("Updated {}", funnel);
+            } else {
+                funnel.setPosition(new Position(proposedFunnel.getPosition().getX(), proposedFunnel.getPosition().getY()));
+            }
+
+            funnelsRemoved.remove(proposedFunnel.getIdentifier());
+        }
+
+
+        // Input Ports
+        final Map<String, Port> inputPortsByVersionedId = group.getInputPorts().stream()
+            .collect(Collectors.toMap(component -> component.getVersionedComponentId().orElse(component.getIdentifier()), Function.identity()));
+        final Set<String> inputPortsRemoved = new HashSet<>(inputPortsByVersionedId.keySet());
+
+        for (final VersionedPort proposedPort : proposed.getInputPorts()) {
+            final Port port = inputPortsByVersionedId.get(proposedPort.getIdentifier());
+            if (port == null) {
+                final Port added = addInputPort(proposedPort, componentIdSeed);
+                LOG.info("Added {} to {}", added, this);
+            } else if (updatedVersionedComponentIds.contains(proposedPort.getIdentifier())) {
+                updatePort(port, proposedPort);
+                LOG.info("Updated {}", port);
+            } else {
+                port.setPosition(new Position(proposedPort.getPosition().getX(), proposedPort.getPosition().getY()));
+            }
+
+            inputPortsRemoved.remove(proposedPort.getIdentifier());
+        }
+
+        // Output Ports
+        final Map<String, Port> outputPortsByVersionedId = group.getOutputPorts().stream()
+            .collect(Collectors.toMap(component -> component.getVersionedComponentId().orElse(component.getIdentifier()), Function.identity()));
+        final Set<String> outputPortsRemoved = new HashSet<>(outputPortsByVersionedId.keySet());
+
+        for (final VersionedPort proposedPort : proposed.getOutputPorts()) {
+            final Port port = outputPortsByVersionedId.get(proposedPort.getIdentifier());
+            if (port == null) {
+                final Port added = addOutputPort(proposedPort, componentIdSeed);
+                LOG.info("Added {} to {}", added, this);
+            } else if (updatedVersionedComponentIds.contains(proposedPort.getIdentifier())) {
+                updatePort(port, proposedPort);
+                LOG.info("Updated {}", port);
+            } else {
+                port.setPosition(new Position(proposedPort.getPosition().getX(), proposedPort.getPosition().getY()));
+            }
+
+            outputPortsRemoved.remove(proposedPort.getIdentifier());
+        }
+
+
+        // Labels
+        final Map<String, Label> labelsByVersionedId = group.getLabels().stream()
+            .collect(Collectors.toMap(component -> component.getVersionedComponentId().orElse(component.getIdentifier()), Function.identity()));
+        final Set<String> labelsRemoved = new HashSet<>(labelsByVersionedId.keySet());
+
+        for (final VersionedLabel proposedLabel : proposed.getLabels()) {
+            final Label label = labelsByVersionedId.get(proposedLabel.getIdentifier());
+            if (label == null) {
+                final Label added = addLabel(proposedLabel, componentIdSeed);
+                LOG.info("Added {} to {}", added, this);
+            } else if (updatedVersionedComponentIds.contains(proposedLabel.getIdentifier())) {
+                updateLabel(label, proposedLabel);
+                LOG.info("Updated {}", label);
+            } else {
+                label.setPosition(new Position(proposedLabel.getPosition().getX(), proposedLabel.getPosition().getY()));
+            }
+
+            labelsRemoved.remove(proposedLabel.getIdentifier());
+        }
+
+
+        // Processors
+        final Map<String, ProcessorNode> processorsByVersionedId = group.getProcessors().stream()
+            .collect(Collectors.toMap(component -> component.getVersionedComponentId().orElse(component.getIdentifier()), Function.identity()));
+        final Set<String> processorsRemoved = new HashSet<>(processorsByVersionedId.keySet());
+
+        for (final VersionedProcessor proposedProcessor : proposed.getProcessors()) {
+            final ProcessorNode processor = processorsByVersionedId.get(proposedProcessor.getIdentifier());
+            if (processor == null) {
+                final ProcessorNode added = addProcessor(proposedProcessor, componentIdSeed);
+                LOG.info("Added {} to {}", added, this);
+            } else if (updatedVersionedComponentIds.contains(proposedProcessor.getIdentifier())) {
+                updateProcessor(processor, proposedProcessor);
+                LOG.info("Updated {}", processor);
+            } else {
+                processor.setPosition(new Position(proposedProcessor.getPosition().getX(), proposedProcessor.getPosition().getY()));
+            }
+
+            processorsRemoved.remove(proposedProcessor.getIdentifier());
+        }
+
+
+        // Remote Groups
+        final Map<String, RemoteProcessGroup> rpgsByVersionedId = group.getRemoteProcessGroups().stream()
+            .collect(Collectors.toMap(component -> component.getVersionedComponentId().orElse(component.getIdentifier()), Function.identity()));
+        final Set<String> rpgsRemoved = new HashSet<>(rpgsByVersionedId.keySet());
+
+        for (final VersionedRemoteProcessGroup proposedRpg : proposed.getRemoteProcessGroups()) {
+            final RemoteProcessGroup rpg = rpgsByVersionedId.get(proposedRpg.getIdentifier());
+            if (rpg == null) {
+                final RemoteProcessGroup added = addRemoteProcessGroup(proposedRpg, componentIdSeed);
+                LOG.info("Added {} to {}", added, this);
+            } else if (updatedVersionedComponentIds.contains(proposedRpg.getIdentifier())) {
+                updateRemoteProcessGroup(rpg, proposedRpg);
+                LOG.info("Updated {}", rpg);
+            } else {
+                rpg.setPosition(new Position(proposedRpg.getPosition().getX(), proposedRpg.getPosition().getY()));
+            }
+
+            rpgsRemoved.remove(proposedRpg.getIdentifier());
+        }
+
+
+        // Connections
+        final Map<String, Connection> connectionsByVersionedId = group.getConnections().stream()
+            .collect(Collectors.toMap(component -> component.getVersionedComponentId().orElse(component.getIdentifier()), Function.identity()));
+        final Set<String> connectionsRemoved = new HashSet<>(connectionsByVersionedId.keySet());
+
+        for (final VersionedConnection proposedConnection : proposed.getConnections()) {
+            final Connection connection = connectionsByVersionedId.get(proposedConnection.getIdentifier());
+            if (connection == null) {
+                final Connection added = addConnection(proposedConnection, componentIdSeed);
+                LOG.info("Added {} to {}", added, this);
+            } else if (!connection.getSource().isRunning() && !connection.getDestination().isRunning()) {
+                // If the connection needs to be updated, then the source and destination will already have
+                // been stopped (else, the validation above would fail). So if the source or the destination is running,
+                // then we know that we don't need to update the connection.
+                updateConnection(connection, proposedConnection);
+                LOG.info("Updated {}", connection);
+            }
+
+            connectionsRemoved.remove(proposedConnection.getIdentifier());
+        }
+
+        // Remove components that exist in the local flow but not the remote flow.
+
+        // Connections must be the first thing to remove, not the last. Otherwise, we will fail
+        // to remove a component if it has a connection going to it!
+        for (final String removedVersionedId : connectionsRemoved) {
+            final Connection connection = connectionsByVersionedId.get(removedVersionedId);
+            LOG.info("Removing {} from {}", connection, group);
+            group.removeConnection(connection);
+        }
+
+        for (final String removedVersionedId : controllerServicesRemoved) {
+            final ControllerServiceNode service = servicesByVersionedId.get(removedVersionedId);
+            LOG.info("Removing {} from {}", service, group);
+            group.removeControllerService(service);
+        }
+
+        for (final String removedVersionedId : funnelsRemoved) {
+            final Funnel funnel = funnelsByVersionedId.get(removedVersionedId);
+            LOG.info("Removing {} from {}", funnel, group);
+            group.removeFunnel(funnel);
+        }
+
+        for (final String removedVersionedId : inputPortsRemoved) {
+            final Port port = inputPortsByVersionedId.get(removedVersionedId);
+            LOG.info("Removing {} from {}", port, group);
+            group.removeInputPort(port);
+        }
+
+        for (final String removedVersionedId : outputPortsRemoved) {
+            final Port port = outputPortsByVersionedId.get(removedVersionedId);
+            LOG.info("Removing {} from {}", port, group);
+            group.removeOutputPort(port);
+        }
+
+        for (final String removedVersionedId : labelsRemoved) {
+            final Label label = labelsByVersionedId.get(removedVersionedId);
+            LOG.info("Removing {} from {}", label, group);
+            group.removeLabel(label);
+        }
+
+        for (final String removedVersionedId : processorsRemoved) {
+            final ProcessorNode processor = processorsByVersionedId.get(removedVersionedId);
+            LOG.info("Removing {} from {}", processor, group);
+            group.removeProcessor(processor);
+        }
+
+        for (final String removedVersionedId : rpgsRemoved) {
+            final RemoteProcessGroup rpg = rpgsByVersionedId.get(removedVersionedId);
+            LOG.info("Removing {} from {}", rpg, group);
+            group.removeRemoteProcessGroup(rpg);
+        }
+
+        for (final String removedVersionedId : childGroupsRemoved) {
+            final ProcessGroup childGroup = childGroupsByVersionedId.get(removedVersionedId);
+            LOG.info("Removing {} from {}", childGroup, group);
+            // TODO: Cannot remove group if it has templates. How do we handle that?
+            group.removeProcessGroup(childGroup);
+        }
+
+    }
+
+    protected String generateUuid(final String componentIdSeed) {
+        UUID uuid;
+        if (componentIdSeed == null) {
+            uuid = ComponentIdGenerator.generateId();
+        } else {
+            try {
+                UUID seedId = UUID.fromString(componentIdSeed);
+                uuid = new UUID(seedId.getMostSignificantBits(), componentIdSeed.hashCode());
+            } catch (Exception e) {
+                LOG.warn("Provided 'seed' does not represent UUID. Will not be able to extract most significant bits for ID generation.");
+                uuid = UUID.nameUUIDFromBytes(componentIdSeed.getBytes(StandardCharsets.UTF_8));
+            }
+        }
+
+        return uuid.toString();
+    }
+
+
+    private ProcessGroup addProcessGroup(final VersionedProcessGroup proposed, final String componentIdSeed) throws ProcessorInstantiationException {
+        final ProcessGroup group = flowController.createProcessGroup(generateUuid(componentIdSeed));
+        group.setVersionedComponentId(proposed.getIdentifier());
+        addProcessGroup(group);
+        updateProcessGroup(group, proposed, componentIdSeed, Collections.emptySet(), true);
+        return group;
+    }
+
+    private void updateConnection(final Connection connection, final VersionedConnection proposed) {
+        connection.setBendPoints(proposed.getBends().stream()
+            .map(pos -> new Position(pos.getX(), pos.getY()))
+            .collect(Collectors.toList()));
+
+        connection.setDestination(getConnectable(proposed.getDestination()));
+        connection.setLabelIndex(proposed.getLabelIndex());
+        connection.setName(proposed.getName());
+        connection.setRelationships(proposed.getSelectedRelationships().stream()
+            .map(name -> new Relationship.Builder().name(name).build())
+            .collect(Collectors.toSet()));
+        connection.setZIndex(proposed.getzIndex());
+    }
+
+    private Connection addConnection(final VersionedConnection proposed, final String componentIdSeed) {
+        final Connectable source = getConnectable(proposed.getSource());
+        if (source == null) {
+            throw new IllegalArgumentException("Connection has a source with identifier " + proposed.getIdentifier()
+                + " but no component could be found in the Process Group with a corresponding identifier");
+        }
+
+        final Connectable destination = getConnectable(proposed.getDestination());
+        if (destination == null) {
+            throw new IllegalArgumentException("Connection has a destination with identifier " + proposed.getIdentifier()
+                + " but no component could be found in the Process Group with a corresponding identifier");
+        }
+
+        final Connection connection = flowController.createConnection(generateUuid(componentIdSeed), proposed.getName(), source, destination, proposed.getSelectedRelationships());
+        connection.setVersionedComponentId(proposed.getIdentifier());
+        addConnection(connection);
+        updateConnection(connection, proposed);
+
+        return connection;
+    }
+
+    private Connectable getConnectable(final ConnectableComponent connectableComponent) {
+        final String id = connectableComponent.getId();
+
+        switch (connectableComponent.getType()) {
+            case FUNNEL:
+                return getFunnels().stream()
+                    .filter(component -> component.getVersionedComponentId().isPresent())
+                    .filter(component -> id.equals(component.getVersionedComponentId().get()))
+                    .findAny()
+                    .orElse(null);
+            case INPUT_PORT:
+                return getInputPorts().stream()
+                    .filter(component -> component.getVersionedComponentId().isPresent())
+                    .filter(component -> id.equals(component.getVersionedComponentId().get()))
+                    .findAny()
+                    .orElse(null);
+            case OUTPUT_PORT:
+                return getOutputPorts().stream()
+                    .filter(component -> component.getVersionedComponentId().isPresent())
+                    .filter(component -> id.equals(component.getVersionedComponentId().get()))
+                    .findAny()
+                    .orElse(null);
+            case PROCESSOR:
+                return getProcessors().stream()
+                    .filter(component -> component.getVersionedComponentId().isPresent())
+                    .filter(component -> id.equals(component.getVersionedComponentId().get()))
+                    .findAny()
+                    .orElse(null);
+            case REMOTE_INPUT_PORT: {
+                final String rpgId = connectableComponent.getGroupId();
+                final Optional<RemoteProcessGroup> rpgOption = getRemoteProcessGroups().stream()
+                    .filter(component -> component.getVersionedComponentId().isPresent())
+                    .filter(component -> id.equals(component.getVersionedComponentId().get()))
+                    .findAny();
+
+                if (!rpgOption.isPresent()) {
+                    throw new IllegalArgumentException("Connection refers to a Port with ID " + id + " within Remote Process Group with ID "
+                        + rpgId + " but could not find a Remote Process Group corresponding to that ID");
+                }
+
+                final RemoteProcessGroup rpg = rpgOption.get();
+                return rpg.getInputPorts().stream()
+                    .filter(component -> component.getVersionedComponentId().isPresent())
+                    .filter(component -> id.equals(component.getVersionedComponentId().get()))
+                    .findAny()
+                    .orElse(null);
+            }
+            case REMOTE_OUTPUT_PORT: {
+                final String rpgId = connectableComponent.getGroupId();
+                final Optional<RemoteProcessGroup> rpgOption = getRemoteProcessGroups().stream()
+                    .filter(component -> component.getVersionedComponentId().isPresent())
+                    .filter(component -> id.equals(component.getVersionedComponentId().get()))
+                    .findAny();
+
+                if (!rpgOption.isPresent()) {
+                    throw new IllegalArgumentException("Connection refers to a Port with ID " + id + " within Remote Process Group with ID "
+                        + rpgId + " but could not find a Remote Process Group corresponding to that ID");
+                }
+
+                final RemoteProcessGroup rpg = rpgOption.get();
+                return rpg.getOutputPorts().stream()
+                    .filter(component -> component.getVersionedComponentId().isPresent())
+                    .filter(component -> id.equals(component.getVersionedComponentId().get()))
+                    .findAny()
+                    .orElse(null);
+            }
+        }
+
+        return null;
+    }
+
+    private void updateControllerService(final ControllerServiceNode service, final VersionedControllerService proposed) {
+        service.setAnnotationData(proposed.getAnnotationData());
+        service.setComments(proposed.getComments());
+        service.setName(proposed.getName());
+        service.setProperties(populatePropertiesMap(service.getProperties(), proposed.getProperties()));
+
+        if (!isEqual(service.getBundleCoordinate(), proposed.getBundle())) {
+            final BundleCoordinate newBundleCoordinate = toCoordinate(proposed.getBundle());
+            final List<PropertyDescriptor> descriptors = new ArrayList<>(service.getProperties().keySet());
+            final Set<URL> additionalUrls = service.getAdditionalClasspathResources(descriptors);
+            flowController.reload(service, proposed.getType(), newBundleCoordinate, additionalUrls);
+        }
+    }
+
+    private boolean isEqual(final BundleCoordinate coordinate, final Bundle bundle) {
+        if (!bundle.getGroup().equals(coordinate.getGroup())) {
+            return false;
+        }
+
+        if (!bundle.getArtifact().equals(coordinate.getId())) {
+            return false;
+        }
+
+        if (!bundle.getVersion().equals(coordinate.getVersion())) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private BundleCoordinate toCoordinate(final Bundle bundle) {
+        return new BundleCoordinate(bundle.getGroup(), bundle.getArtifact(), bundle.getVersion());
+    }
+
+    private ControllerServiceNode addControllerService(final VersionedControllerService proposed, final String componentIdSeed) {
+        final String type = proposed.getType();
+        final String id = generateUuid(componentIdSeed);
+
+        final Bundle bundle = proposed.getBundle();
+        final BundleCoordinate coordinate = toCoordinate(bundle);
+        final boolean firstTimeAdded = true;
+        final Set<URL> additionalUrls = Collections.emptySet();
+
+        final ControllerServiceNode newService = flowController.createControllerService(type, id, coordinate, additionalUrls, firstTimeAdded);
+        newService.setVersionedComponentId(proposed.getIdentifier());
+
+        addControllerService(newService);
+        updateControllerService(newService, proposed);
+
+        return newService;
+    }
+
+    private void updateFunnel(final Funnel funnel, final VersionedFunnel proposed) {
+        funnel.setPosition(new Position(proposed.getPosition().getX(), proposed.getPosition().getY()));
+    }
+
+    private Funnel addFunnel(final VersionedFunnel proposed, final String componentIdSeed) {
+        final Funnel funnel = flowController.createFunnel(generateUuid(componentIdSeed));
+        funnel.setVersionedComponentId(proposed.getIdentifier());
+        addFunnel(funnel);
+        updateFunnel(funnel, proposed);
+
+        return funnel;
+    }
+
+    private void updatePort(final Port port, final VersionedPort proposed) {
+        port.setComments(proposed.getComments());
+        port.setName(proposed.getName());
+        port.setPosition(new Position(proposed.getPosition().getX(), proposed.getPosition().getY()));
+    }
+
+    private Port addInputPort(final VersionedPort proposed, final String componentIdSeed) {
+        final Port port = flowController.createLocalInputPort(generateUuid(componentIdSeed), proposed.getName());
+        port.setVersionedComponentId(proposed.getIdentifier());
+        addInputPort(port);
+        updatePort(port, proposed);
+
+        return port;
+    }
+
+    private Port addOutputPort(final VersionedPort proposed, final String componentIdSeed) {
+        final Port port = flowController.createLocalInputPort(generateUuid(componentIdSeed), proposed.getName());
+        port.setVersionedComponentId(proposed.getIdentifier());
+        addOutputPort(port);
+        updatePort(port, proposed);
+
+        return port;
+    }
+
+    private Label addLabel(final VersionedLabel proposed, final String componentIdSeed) {
+        final Label label = flowController.createLabel(generateUuid(componentIdSeed), proposed.getLabel());
+        label.setVersionedComponentId(proposed.getIdentifier());
+        addLabel(label);
+        updateLabel(label, proposed);
+
+        return label;
+    }
+
+    private void updateLabel(final Label label, final VersionedLabel proposed) {
+        label.setPosition(new Position(proposed.getPosition().getX(), proposed.getPosition().getY()));
+        label.setSize(new Size(proposed.getWidth(), proposed.getHeight()));
+        label.setStyle(proposed.getStyle());
+        label.setValue(proposed.getLabel());
+    }
+
+    private ProcessorNode addProcessor(final VersionedProcessor proposed, final String componentIdSeed) throws ProcessorInstantiationException {
+        final BundleCoordinate coordinate = toCoordinate(proposed.getBundle());
+        final ProcessorNode procNode = flowController.createProcessor(proposed.getType(), generateUuid(componentIdSeed), coordinate, true);
+        procNode.setVersionedComponentId(proposed.getIdentifier());
+
+        addProcessor(procNode);
+        updateProcessor(procNode, proposed);
+
+        return procNode;
+    }
+
+    private void updateProcessor(final ProcessorNode processor, final VersionedProcessor proposed) throws ProcessorInstantiationException {
+        processor.setAnnotationData(proposed.getAnnotationData());
+        processor.setBulletinLevel(LogLevel.valueOf(proposed.getBulletinLevel()));
+        processor.setComments(proposed.getComments());
+        processor.setMaxConcurrentTasks(proposed.getConcurrentlySchedulableTaskCount());
+        processor.setExecutionNode(ExecutionNode.valueOf(proposed.getExecutionNode()));
+        processor.setName(proposed.getName());
+        processor.setPenalizationPeriod(proposed.getPenaltyDuration());
+        processor.setProperties(populatePropertiesMap(processor.getProperties(), proposed.getProperties()));
+        processor.setRunDuration(proposed.getRunDurationMillis(), TimeUnit.MILLISECONDS);
+        processor.setScheduldingPeriod(proposed.getSchedulingPeriod());
+        processor.setSchedulingStrategy(SchedulingStrategy.valueOf(proposed.getSchedulingStrategy()));
+        processor.setStyle(proposed.getStyle());
+        processor.setYieldPeriod(proposed.getYieldDuration());
+        processor.setPosition(new Position(proposed.getPosition().getX(), proposed.getPosition().getY()));
+
+        processor.setAutoTerminatedRelationships(proposed.getAutoTerminatedRelationships().stream()
+            .map(relName -> processor.getRelationship(relName))
+            .collect(Collectors.toSet()));
+
+        if (!isEqual(processor.getBundleCoordinate(), proposed.getBundle())) {
+            final BundleCoordinate newBundleCoordinate = toCoordinate(proposed.getBundle());
+            final List<PropertyDescriptor> descriptors = new ArrayList<>(processor.getProperties().keySet());
+            final Set<URL> additionalUrls = processor.getAdditionalClasspathResources(descriptors);
+            flowController.reload(processor, proposed.getType(), newBundleCoordinate, additionalUrls);
+        }
+    }
+
+    private Map<String, String> populatePropertiesMap(final Map<PropertyDescriptor, String> currentProperties, final Map<String, String> proposedProperties) {
+        final Map<String, String> fullPropertyMap = new HashMap<>();
+        for (final PropertyDescriptor property : currentProperties.keySet()) {
+            fullPropertyMap.put(property.getName(), null);
+        }
+
+        fullPropertyMap.putAll(proposedProperties);
+        return fullPropertyMap;
+    }
+
+    private RemoteProcessGroup addRemoteProcessGroup(final VersionedRemoteProcessGroup proposed, final String componentIdSeed) {
+        final RemoteProcessGroup rpg = flowController.createRemoteProcessGroup(generateUuid(componentIdSeed), proposed.getTargetUris());
+        rpg.setVersionedComponentId(proposed.getIdentifier());
+
+        addRemoteProcessGroup(rpg);
+        updateRemoteProcessGroup(rpg, proposed);
+
+        return rpg;
+    }
+
+    private void updateRemoteProcessGroup(final RemoteProcessGroup rpg, final VersionedRemoteProcessGroup proposed) {
+        rpg.setComments(proposed.getComments());
+        rpg.setCommunicationsTimeout(proposed.getCommunicationsTimeout());
+        rpg.setInputPorts(proposed.getInputPorts().stream()
+            .map(port -> createPortDescriptor(port))
+            .collect(Collectors.toSet()));
+        rpg.setName(proposed.getName());
+        rpg.setNetworkInterface(proposed.getLocalNetworkInterface());
+        rpg.setOutputPorts(proposed.getOutputPorts().stream()
+            .map(port -> createPortDescriptor(port))
+            .collect(Collectors.toSet()));
+        rpg.setPosition(new Position(proposed.getPosition().getX(), proposed.getPosition().getY()));
+        rpg.setProxyHost(proposed.getProxyHost());
+        rpg.setProxyPort(proposed.getProxyPort());
+        rpg.setProxyUser(proposed.getProxyUser());
+        rpg.setTransportProtocol(SiteToSiteTransportProtocol.valueOf(proposed.getTransportProtocol()));
+        rpg.setYieldDuration(proposed.getYieldDuration());
+    }
+
+    private RemoteProcessGroupPortDescriptor createPortDescriptor(final VersionedRemoteGroupPort proposed) {
+        final StandardRemoteProcessGroupPortDescriptor descriptor = new StandardRemoteProcessGroupPortDescriptor();
+        descriptor.setVersionedComponentId(proposed.getIdentifier());
+        descriptor.setBatchCount(proposed.getBatchSize().getCount());
+        descriptor.setBatchDuration(proposed.getBatchSize().getDuration());
+        descriptor.setBatchSize(proposed.getBatchSize().getSize());
+        descriptor.setComments(proposed.getComments());
+        descriptor.setConcurrentlySchedulableTaskCount(proposed.getConcurrentlySchedulableTaskCount());
+        descriptor.setGroupId(proposed.getGroupId());
+        descriptor.setId(UUID.randomUUID().toString()); // TODO: Need to address this issue of port id's
+        descriptor.setName(proposed.getName());
+        descriptor.setUseCompression(proposed.isUseCompression());
+        return descriptor;
+    }
+
+
+
+    public void versionControlFlow() {
+        // TODO: Workflow for this:
+        // 1. Ensure user has both READ and WRITE permissions.
+        // 2. Check if Process Group is under version control. If so, throw IllegalStateException
+        // 3. Create a VersionedFlowSnapshot of the Process Group.
+        // 4. Publish VersionedFlowSnapshot to the registry.
+        // 5. Use registry response to build VersionControlInformation that includes snapshot version.
+        // 6. Set Version Control Information (on all nodes in cluster).
+
+        // Things to consider:
+        // 1. In order to interact with the FlowRegistry, we need a FlowRegistryClient. How do we get to this?
+        //    These endpoints will be in the ProcessGroupResource, so does this live in the ProcessGroupDAO? NiFiServiceFacade?
+
+
+
+        // NOTES:
+        // - new REST Resource: /versions/process-groups/<uuid>
+        // - Need to create an update request, which will obtain a lock on all nodes.
+        //   We need to do this in case two users go to different nodes and User 1 starts Version Control on Process Group A,
+        //   while at the same time User 2 starts Version Control on Process Group B, which is a child of Process Group A.
+        //   We want to avoid this so we get a 'version control update lock' on all nodes.
+        //   This lock must be released at the end of the update cycle.
+        //   This lock must also time out!! Perhaps after 1 minute or 5 minutes.
+    }
+
+
+    public void updateFlow(final VersionedFlowSnapshot snapshot) {
+        // TODO: Workflow for this:
+        // 0. Obtain the versioned flow snapshot to use for the update
+        //    a. Contact registry to download the desired version.
+        //    b. Get Variable Registry of this Process Group and all ancestor groups
+        //    c. Perform diff to find any new variables
+        //    d. Get Variable Registry of any child Process Group in the versioned flow
+        //    e. Perform diff to find any new variables
+        //    f. Prompt user to fill in values for all new variables
+        // 1. Verify that all components in the snapshot exist on all nodes (i.e., the NAR exists)?
+        // 2. Verify that Process Group is already under version control. If not, must start Version Control instead of updateFlow
+        // 3. Verify that Process Group is not 'dirty'.
+        // 4. Determine which components would be affected (and are enabled/running)
+        //    a. Component itself is modified in some way, other than position changing.
+        //    b. Source and Destination of any Connection that is modified.
+        //    c. Any Processor or Controller Service that references a Controller Service that is modified.
+        // 5. Verify READ and WRITE permissions for user, for every component affected.
+        // 6. Stop all Processors, Funnels, Ports that are affected.
+        // 7. Wait for all of the components to finish stopping.
+        // 8. Disable all Controller Services that are affected.
+        // 9. Wait for all Controller Services to finish disabling.
+        // 10. Ensure that if any connection was deleted, that it has no data in it. Ensure that no Input Port
+        //    was removed, unless it currently has no incoming connections. Ensure that no Output Port was removed,
+        //    unless it currently has no outgoing connections. Checking ports & connections could be done before
+        //    stopping everything, but removal of Connections cannot.
+        // 11. Update variable registry to include new variables
+        //    (only new variables so don't have to worry about affected components? Or do we need to in case a processor
+        //    is already referencing the variable? In which case we need to include the affected components above in the
+        //    Set of affected components before stopping/disabling.).
+        // 12. Update components in the Process Group, update Version Control Information.
+        // 13. Re-Enable all affected Controller Services that were not removed.
+        // 14. Re-Start all Processors, Funnels, Ports that are affected and not removed.
+
+        // NOTE NOTE NOTE: Can we do all of this as a single action or do we
+        // need to do each of these as a separate web request?
+
+        // ALSO: Need to get a list of new variables and get the new values for those variables as part of the snapshot.
+
+        // ALSO: This may take quite a while. Need to ensure that this is all done asynchronously in a request w/ polling
+        // fashion, in the same manner as the Variable Registry updating was done in ProcessGroupResource.
+    }
+
+    public Optional<Boolean> isModified() {
+        final StandardVersionControlInformation vci = versionControlInfo.get();
+
+        // If this group is not under version control, then we need to notify the parent
+        // group (if any) that a modification has taken place. Otherwise, we need to
+        // compare the current the flow with the 'versioned snapshot' of the flow in order
+        // to determine if the flows are different.
+        // We cannot simply say 'if something changed then this flow is different than the versioned snapshot'
+        // because if we do this, and a user adds a processor then subsequently removes it, then the logic would
+        // say that the flow is modified. There would be no way to ever go back to the flow not being modified.
+        // So we have to perform a diff of the flows and see if they are the same.
+        if (vci == null) {
+            return Optional.of(Boolean.FALSE);
+        }
+
+        if (vci.getFlowSnapshot() == null) {
+            // we haven't retrieved the flow from the Flow Registry yet, so we don't know if it's been modified.
+            // As a result, we will just return an empty optional
+            return Optional.empty();
+        }
+
+        final NiFiRegistryFlowMapper mapper = new NiFiRegistryFlowMapper();
+        final VersionedProcessGroup versionedGroup = mapper.mapProcessGroup(this);
+
+        final ComparableDataFlow currentFlow = new ComparableDataFlow() {
+            @Override
+            public VersionedProcessGroup getContents() {
+                return versionedGroup;
+            }
+
+            @Override
+            public String getName() {
+                return "Local Flow";
+            }
+        };
+
+        final ComparableDataFlow snapshotFlow = new ComparableDataFlow() {
+            @Override
+            public VersionedProcessGroup getContents() {
+                return vci.getFlowSnapshot();
+            }
+
+            @Override
+            public String getName() {
+                return "Flow Under Version Control";
+            }
+        };
+
+        final FlowComparator flowComparator = new StandardFlowComparator(currentFlow, snapshotFlow);
+        final FlowComparison comparison = flowComparator.compare();
+        final Set<FlowDifference> differences = comparison.getDifferences();
+        final boolean modified = differences.stream()
+            .filter(diff -> diff.getDifferenceType() != DifferenceType.POSITION_CHANGED)
+            .filter(diff -> diff.getDifferenceType() != DifferenceType.STYLE_CHANGED)
+            .findAny()
+            .isPresent();
+
+        LOG.debug("There are {} differences between this flow and the versioned snapshot of this flow: {}", differences.size(), differences);
+        return Optional.of(modified);
+    }
+
+
+    @Override
+    public void verifyCanUpdate(final VersionedFlowSnapshot updatedFlow) {
+        readLock.lock();
+        try {
+            final VersionControlInformation versionControlInfo = getVersionControlInformation();
+            if (versionControlInfo != null) {
+                if (!versionControlInfo.getFlowIdentifier().equals(updatedFlow.getSnapshotMetadata().getFlowIdentifier())) {
+                    throw new IllegalStateException(this + " is under version control but the given flow does not match the flow that this Process Group is synchronized with");
+                }
+
+                final Optional<Boolean> modifiedOption = versionControlInfo.getModified();
+                if (!modifiedOption.isPresent()) {
+                    throw new IllegalStateException(this + " cannot be updated to a different version of the flow because the local flow "
+                        + "has not yet been synchronized with the Flow Registry");
+                }
+
+                if (Boolean.TRUE.equals(modifiedOption.get())) {
+                    throw new IllegalStateException(this + " cannot be updated to a different version of the flow because the local flow "
+                        + "has been modified since it was last synchronized with the Flow Registry");
+                }
+            }
+
+            // Determine which Connections have been removed.
+            final Set<String> removedConnectionIds = new HashSet<>();
+            findAllConnections().stream()
+                .forEach(conn -> removedConnectionIds.add(conn.getIdentifier()));
+
+            final VersionedProcessGroup flowContents = updatedFlow.getFlowContents();
+            final Set<String> proposedFlowConnectionIds = new HashSet<>();
+            findAllConnectionIds(flowContents, proposedFlowConnectionIds);
+
+            removedConnectionIds.removeAll(proposedFlowConnectionIds);
+
+            // If any connection that was removed has data in it, throw an IllegalStateException
+            for (final String removedConnectionId : removedConnectionIds) {
+                final Connection connection = findConnection(removedConnectionId);
+                final FlowFileQueue flowFileQueue = connection.getFlowFileQueue();
+                if (!flowFileQueue.isEmpty()) {
+                    throw new IllegalStateException(this + " cannot be updated to the proposed version of the flow because the proposed version does not contain a connection with identifier "
+                        + removedConnectionId + " and the connection with that identifier currently has data in the queue.");
+                }
+            }
+
+            // Determine which input ports were removed from this process group
+            final Set<String> removedInputPortIds = new HashSet<>();
+            getInputPorts().stream().map(Port::getIdentifier).forEach(id -> removedInputPortIds.add(id));
+            flowContents.getInputPorts().stream()
+                .map(VersionedPort::getIdentifier)
+                .forEach(id -> removedInputPortIds.remove(id));
+
+            // Ensure that there are no incoming connections for any Input Port that was removed.
+            for (final String removedInputPortId : removedInputPortIds) {
+                final Port inputPort = getInputPort(removedInputPortId);
+                final List<Connection> incomingConnections = inputPort.getIncomingConnections();
+                if (!incomingConnections.isEmpty()) {
+                    throw new IllegalStateException(this + " cannot be updated to the proposed version of the flow because the proposed version does not contain the Input Port with identifier "
+                        + removedInputPortId + " and the Input Port currently has an incoming connections");
+                }
+            }
+
+            // Determine which output ports were removed from this process group
+            final Set<String> removedOutputPortIds = new HashSet<>();
+            getOutputPorts().stream().map(Port::getIdentifier).forEach(id -> removedOutputPortIds.add(id));
+            flowContents.getOutputPorts().stream()
+                .map(VersionedPort::getIdentifier)
+                .forEach(id -> removedOutputPortIds.remove(id));
+
+            // Ensure that there are no outgoing connections for any Output Port that was removed.
+            for (final String removedOutputPortId : removedOutputPortIds) {
+                final Port outputPort = getOutputPort(removedOutputPortId);
+                final Set<Connection> outgoingConnections = outputPort.getConnections();
+                if (!outgoingConnections.isEmpty()) {
+                    throw new IllegalStateException(this + " cannot be updated to the proposed version of the flow because the proposed version does not contain the Output Port with identifier "
+                        + removedOutputPortId + " and the Output Port currently has an outgoing connections");
+                }
+            }
+        } finally {
+            readLock.unlock();
+        }
+    }
+
+    private void findAllConnectionIds(final VersionedProcessGroup group, final Set<String> ids) {
+        for (final VersionedConnection connection : group.getConnections()) {
+            ids.add(connection.getIdentifier());
+        }
+
+        for (final VersionedProcessGroup childGroup : group.getProcessGroups()) {
+            findAllConnectionIds(childGroup, ids);
+        }
+    }
 }

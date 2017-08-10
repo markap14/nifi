@@ -197,6 +197,7 @@ import org.apache.nifi.provenance.ProvenanceRepository;
 import org.apache.nifi.provenance.StandardProvenanceEventRecord;
 import org.apache.nifi.registry.ComponentVariableRegistry;
 import org.apache.nifi.registry.VariableRegistry;
+import org.apache.nifi.registry.flow.FlowRegistryClient;
 import org.apache.nifi.registry.variable.MutableVariableRegistry;
 import org.apache.nifi.registry.variable.StandardComponentVariableRegistry;
 import org.apache.nifi.remote.HttpRemoteSiteListener;
@@ -332,6 +333,7 @@ public class FlowController implements EventAccess, ControllerServiceProvider, R
     private final List<RemoteGroupPort> startRemoteGroupPortsAfterInitialization;
     private final LeaderElectionManager leaderElectionManager;
     private final ClusterCoordinator clusterCoordinator;
+    private final FlowRegistryClient flowRegistryClient;
 
     /**
      * true if controller is configured to operate in a clustered environment
@@ -398,7 +400,8 @@ public class FlowController implements EventAccess, ControllerServiceProvider, R
             final AuditService auditService,
             final StringEncryptor encryptor,
             final BulletinRepository bulletinRepo,
-            final VariableRegistry variableRegistry) {
+            final VariableRegistry variableRegistry,
+            final FlowRegistryClient flowRegistryClient) {
 
         return new FlowController(
                 flowFileEventRepo,
@@ -412,7 +415,8 @@ public class FlowController implements EventAccess, ControllerServiceProvider, R
                 /* cluster coordinator */ null,
                 /* heartbeat monitor */ null,
                 /* leader election manager */ null,
-                /* variable registry */ variableRegistry);
+                /* variable registry */ variableRegistry,
+                flowRegistryClient);
     }
 
     public static FlowController createClusteredInstance(
@@ -426,7 +430,8 @@ public class FlowController implements EventAccess, ControllerServiceProvider, R
             final ClusterCoordinator clusterCoordinator,
             final HeartbeatMonitor heartbeatMonitor,
             final LeaderElectionManager leaderElectionManager,
-            final VariableRegistry variableRegistry) {
+            final VariableRegistry variableRegistry,
+            final FlowRegistryClient flowRegistryClient) {
 
         final FlowController flowController = new FlowController(
                 flowFileEventRepo,
@@ -440,7 +445,8 @@ public class FlowController implements EventAccess, ControllerServiceProvider, R
                 clusterCoordinator,
                 heartbeatMonitor,
                 leaderElectionManager,
-                variableRegistry);
+                variableRegistry,
+                flowRegistryClient);
 
         return flowController;
     }
@@ -457,7 +463,8 @@ public class FlowController implements EventAccess, ControllerServiceProvider, R
             final ClusterCoordinator clusterCoordinator,
             final HeartbeatMonitor heartbeatMonitor,
             final LeaderElectionManager leaderElectionManager,
-            final VariableRegistry variableRegistry) {
+            final VariableRegistry variableRegistry,
+            final FlowRegistryClient flowRegistryClient) {
 
         maxTimerDrivenThreads = new AtomicInteger(10);
         maxEventDrivenThreads = new AtomicInteger(5);
@@ -519,6 +526,7 @@ public class FlowController implements EventAccess, ControllerServiceProvider, R
         startRemoteGroupPortsAfterInitialization = new ArrayList<>();
         this.authorizer = authorizer;
         this.auditService = auditService;
+        this.flowRegistryClient = flowRegistryClient;
 
         final String gracefulShutdownSecondsVal = nifiProperties.getProperty(GRACEFUL_SHUTDOWN_PERIOD);
         long shutdownSecs;
@@ -756,6 +764,23 @@ public class FlowController implements EventAccess, ControllerServiceProvider, R
                     }
                 }
             }, 0L, 30L, TimeUnit.SECONDS);
+
+            timerDrivenEngineRef.get().scheduleWithFixedDelay(new Runnable() {
+                @Override
+                public void run() {
+                    final ProcessGroup rootGroup = getRootGroup();
+                    final List<ProcessGroup> allGroups = rootGroup.findAllProcessGroups();
+                    allGroups.add(rootGroup);
+
+                    for (final ProcessGroup group : allGroups) {
+                        try {
+                            group.synchronizeWithFlowRegistry(flowRegistryClient);
+                        } catch (final Exception e) {
+                            LOG.error("Failed to synchronize {} with Flow Registry", group, e);
+                        }
+                    }
+                }
+            }, 5, 60, TimeUnit.SECONDS);
 
             initialized.set(true);
         } finally {

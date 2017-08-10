@@ -16,6 +16,7 @@
  */
 package org.apache.nifi.web.dao.impl;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -33,9 +34,13 @@ import org.apache.nifi.controller.ScheduledState;
 import org.apache.nifi.controller.service.ControllerServiceNode;
 import org.apache.nifi.controller.service.ControllerServiceState;
 import org.apache.nifi.groups.ProcessGroup;
+import org.apache.nifi.registry.flow.StandardVersionControlInformation;
+import org.apache.nifi.registry.flow.VersionControlInformation;
+import org.apache.nifi.registry.flow.VersionedFlowSnapshot;
 import org.apache.nifi.web.ResourceNotFoundException;
 import org.apache.nifi.web.api.dto.ProcessGroupDTO;
 import org.apache.nifi.web.api.dto.VariableRegistryDTO;
+import org.apache.nifi.web.api.dto.VersionControlInformationDTO;
 import org.apache.nifi.web.api.entity.VariableEntity;
 import org.apache.nifi.web.dao.ProcessGroupDAO;
 
@@ -193,6 +198,41 @@ public class StandardProcessGroupDAO extends ComponentDAO implements ProcessGrou
             group.setComments(comments);
         }
 
+        return group;
+    }
+
+    @Override
+    public ProcessGroup updateVersionControlInformation(final VersionControlInformationDTO versionControlInformation, final Map<String, String> versionedComponentMapping) {
+        final String groupId = versionControlInformation.getGroupId();
+        final ProcessGroup group = locateProcessGroup(flowController, groupId);
+
+        final String registryId = versionControlInformation.getRegistryId();
+        final String bucketId = versionControlInformation.getBucketId();
+        final String flowId = versionControlInformation.getFlowId();
+        final int version = versionControlInformation.getVersion();
+
+        final VersionControlInformation vci = new StandardVersionControlInformation(registryId, bucketId, flowId, version, null, false, true);
+        group.setVersionControlInformation(vci, versionedComponentMapping);
+
+        return group;
+    }
+
+    @Override
+    public ProcessGroup updateProcessGroupFlow(final String groupId, final VersionedFlowSnapshot proposedSnapshot, final VersionControlInformationDTO versionControlInformation,
+        final String componentIdSeed) {
+        final ProcessGroup group = locateProcessGroup(flowController, groupId);
+        group.updateFlow(proposedSnapshot, componentIdSeed);
+
+        final StandardVersionControlInformation svci = new StandardVersionControlInformation(
+            versionControlInformation.getRegistryId(),
+            versionControlInformation.getBucketId(),
+            versionControlInformation.getFlowId(),
+            versionControlInformation.getVersion(),
+            proposedSnapshot.getFlowContents(),
+            versionControlInformation.getModified(),
+            versionControlInformation.getCurrent());
+
+        group.setVersionControlInformation(svci, Collections.emptyMap());
         return group;
     }
 

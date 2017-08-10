@@ -114,6 +114,16 @@ import org.apache.nifi.provenance.lineage.ProvenanceEventLineageNode;
 import org.apache.nifi.registry.ComponentVariableRegistry;
 import org.apache.nifi.registry.variable.VariableRegistryUpdateRequest;
 import org.apache.nifi.registry.variable.VariableRegistryUpdateStep;
+import org.apache.nifi.registry.flow.VersionControlInformation;
+import org.apache.nifi.registry.flow.VersionedRemoteGroupPort;
+import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedConnection;
+import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedControllerService;
+import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedLabel;
+import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedPort;
+import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedProcessGroup;
+import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedProcessor;
+import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedRemoteGroupPort;
+import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedRemoteProcessGroup;
 import org.apache.nifi.remote.RemoteGroupPort;
 import org.apache.nifi.remote.RootGroupPort;
 import org.apache.nifi.reporting.Bulletin;
@@ -616,6 +626,7 @@ public final class DtoFactory {
         dto.setzIndex(connection.getZIndex());
         dto.setSource(createConnectableDto(connection.getSource()));
         dto.setDestination(createConnectableDto(connection.getDestination()));
+        dto.setVersionedComponentId(connection.getVersionedComponentId().orElse(null));
 
         dto.setBackPressureObjectThreshold(connection.getFlowFileQueue().getBackPressureObjectThreshold());
         dto.setBackPressureDataSizeThreshold(connection.getFlowFileQueue().getBackPressureDataSizeThreshold());
@@ -667,6 +678,7 @@ public final class DtoFactory {
         dto.setId(connectable.getIdentifier());
         dto.setName(isAuthorized ? connectable.getName() : connectable.getIdentifier());
         dto.setType(connectable.getConnectableType().name());
+        dto.setVersionedComponentId(connectable.getVersionedComponentId().orElse(null));
 
         if (connectable instanceof RemoteGroupPort) {
             final RemoteGroupPort remoteGroupPort = (RemoteGroupPort) connectable;
@@ -708,6 +720,7 @@ public final class DtoFactory {
         dto.setWidth(label.getSize().getWidth());
         dto.setLabel(label.getValue());
         dto.setParentGroupId(label.getProcessGroup().getIdentifier());
+        dto.setVersionedComponentId(label.getVersionedComponentId().orElse(null));
 
         return dto;
     }
@@ -824,6 +837,7 @@ public final class DtoFactory {
         dto.setId(funnel.getIdentifier());
         dto.setPosition(createPositionDto(funnel.getPosition()));
         dto.setParentGroupId(funnel.getProcessGroup().getIdentifier());
+        dto.setVersionedComponentId(funnel.getVersionedComponentId().orElse(null));
 
         return dto;
     }
@@ -1226,6 +1240,7 @@ public final class DtoFactory {
         dto.setParentGroupId(port.getProcessGroup().getIdentifier());
         dto.setState(port.getScheduledState().toString());
         dto.setType(port.getConnectableType().name());
+        dto.setVersionedComponentId(port.getVersionedComponentId().orElse(null));
 
         // if this port is on the root group, determine if its actually connected to another nifi
         if (port instanceof RootGroupPort) {
@@ -1352,6 +1367,7 @@ public final class DtoFactory {
         dto.setDeprecated(controllerServiceNode.isDeprecated());
         dto.setExtensionMissing(controllerServiceNode.isExtensionMissing());
         dto.setMultipleVersionsAvailable(compatibleBundles.size() > 1);
+        dto.setVersionedComponentId(controllerServiceNode.getVersionedComponentId().orElse(null));
 
         // sort a copy of the properties
         final Map<PropertyDescriptor, String> sortedProperties = new TreeMap<>(new Comparator<PropertyDescriptor>() {
@@ -1508,6 +1524,7 @@ public final class DtoFactory {
         dto.setConcurrentlySchedulableTaskCount(port.getMaxConcurrentTasks());
         dto.setUseCompression(port.isUseCompression());
         dto.setExists(port.getTargetExists());
+        dto.setVersionedComponentId(port.getVersionedComponentId().orElse(null));
 
         final BatchSettingsDTO batchDTO = new BatchSettingsDTO();
         batchDTO.setCount(port.getBatchCount());
@@ -1616,6 +1633,7 @@ public final class DtoFactory {
         dto.setInactiveRemoteInputPortCount(inactiveRemoteInputPortCount);
         dto.setActiveRemoteOutputPortCount(activeRemoteOutputPortCount);
         dto.setInactiveRemoteOutputPortCount(inactiveRemoteOutputPortCount);
+        dto.setVersionedComponentId(group.getVersionedComponentId().orElse(null));
 
         final ProcessGroupCounts counts = group.getCounts();
         if (counts != null) {
@@ -1676,6 +1694,7 @@ public final class DtoFactory {
         dto.setId(componentAuthorizable.getIdentifier());
         dto.setParentGroupId(componentAuthorizable.getProcessGroupIdentifier());
         dto.setName(authorizable.getResource().getName());
+
         return dto;
     }
 
@@ -2044,6 +2063,8 @@ public final class DtoFactory {
         dto.setPosition(createPositionDto(group.getPosition()));
         dto.setComments(group.getComments());
         dto.setName(group.getName());
+        dto.setVersionedComponentId(group.getVersionedComponentId().orElse(null));
+        dto.setVersionControlInformation(createVersionControlInformationDto(group.getVersionControlInformation()));
 
         final Map<String, String> variables = group.getVariableRegistry().getVariableMap().entrySet().stream()
             .collect(Collectors.toMap(entry -> entry.getKey().getName(), entry -> entry.getValue()));
@@ -2066,6 +2087,68 @@ public final class DtoFactory {
 
         return dto;
     }
+
+    public VersionControlInformationDTO createVersionControlInformationDto(final VersionControlInformation versionControlInfo) {
+        if (versionControlInfo == null) {
+            return null;
+        }
+
+        final VersionControlInformationDTO dto = new VersionControlInformationDTO();
+        dto.setRegistryId(versionControlInfo.getRegistryIdentifier());
+        dto.setBucketId(versionControlInfo.getBucketIdentifier());
+        dto.setFlowId(versionControlInfo.getFlowIdentifier());
+        dto.setVersion(versionControlInfo.getVersion());
+        dto.setCurrent(versionControlInfo.getCurrent().orElse(null));
+        dto.setModified(versionControlInfo.getModified().orElse(null));
+        return dto;
+    }
+
+    public Map<String, String> createVersionControlComponentMappingDto(final InstantiatedVersionedProcessGroup group) {
+        final Map<String, String> mapping = new HashMap<>();
+
+        mapping.put(group.getInstanceId(), group.getIdentifier());
+        group.getProcessors().stream()
+            .map(proc -> (InstantiatedVersionedProcessor) proc)
+            .forEach(proc -> mapping.put(proc.getInstanceId(), proc.getIdentifier()));
+        group.getInputPorts().stream()
+            .map(port -> (InstantiatedVersionedPort) port)
+            .forEach(port -> mapping.put(port.getInstanceId(), port.getIdentifier()));
+        group.getOutputPorts().stream()
+            .map(port -> (InstantiatedVersionedPort) port)
+            .forEach(port -> mapping.put(port.getInstanceId(), port.getIdentifier()));
+        group.getControllerServices().stream()
+            .map(service -> (InstantiatedVersionedControllerService) service)
+            .forEach(service -> mapping.put(service.getInstanceId(), service.getIdentifier()));
+        group.getLabels().stream()
+            .map(label -> (InstantiatedVersionedLabel) label)
+            .forEach(label -> mapping.put(label.getInstanceId(), label.getIdentifier()));
+        group.getConnections().stream()
+            .map(conn -> (InstantiatedVersionedConnection) conn)
+            .forEach(conn -> mapping.put(conn.getInstanceId(), conn.getIdentifier()));
+        group.getRemoteProcessGroups().stream()
+            .map(rpg -> (InstantiatedVersionedRemoteProcessGroup) rpg)
+            .forEach(rpg -> {
+                mapping.put(rpg.getInstanceId(), rpg.getIdentifier());
+
+                rpg.getInputPorts().stream()
+                    .map(port -> (InstantiatedVersionedRemoteGroupPort) port)
+                    .forEach(port -> mapping.put(port.getInstanceId(), port.getIdentifier()));
+
+                rpg.getOutputPorts().stream()
+                    .map(port -> (InstantiatedVersionedRemoteGroupPort) port)
+                    .forEach(port -> mapping.put(port.getInstanceId(), port.getIdentifier()));
+            });
+
+        group.getProcessGroups().stream()
+            .map(child -> (InstantiatedVersionedProcessGroup) child)
+            .forEach(child -> {
+                final Map<String, String> childMapping = createVersionControlComponentMappingDto(child);
+                mapping.putAll(childMapping);
+            });
+
+        return mapping;
+    }
+
 
     /**
      * Creates a ProcessGroupContentDTO from the specified ProcessGroup.
@@ -2415,6 +2498,7 @@ public final class DtoFactory {
         dto.setDeprecated(node.isDeprecated());
         dto.setExtensionMissing(node.isExtensionMissing());
         dto.setMultipleVersionsAvailable(compatibleBundles.size() > 1);
+        dto.setVersionedComponentId(node.getVersionedComponentId().orElse(null));
 
         dto.setType(node.getCanonicalClassName());
         dto.setBundle(createBundleDto(bundleCoordinate));
@@ -2986,6 +3070,7 @@ public final class DtoFactory {
         copy.setPosition(original.getPosition());
         copy.setWidth(original.getWidth());
         copy.setHeight(original.getHeight());
+        copy.setVersionedComponentId(original.getVersionedComponentId());
 
         return copy;
     }
@@ -3009,6 +3094,7 @@ public final class DtoFactory {
         copy.setMultipleVersionsAvailable(original.getMultipleVersionsAvailable());
         copy.setPersistsState(original.getPersistsState());
         copy.setValidationErrors(copy(original.getValidationErrors()));
+        copy.setVersionedComponentId(original.getVersionedComponentId());
         return copy;
     }
 
@@ -3017,6 +3103,7 @@ public final class DtoFactory {
         copy.setId(original.getId());
         copy.setParentGroupId(original.getParentGroupId());
         copy.setPosition(original.getPosition());
+        copy.setVersionedComponentId(original.getVersionedComponentId());
 
         return copy;
     }
@@ -3085,6 +3172,7 @@ public final class DtoFactory {
         copy.setExtensionMissing(original.getExtensionMissing());
         copy.setMultipleVersionsAvailable(original.getMultipleVersionsAvailable());
         copy.setValidationErrors(copy(original.getValidationErrors()));
+        copy.setVersionedComponentId(original.getVersionedComponentId());
 
         return copy;
     }
@@ -3129,6 +3217,7 @@ public final class DtoFactory {
         copy.setzIndex(original.getzIndex());
         copy.setLabelIndex(original.getLabelIndex());
         copy.setBends(copy(original.getBends()));
+        copy.setVersionedComponentId(original.getVersionedComponentId());
 
         return copy;
     }
@@ -3161,6 +3250,7 @@ public final class DtoFactory {
         copy.setUserAccessControl(copy(original.getUserAccessControl()));
         copy.setGroupAccessControl(copy(original.getGroupAccessControl()));
         copy.setValidationErrors(copy(original.getValidationErrors()));
+        copy.setVersionedComponentId(original.getVersionedComponentId());
         return copy;
     }
 
@@ -3176,6 +3266,8 @@ public final class DtoFactory {
         copy.setConcurrentlySchedulableTaskCount(original.getConcurrentlySchedulableTaskCount());
         copy.setUseCompression(original.getUseCompression());
         copy.setExists(original.getExists());
+        copy.setVersionedComponentId(original.getVersionedComponentId());
+
         final BatchSettingsDTO batchOrg = original.getBatchSettings();
         if (batchOrg != null) {
             final BatchSettingsDTO batchCopy = new BatchSettingsDTO();
@@ -3195,8 +3287,10 @@ public final class DtoFactory {
         copy.setInputPortCount(original.getInputPortCount());
         copy.setInvalidCount(original.getInvalidCount());
         copy.setName(original.getName());
+        copy.setVersionControlInformation(copy(original.getVersionControlInformation()));
         copy.setOutputPortCount(original.getOutputPortCount());
         copy.setParentGroupId(original.getParentGroupId());
+        copy.setVersionedComponentId(original.getVersionedComponentId());
 
         copy.setRunningCount(original.getRunningCount());
         copy.setStoppedCount(original.getStoppedCount());
@@ -3208,6 +3302,21 @@ public final class DtoFactory {
             copy.setVariables(new HashMap<>(original.getVariables()));
         }
 
+        return copy;
+    }
+
+    public VersionControlInformationDTO copy(final VersionControlInformationDTO original) {
+        if (original == null) {
+            return null;
+        }
+
+        final VersionControlInformationDTO copy = new VersionControlInformationDTO();
+        copy.setRegistryId(original.getRegistryId());
+        copy.setBucketId(original.getBucketId());
+        copy.setFlowId(original.getFlowId());
+        copy.setVersion(original.getVersion());
+        copy.setCurrent(original.getCurrent());
+        copy.setModified(original.getModified());
         return copy;
     }
 
@@ -3252,6 +3361,7 @@ public final class DtoFactory {
         copy.setProxyUser(original.getProxyUser());
         copy.setProxyPassword(original.getProxyPassword());
         copy.setLocalNetworkInterface(original.getLocalNetworkInterface());
+        copy.setVersionedComponentId(original.getVersionedComponentId());
 
         copy.setContents(copyContents);
 
@@ -3264,6 +3374,7 @@ public final class DtoFactory {
         connectable.setId(port.getId());
         connectable.setName(port.getName());
         connectable.setType(type.name());
+        connectable.setVersionedComponentId(port.getVersionedComponentId());
         return connectable;
     }
 
@@ -3273,6 +3384,7 @@ public final class DtoFactory {
         connectable.setId(processor.getId());
         connectable.setName(processor.getName());
         connectable.setType(ConnectableType.PROCESSOR.name());
+        connectable.setVersionedComponentId(processor.getVersionedComponentId());
         return connectable;
     }
 
@@ -3281,6 +3393,7 @@ public final class DtoFactory {
         connectable.setGroupId(funnel.getParentGroupId());
         connectable.setId(funnel.getId());
         connectable.setType(ConnectableType.FUNNEL.name());
+        connectable.setVersionedComponentId(funnel.getVersionedComponentId());
         return connectable;
     }
 
@@ -3290,6 +3403,7 @@ public final class DtoFactory {
         connectable.setId(remoteGroupPort.getId());
         connectable.setName(remoteGroupPort.getName());
         connectable.setType(type.name());
+        connectable.setVersionedComponentId(connectable.getVersionedComponentId());
         return connectable;
     }
 

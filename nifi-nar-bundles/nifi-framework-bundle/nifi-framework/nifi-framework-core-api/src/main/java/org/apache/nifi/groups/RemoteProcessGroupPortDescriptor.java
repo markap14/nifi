@@ -35,6 +35,11 @@ public interface RemoteProcessGroupPortDescriptor {
     String getId();
 
     /**
+     * @return the ID corresponding to the component that is under version control
+     */
+    String getVersionedComponentId();
+
+    /**
      * @return id of the remote process group that this port resides in
      */
     String getGroupId();

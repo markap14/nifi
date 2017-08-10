@@ -107,6 +107,7 @@
         <hbase.version>1.1.2</hbase.version>
         <storm.version>1.0.1</storm.version>
         <hwx.registry.version>0.3.0</hwx.registry.version>
+        <nifi.registry.version>0.0.1-SNAPSHOT</nifi.registry.version>
     </properties>
 
     <repositories>
@@ -1622,6 +1623,16 @@
                 <groupId>org.apache.nifi</groupId>
                 <artifactId>nifi-assembly</artifactId>
                 <version>1.4.0-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.nifi.registry</groupId>
+                <artifactId>nifi-registry-data-model</artifactId>
+                <version>${nifi.registry.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.nifi.registry</groupId>
+                <artifactId>nifi-registry-flow-diff</artifactId>
+                <version>${nifi.registry.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.jayway.jsonpath</groupId>

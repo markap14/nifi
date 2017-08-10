@@ -162,6 +162,7 @@ public class MonitorMemoryTest {
                 mock(AuditService.class),
                 null,
                 null,
+                null,
                 null), bundle);
     }
 }

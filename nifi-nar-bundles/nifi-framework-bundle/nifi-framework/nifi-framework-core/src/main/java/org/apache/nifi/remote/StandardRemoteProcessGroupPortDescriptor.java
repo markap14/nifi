@@ -21,6 +21,7 @@ import org.apache.nifi.groups.RemoteProcessGroupPortDescriptor;
 public class StandardRemoteProcessGroupPortDescriptor implements RemoteProcessGroupPortDescriptor {
 
     private String id;
+    private String versionedComponentId;
     private String groupId;
     private String name;
     private String comments;
@@ -174,5 +175,14 @@ public class StandardRemoteProcessGroupPortDescriptor implements RemoteProcessGr
             return false;
         }
         return name.equals(other.getName());
+    }
+
+    @Override
+    public String getVersionedComponentId() {
+        return versionedComponentId;
+    }
+
+    public void setVersionedComponentId(String versionedId) {
+        this.versionedComponentId = versionedId;
     }
 }
