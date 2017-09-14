@@ -55,6 +55,7 @@ import com.sun.jersey.api.client.UniformInterfaceException;
 import com.sun.jersey.api.client.config.ClientConfig;
 import com.sun.jersey.api.client.config.DefaultClientConfig;
 
+// TODO: Delete this class. Use ClusterReplicationComponentLifecycle instead!
 public class JerseyClientComponentLifecycle implements ComponentLifecycle {
     private static final Logger logger = LoggerFactory.getLogger(JerseyClientComponentLifecycle.class);
 

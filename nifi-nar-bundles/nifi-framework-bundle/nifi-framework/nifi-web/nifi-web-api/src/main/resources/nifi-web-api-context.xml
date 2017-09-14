@@ -62,9 +62,11 @@
         <property name="accessPolicyDAO" ref="policyBasedAuthorizerDAO"/>
     </bean>
     
-    <bean id="componentLifecycle" class="org.apache.nifi.web.util.JerseyClientComponentLifecycle">
-        <constructor-arg index="0" ref="nifiProperties" />
-        <property name="revisionManager" ref="revisionManager" />
+    <bean id="componentLifecycle" class="org.apache.nifi.web.util.ClusterReplicationComponentLifecycle">
+        <property name="clusterCoordinator" ref="clusterCoordinator" />
+        <property name="requestReplicator" ref="requestReplicator" />
+        <property name="serviceFacade" ref="serviceFacade" />
+        <property name="dtoFactory" ref="dtoFactory" />
     </bean>
 
     <!-- nifi component dao initialization -->
