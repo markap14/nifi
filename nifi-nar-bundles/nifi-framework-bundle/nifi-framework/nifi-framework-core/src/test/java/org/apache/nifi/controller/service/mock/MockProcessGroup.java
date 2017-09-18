@@ -646,7 +646,7 @@ public class MockProcessGroup implements ProcessGroup {
     }
 
     @Override
-    public void verifyCanUpdate(VersionedFlowSnapshot updatedFlow) {
+    public void verifyCanUpdate(VersionedFlowSnapshot updatedFlow, boolean verifyConnectionRemoval) {
     }
 
     @Override

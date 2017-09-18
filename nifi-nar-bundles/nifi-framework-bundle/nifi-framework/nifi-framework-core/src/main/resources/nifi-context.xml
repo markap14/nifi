@@ -37,7 +37,7 @@
 
     <!-- flow registry -->
     <bean id="flowRegistryClient" class="org.apache.nifi.registry.flow.FileBasedFlowRegistryClient">
-        <constructor-arg index="0" type="java.io.File" value="./flowRegistry" />
+        <constructor-arg index="0" type="java.io.File" value="../flowRegistry" />
     </bean>
 
     <!-- flow controller -->

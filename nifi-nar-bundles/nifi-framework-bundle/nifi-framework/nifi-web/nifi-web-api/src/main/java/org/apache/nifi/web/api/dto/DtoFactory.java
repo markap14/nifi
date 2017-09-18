@@ -16,6 +16,33 @@
  */
 package org.apache.nifi.web.api.dto;
 
+import java.text.Collator;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.TimeZone;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
+
+import javax.ws.rs.WebApplicationException;
+
 import org.apache.commons.lang3.ClassUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.nifi.action.Action;
@@ -112,10 +139,7 @@ import org.apache.nifi.provenance.lineage.LineageEdge;
 import org.apache.nifi.provenance.lineage.LineageNode;
 import org.apache.nifi.provenance.lineage.ProvenanceEventLineageNode;
 import org.apache.nifi.registry.ComponentVariableRegistry;
-import org.apache.nifi.registry.variable.VariableRegistryUpdateRequest;
-import org.apache.nifi.registry.variable.VariableRegistryUpdateStep;
 import org.apache.nifi.registry.flow.VersionControlInformation;
-import org.apache.nifi.registry.flow.VersionedRemoteGroupPort;
 import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedConnection;
 import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedControllerService;
 import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedLabel;
@@ -124,6 +148,8 @@ import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedProcessGroup;
 import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedProcessor;
 import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedRemoteGroupPort;
 import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedRemoteProcessGroup;
+import org.apache.nifi.registry.variable.VariableRegistryUpdateRequest;
+import org.apache.nifi.registry.variable.VariableRegistryUpdateStep;
 import org.apache.nifi.remote.RemoteGroupPort;
 import org.apache.nifi.remote.RootGroupPort;
 import org.apache.nifi.reporting.Bulletin;
@@ -170,41 +196,18 @@ import org.apache.nifi.web.api.entity.AllowableValueEntity;
 import org.apache.nifi.web.api.entity.BulletinEntity;
 import org.apache.nifi.web.api.entity.ComponentReferenceEntity;
 import org.apache.nifi.web.api.entity.ConnectionStatusSnapshotEntity;
+import org.apache.nifi.web.api.entity.ControllerServiceEntity;
 import org.apache.nifi.web.api.entity.FlowBreadcrumbEntity;
 import org.apache.nifi.web.api.entity.PortStatusSnapshotEntity;
 import org.apache.nifi.web.api.entity.ProcessGroupStatusSnapshotEntity;
+import org.apache.nifi.web.api.entity.ProcessorEntity;
 import org.apache.nifi.web.api.entity.ProcessorStatusSnapshotEntity;
+import org.apache.nifi.web.api.entity.RemoteProcessGroupEntity;
 import org.apache.nifi.web.api.entity.RemoteProcessGroupStatusSnapshotEntity;
 import org.apache.nifi.web.api.entity.TenantEntity;
 import org.apache.nifi.web.api.entity.VariableEntity;
 import org.apache.nifi.web.controller.ControllerFacade;
 import org.apache.nifi.web.revision.RevisionManager;
-
-import javax.ws.rs.WebApplicationException;
-import java.text.Collator;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.TimeZone;
-import java.util.TreeMap;
-import java.util.TreeSet;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 public final class DtoFactory {
 
@@ -1753,6 +1756,81 @@ public final class DtoFactory {
         dto.setCanWrite(authorizable.isAuthorized(authorizer, RequestAction.WRITE, user));
         return dto;
     }
+
+    public AffectedComponentEntity createAffectedComponentEntity(final ProcessorEntity processorEntity) {
+        if (processorEntity == null) {
+            return null;
+        }
+
+        final AffectedComponentEntity component = new AffectedComponentEntity();
+        component.setBulletins(processorEntity.getBulletins());
+        component.setId(processorEntity.getId());
+        component.setPermissions(processorEntity.getPermissions());
+        component.setPosition(processorEntity.getPosition());
+        component.setRevision(processorEntity.getRevision());
+        component.setUri(processorEntity.getUri());
+
+        final ProcessorDTO processorDto = processorEntity.getComponent();
+        final AffectedComponentDTO componentDto = new AffectedComponentDTO();
+        componentDto.setId(processorDto.getId());
+        componentDto.setName(processorDto.getName());
+        componentDto.setProcessGroupId(processorDto.getParentGroupId());
+        componentDto.setReferenceType(AffectedComponentDTO.COMPONENT_TYPE_CONTROLLER_SERVICE);
+        componentDto.setState(processorDto.getState());
+        componentDto.setValidationErrors(processorDto.getValidationErrors());
+        component.setComponent(componentDto);
+
+        return component;
+    }
+
+    public AffectedComponentEntity createAffectedComponentEntity(final ControllerServiceEntity serviceEntity) {
+        if (serviceEntity == null) {
+            return null;
+        }
+
+        final AffectedComponentEntity component = new AffectedComponentEntity();
+        component.setBulletins(serviceEntity.getBulletins());
+        component.setId(serviceEntity.getId());
+        component.setPermissions(serviceEntity.getPermissions());
+        component.setPosition(serviceEntity.getPosition());
+        component.setRevision(serviceEntity.getRevision());
+        component.setUri(serviceEntity.getUri());
+
+        final ControllerServiceDTO serviceDto = serviceEntity.getComponent();
+        final AffectedComponentDTO componentDto = new AffectedComponentDTO();
+        componentDto.setId(serviceDto.getId());
+        componentDto.setName(serviceDto.getName());
+        componentDto.setProcessGroupId(serviceDto.getParentGroupId());
+        componentDto.setReferenceType(AffectedComponentDTO.COMPONENT_TYPE_CONTROLLER_SERVICE);
+        componentDto.setState(serviceDto.getState());
+        componentDto.setValidationErrors(serviceDto.getValidationErrors());
+        component.setComponent(componentDto);
+
+        return component;
+    }
+
+    public AffectedComponentEntity createAffectedComponentEntity(final RemoteProcessGroupPortDTO remotePortDto, final String referenceType, final RemoteProcessGroupEntity rpgEntity) {
+        if (remotePortDto == null) {
+            return null;
+        }
+
+        final AffectedComponentEntity component = new AffectedComponentEntity();
+        component.setId(remotePortDto.getId());
+        component.setPermissions(rpgEntity.getPermissions());
+        component.setRevision(rpgEntity.getRevision());
+        component.setUri(rpgEntity.getUri());
+
+        final AffectedComponentDTO componentDto = new AffectedComponentDTO();
+        componentDto.setId(remotePortDto.getId());
+        componentDto.setName(remotePortDto.getName());
+        componentDto.setProcessGroupId(remotePortDto.getGroupId());
+        componentDto.setReferenceType(referenceType);
+        componentDto.setState(remotePortDto.isTransmitting() ? "Running" : "Stopped");
+        component.setComponent(componentDto);
+
+        return component;
+    }
+
 
     public AffectedComponentDTO createAffectedComponentDto(final ConfiguredComponent component) {
         final AffectedComponentDTO dto = new AffectedComponentDTO();

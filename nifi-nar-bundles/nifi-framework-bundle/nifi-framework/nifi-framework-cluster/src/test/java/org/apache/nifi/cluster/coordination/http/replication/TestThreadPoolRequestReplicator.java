@@ -26,6 +26,7 @@ import com.sun.jersey.core.header.OutBoundHeaders;
 import org.apache.commons.collections4.map.MultiValueMap;
 import org.apache.nifi.authorization.user.NiFiUser;
 import org.apache.nifi.authorization.user.NiFiUserDetails;
+import org.apache.nifi.authorization.user.NiFiUserUtils;
 import org.apache.nifi.authorization.user.StandardNiFiUser;
 import org.apache.nifi.authorization.user.StandardNiFiUser.Builder;
 import org.apache.nifi.cluster.coordination.ClusterCoordinator;
@@ -441,7 +442,7 @@ public class TestThreadPoolRequestReplicator {
 
                 // ensure the proxied entities header is set
                 final Map<String, String> updatedHeaders = new HashMap<>();
-                replicator.updateRequestHeaders(updatedHeaders);
+                replicator.updateRequestHeaders(updatedHeaders, NiFiUserUtils.getNiFiUser());
 
                 // Pass in Collections.emptySet() for the node ID's so that an Exception is thrown
                 replicator.replicate(Collections.emptySet(), "GET", new URI("localhost:8080/nifi"), Collections.emptyMap(),
@@ -499,7 +500,7 @@ public class TestThreadPoolRequestReplicator {
 
             // ensure the proxied entities header is set
             final Map<String, String> updatedHeaders = new HashMap<>();
-            replicator.updateRequestHeaders(updatedHeaders);
+            replicator.updateRequestHeaders(updatedHeaders, NiFiUserUtils.getNiFiUser());
 
             replicator.replicate(nodeIds, HttpMethod.GET, uri, entity, updatedHeaders, true, null, true, true, monitor);
 
@@ -552,7 +553,7 @@ public class TestThreadPoolRequestReplicator {
 
             // ensure the proxied entities header is set
             final Map<String, String> updatedHeaders = new HashMap<>();
-            replicator.updateRequestHeaders(updatedHeaders);
+            replicator.updateRequestHeaders(updatedHeaders, NiFiUserUtils.getNiFiUser());
 
             replicator.replicate(nodeIds, HttpMethod.GET, uri, entity, updatedHeaders, true, null, true, true, monitor);
 

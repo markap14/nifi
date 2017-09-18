@@ -17,7 +17,6 @@
 
 package org.apache.nifi.web.util;
 
-import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.HashMap;
@@ -31,6 +30,7 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.Response.Status;
 
+import org.apache.nifi.authorization.user.NiFiUser;
 import org.apache.nifi.cluster.coordination.ClusterCoordinator;
 import org.apache.nifi.cluster.coordination.http.replication.RequestReplicator;
 import org.apache.nifi.cluster.exception.NoClusterCoordinatorException;
@@ -42,9 +42,7 @@ import org.apache.nifi.web.NiFiServiceFacade;
 import org.apache.nifi.web.Revision;
 import org.apache.nifi.web.api.ApplicationResource.ReplicationTarget;
 import org.apache.nifi.web.api.dto.AffectedComponentDTO;
-import org.apache.nifi.web.api.dto.ControllerServiceDTO;
 import org.apache.nifi.web.api.dto.DtoFactory;
-import org.apache.nifi.web.api.dto.ProcessorDTO;
 import org.apache.nifi.web.api.dto.RevisionDTO;
 import org.apache.nifi.web.api.dto.status.ProcessorStatusDTO;
 import org.apache.nifi.web.api.entity.ActivateControllerServicesEntity;
@@ -69,11 +67,7 @@ public class ClusterReplicationComponentLifecycle implements ComponentLifecycle 
 
 
     @Override
-    public void close() throws IOException {
-    }
-
-    @Override
-    public Set<AffectedComponentEntity> scheduleComponents(final URI exampleUri, final String groupId, final Set<AffectedComponentEntity> components,
+    public Set<AffectedComponentEntity> scheduleComponents(final URI exampleUri, final NiFiUser user, final String groupId, final Set<AffectedComponentEntity> components,
             final ScheduledState desiredState, final Pause pause) throws LifecycleManagementException {
 
         final Set<String> componentIds = components.stream()
@@ -83,12 +77,12 @@ public class ClusterReplicationComponentLifecycle implements ComponentLifecycle 
         final Map<String, AffectedComponentEntity> componentMap = components.stream()
             .collect(Collectors.toMap(AffectedComponentEntity::getId, Function.identity()));
 
-        final Map<String, Revision> processorRevisionMap = getRevisions(groupId, componentIds);
-        final Map<String, RevisionDTO> processorRevisionDtoMap = processorRevisionMap.entrySet().stream().collect(
+        final Map<String, Revision> componentRevisionMap = getRevisions(groupId, componentIds);
+        final Map<String, RevisionDTO> componentRevisionDtoMap = componentRevisionMap.entrySet().stream().collect(
             Collectors.toMap(Map.Entry::getKey, entry -> dtoFactory.createRevisionDTO(entry.getValue())));
 
         final ScheduleComponentsEntity scheduleProcessorsEntity = new ScheduleComponentsEntity();
-        scheduleProcessorsEntity.setComponents(processorRevisionDtoMap);
+        scheduleProcessorsEntity.setComponents(componentRevisionDtoMap);
         scheduleProcessorsEntity.setId(groupId);
         scheduleProcessorsEntity.setState(desiredState.name());
 
@@ -107,10 +101,10 @@ public class ClusterReplicationComponentLifecycle implements ComponentLifecycle 
         try {
             final NodeResponse clusterResponse;
             if (getReplicationTarget() == ReplicationTarget.CLUSTER_NODES) {
-                clusterResponse = getRequestReplicator().replicate(HttpMethod.PUT, scheduleGroupUri, scheduleProcessorsEntity, headers).awaitMergedResponse();
+                clusterResponse = getRequestReplicator().replicate(user, HttpMethod.PUT, scheduleGroupUri, scheduleProcessorsEntity, headers).awaitMergedResponse();
             } else {
                 clusterResponse = getRequestReplicator().forwardToCoordinator(
-                    getClusterCoordinatorNode(), HttpMethod.PUT, scheduleGroupUri, scheduleProcessorsEntity, headers).awaitMergedResponse();
+                    getClusterCoordinatorNode(), user, HttpMethod.PUT, scheduleGroupUri, scheduleProcessorsEntity, headers).awaitMergedResponse();
             }
 
             final int scheduleComponentStatus = clusterResponse.getStatus();
@@ -118,7 +112,7 @@ public class ClusterReplicationComponentLifecycle implements ComponentLifecycle 
                 throw new LifecycleManagementException("Failed to transition components to a state of " + desiredState);
             }
 
-            final boolean processorsTransitioned = waitForProcessorStatus(exampleUri, groupId, componentMap, desiredState, pause);
+            final boolean processorsTransitioned = waitForProcessorStatus(user, exampleUri, groupId, componentMap, desiredState, pause);
 
             if (!processorsTransitioned) {
                 throw new LifecycleManagementException("Failed while waiting for components to transition to state of " + desiredState);
@@ -128,34 +122,12 @@ public class ClusterReplicationComponentLifecycle implements ComponentLifecycle 
             throw new LifecycleManagementException("Interrupted while attempting to transition components to state of " + desiredState);
         }
 
-        return components.stream()
-            .map(componentEntity -> serviceFacade.getProcessor(componentEntity.getId()))
-            .map(this::createAffectedComponentEntity)
+        final Set<AffectedComponentEntity> updatedEntities = components.stream()
+            .map(component -> AffectedComponentUtils.updateEntity(component, serviceFacade, dtoFactory, user))
             .collect(Collectors.toSet());
+        return updatedEntities;
     }
 
-
-    private AffectedComponentEntity createAffectedComponentEntity(final ProcessorEntity processorEntity) {
-        final AffectedComponentEntity component = new AffectedComponentEntity();
-        component.setBulletins(processorEntity.getBulletins());
-        component.setId(processorEntity.getId());
-        component.setPermissions(processorEntity.getPermissions());
-        component.setPosition(processorEntity.getPosition());
-        component.setRevision(processorEntity.getRevision());
-        component.setUri(processorEntity.getUri());
-
-        final ProcessorDTO processorDto = processorEntity.getComponent();
-        final AffectedComponentDTO componentDto = new AffectedComponentDTO();
-        componentDto.setId(processorDto.getId());
-        componentDto.setName(processorDto.getName());
-        componentDto.setProcessGroupId(processorDto.getParentGroupId());
-        componentDto.setReferenceType(AffectedComponentDTO.COMPONENT_TYPE_CONTROLLER_SERVICE);
-        componentDto.setState(processorDto.getState());
-        componentDto.setValidationErrors(processorDto.getValidationErrors());
-        component.setComponent(componentDto);
-
-        return component;
-    }
 
     private ReplicationTarget getReplicationTarget() {
         return clusterCoordinator.isActiveClusterCoordinator() ? ReplicationTarget.CLUSTER_NODES : ReplicationTarget.CLUSTER_COORDINATOR;
@@ -182,14 +154,15 @@ public class ClusterReplicationComponentLifecycle implements ComponentLifecycle 
     /**
      * Periodically polls the process group with the given ID, waiting for all processors whose ID's are given to have the given Scheduled State.
      *
+     * @param user the user making the request
      * @param groupId the ID of the Process Group to poll
      * @param processorIds the ID of all Processors whose state should be equal to the given desired state
      * @param desiredState the desired state for all processors with the ID's given
      * @param pause the Pause that can be used to wait between polling
      * @return <code>true</code> if successful, <code>false</code> if unable to wait for processors to reach the desired state
      */
-    private boolean waitForProcessorStatus(final URI originalUri, final String groupId, final Map<String, AffectedComponentEntity> processors, final ScheduledState desiredState, final Pause pause)
-            throws InterruptedException {
+    private boolean waitForProcessorStatus(final NiFiUser user, final URI originalUri, final String groupId, final Map<String, AffectedComponentEntity> processors,
+                final ScheduledState desiredState, final Pause pause) throws InterruptedException {
         URI groupUri;
         try {
             groupUri = new URI(originalUri.getScheme(), originalUri.getUserInfo(), originalUri.getHost(),
@@ -207,10 +180,10 @@ public class ClusterReplicationComponentLifecycle implements ComponentLifecycle 
             // Determine whether we should replicate only to the cluster coordinator, or if we should replicate directly to the cluster nodes themselves.
             final NodeResponse clusterResponse;
             if (getReplicationTarget() == ReplicationTarget.CLUSTER_NODES) {
-                clusterResponse = getRequestReplicator().replicate(HttpMethod.GET, groupUri, requestEntity, headers).awaitMergedResponse();
+                clusterResponse = getRequestReplicator().replicate(user, HttpMethod.GET, groupUri, requestEntity, headers).awaitMergedResponse();
             } else {
                 clusterResponse = getRequestReplicator().forwardToCoordinator(
-                    getClusterCoordinatorNode(), HttpMethod.GET, groupUri, requestEntity, headers).awaitMergedResponse();
+                    getClusterCoordinatorNode(), user, HttpMethod.GET, groupUri, requestEntity, headers).awaitMergedResponse();
             }
 
             if (clusterResponse.getStatus() != Status.OK.getStatusCode()) {
@@ -301,7 +274,7 @@ public class ClusterReplicationComponentLifecycle implements ComponentLifecycle 
 
 
     @Override
-    public Set<AffectedComponentEntity> activateControllerServices(final URI originalUri, final String groupId, final Set<AffectedComponentEntity> affectedServices,
+    public Set<AffectedComponentEntity> activateControllerServices(final URI originalUri, final NiFiUser user, final String groupId, final Set<AffectedComponentEntity> affectedServices,
         final ControllerServiceState desiredState, final Pause pause) throws LifecycleManagementException {
 
         final Set<String> affectedServiceIds = affectedServices.stream()
@@ -332,10 +305,10 @@ public class ClusterReplicationComponentLifecycle implements ComponentLifecycle 
         try {
             final NodeResponse clusterResponse;
             if (getReplicationTarget() == ReplicationTarget.CLUSTER_NODES) {
-                clusterResponse = getRequestReplicator().replicate(HttpMethod.PUT, controllerServicesUri, activateServicesEntity, headers).awaitMergedResponse();
+                clusterResponse = getRequestReplicator().replicate(user, HttpMethod.PUT, controllerServicesUri, activateServicesEntity, headers).awaitMergedResponse();
             } else {
                 clusterResponse = getRequestReplicator().forwardToCoordinator(
-                    getClusterCoordinatorNode(), HttpMethod.PUT, controllerServicesUri, activateServicesEntity, headers).awaitMergedResponse();
+                    getClusterCoordinatorNode(), user, HttpMethod.PUT, controllerServicesUri, activateServicesEntity, headers).awaitMergedResponse();
             }
 
             final int disableServicesStatus = clusterResponse.getStatus();
@@ -343,7 +316,7 @@ public class ClusterReplicationComponentLifecycle implements ComponentLifecycle 
                 throw new LifecycleManagementException("Failed to update Controller Services to a state of " + desiredState);
             }
 
-            final boolean serviceTransitioned = waitForControllerServiceStatus(originalUri, groupId, affectedServiceIds, desiredState, pause);
+            final boolean serviceTransitioned = waitForControllerServiceStatus(user, originalUri, groupId, affectedServiceIds, desiredState, pause);
 
             if (!serviceTransitioned) {
                 throw new LifecycleManagementException("Failed while waiting for Controller Services to finish transitioning to a state of " + desiredState);
@@ -354,21 +327,22 @@ public class ClusterReplicationComponentLifecycle implements ComponentLifecycle 
         }
 
         return affectedServices.stream()
-            .map(componentEntity -> serviceFacade.getControllerService(componentEntity.getId()))
-            .map(this::createAffectedComponentEntity)
+            .map(componentEntity -> serviceFacade.getControllerService(componentEntity.getId(), user))
+            .map(dtoFactory::createAffectedComponentEntity)
             .collect(Collectors.toSet());
     }
 
     /**
      * Periodically polls the process group with the given ID, waiting for all controller services whose ID's are given to have the given Controller Service State.
      *
+     * @param user the user making the request
      * @param groupId the ID of the Process Group to poll
      * @param serviceIds the ID of all Controller Services whose state should be equal to the given desired state
      * @param desiredState the desired state for all services with the ID's given
      * @param pause the Pause that can be used to wait between polling
      * @return <code>true</code> if successful, <code>false</code> if unable to wait for services to reach the desired state
      */
-    private boolean waitForControllerServiceStatus(final URI originalUri, final String groupId, final Set<String> serviceIds,
+    private boolean waitForControllerServiceStatus(final NiFiUser user, final URI originalUri, final String groupId, final Set<String> serviceIds,
         final ControllerServiceState desiredState, final Pause pause) throws InterruptedException {
 
         URI groupUri;
@@ -388,10 +362,10 @@ public class ClusterReplicationComponentLifecycle implements ComponentLifecycle 
             // Determine whether we should replicate only to the cluster coordinator, or if we should replicate directly to the cluster nodes themselves.
             final NodeResponse clusterResponse;
             if (getReplicationTarget() == ReplicationTarget.CLUSTER_NODES) {
-                clusterResponse = getRequestReplicator().replicate(HttpMethod.GET, groupUri, requestEntity, headers).awaitMergedResponse();
+                clusterResponse = getRequestReplicator().replicate(user, HttpMethod.GET, groupUri, requestEntity, headers).awaitMergedResponse();
             } else {
                 clusterResponse = getRequestReplicator().forwardToCoordinator(
-                    getClusterCoordinatorNode(), HttpMethod.GET, groupUri, requestEntity, headers).awaitMergedResponse();
+                    getClusterCoordinatorNode(), user, HttpMethod.GET, groupUri, requestEntity, headers).awaitMergedResponse();
             }
 
             if (clusterResponse.getStatus() != Status.OK.getStatusCode()) {
@@ -402,7 +376,7 @@ public class ClusterReplicationComponentLifecycle implements ComponentLifecycle 
             final Set<ControllerServiceEntity> serviceEntities = controllerServicesEntity.getControllerServices();
 
             final Map<String, AffectedComponentEntity> affectedServices = serviceEntities.stream()
-                .collect(Collectors.toMap(ControllerServiceEntity::getId, this::createAffectedComponentEntity));
+                .collect(Collectors.toMap(ControllerServiceEntity::getId, dtoFactory::createAffectedComponentEntity));
 
             // update the affected controller services
             updateAffectedControllerServices(serviceEntities, affectedServices);
@@ -424,28 +398,6 @@ public class ClusterReplicationComponentLifecycle implements ComponentLifecycle 
         }
 
         return false;
-    }
-
-    private AffectedComponentEntity createAffectedComponentEntity(final ControllerServiceEntity serviceEntity) {
-        final AffectedComponentEntity component = new AffectedComponentEntity();
-        component.setBulletins(serviceEntity.getBulletins());
-        component.setId(serviceEntity.getId());
-        component.setPermissions(serviceEntity.getPermissions());
-        component.setPosition(serviceEntity.getPosition());
-        component.setRevision(serviceEntity.getRevision());
-        component.setUri(serviceEntity.getUri());
-
-        final ControllerServiceDTO serviceDto = serviceEntity.getComponent();
-        final AffectedComponentDTO componentDto = new AffectedComponentDTO();
-        componentDto.setId(serviceDto.getId());
-        componentDto.setName(serviceDto.getName());
-        componentDto.setProcessGroupId(serviceDto.getParentGroupId());
-        componentDto.setReferenceType(AffectedComponentDTO.COMPONENT_TYPE_CONTROLLER_SERVICE);
-        componentDto.setState(serviceDto.getState());
-        componentDto.setValidationErrors(serviceDto.getValidationErrors());
-        component.setComponent(componentDto);
-
-        return component;
     }
 
 

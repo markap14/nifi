@@ -121,6 +121,9 @@ public class NiFiRegistryFlowMapper {
             .map(this::mapConnection)
             .collect(Collectors.toCollection(LinkedHashSet::new)));
 
+        versionedGroup.setVariables(group.getVariableRegistry().getVariableMap().entrySet().stream()
+            .collect(Collectors.toMap(entry -> entry.getKey().getName(), Map.Entry::getValue)));
+
         return versionedGroup;
     }
 

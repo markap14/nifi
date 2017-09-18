@@ -843,8 +843,9 @@ public interface ProcessGroup extends ComponentAuthorizable, Positionable, Versi
      * Ensure that the contents of the Process Group can be update to match the given new flow
      *
      * @param updatedFlow the updated version of the flow
+     * @param verifyConnectionRemoval whether or not to verify that connections that are not present in teh updated flow can be removed
      */
-    void verifyCanUpdate(VersionedFlowSnapshot updatedFlow);
+    void verifyCanUpdate(VersionedFlowSnapshot updatedFlow, boolean verifyConnectionRemoval);
 
     /**
      * Adds the given template to this Process Group

@@ -30,7 +30,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
-import java.util.UUID;
 
 import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.JsonGenerator;
@@ -128,7 +127,7 @@ public class FileBasedFlowRegistryClient implements FlowRegistryClient, FlowRegi
             throw new IllegalArgumentException("Flow with name '" + flow.getName() + "' already exists for Bucket with ID " + flow.getBucketIdentifier());
         }
 
-        final String flowIdentifier = UUID.randomUUID().toString();
+        final String flowIdentifier = flow.getIdentifier();
         final File flowDir = new File(bucketDir, flowIdentifier);
         if (!flowDir.mkdirs()) {
             throw new IOException("Failed to create directory " + flowDir + " for new Flow");

@@ -501,6 +501,14 @@ public interface NiFiServiceFacade {
     ProcessorEntity getProcessor(String id);
 
     /**
+     * Gets the Processor transfer object for the specified id, as it is visible to the given user
+     *
+     * @param id Id of the processor to return
+     * @return The Processor transfer object
+     */
+    ProcessorEntity getProcessor(String id, NiFiUser user);
+
+    /**
      * Gets the processor status.
      *
      * @param id id
@@ -1076,12 +1084,31 @@ public interface NiFiServiceFacade {
     RemoteProcessGroupEntity getRemoteProcessGroup(String remoteProcessGroupId);
 
     /**
+     * Gets a remote process group as it is visible to the given user
+     *
+     * @param remoteProcessGroupId The id of the remote process group
+     * @param user the user requesting the action
+     * @return group
+     */
+    RemoteProcessGroupEntity getRemoteProcessGroup(String remoteProcessGroupId, NiFiUser user);
+
+
+    /**
      * Gets all remote process groups in the a given parent group.
      *
      * @param groupId The id of the parent group
      * @return group
      */
     Set<RemoteProcessGroupEntity> getRemoteProcessGroups(String groupId);
+
+    /**
+     * Gets all remote process groups in the a given parent group as they are visible to the given user
+     *
+     * @param groupId The id of the parent group
+     * @param user the user making the request
+     * @return group
+     */
+    Set<RemoteProcessGroupEntity> getRemoteProcessGroups(String groupId, NiFiUser user);
 
     /**
      * Gets the remote process group status.
@@ -1310,17 +1337,19 @@ public interface NiFiServiceFacade {
      *
      * @param processGroupId the ID of the Process Group to update
      * @param updatedSnapshot the snapshot to update the Process Group to
+     * @param user the user making the request
      * @return the set of all components that would be affected by updating the Process Group
      */
-    Set<AffectedComponentEntity> getComponentsAffectedByVersionChange(String processGroupId, VersionedFlowSnapshot updatedSnapshot);
+    Set<AffectedComponentEntity> getComponentsAffectedByVersionChange(String processGroupId, VersionedFlowSnapshot updatedSnapshot, NiFiUser user);
 
     /**
      * Verifies that the Process Group with the given identifier can be updated to the proposed flow
      *
      * @param groupId the ID of the Process Group to update
      * @param proposedFlow the proposed flow
+     * @param verifyConnectionRemoval whether or not to verify that connections that no longer exist in the proposed flow are eligible for deletion
      */
-    void verifyCanUpdate(String groupId, VersionedFlowSnapshot proposedFlow);
+    void verifyCanUpdate(String groupId, VersionedFlowSnapshot proposedFlow, boolean verifyConnectionRemoval);
 
     /**
      * Updates the Process group with the given ID to match the new snapshot
@@ -1625,6 +1654,15 @@ public interface NiFiServiceFacade {
      * @return service
      */
     ControllerServiceEntity getControllerService(String controllerServiceId);
+
+    /**
+     * Gets the specified controller service as it is visible to the given user
+     *
+     * @param controllerServiceId id
+     * @param user the user making the request
+     * @return service
+     */
+    ControllerServiceEntity getControllerService(String controllerServiceId, NiFiUser user);
 
     /**
      * Get the descriptor for the specified property of the specified controller service.

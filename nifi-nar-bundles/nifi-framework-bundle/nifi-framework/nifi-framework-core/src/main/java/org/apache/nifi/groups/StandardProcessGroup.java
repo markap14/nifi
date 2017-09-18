@@ -83,6 +83,7 @@ import org.apache.nifi.controller.service.ControllerServiceProvider;
 import org.apache.nifi.controller.service.ControllerServiceReference;
 import org.apache.nifi.controller.service.StandardConfigurationContext;
 import org.apache.nifi.encrypt.StringEncryptor;
+import org.apache.nifi.flowfile.FlowFilePrioritizer;
 import org.apache.nifi.logging.LogLevel;
 import org.apache.nifi.logging.LogRepositoryFactory;
 import org.apache.nifi.nar.ExtensionManager;
@@ -2822,18 +2823,12 @@ public final class StandardProcessGroup implements ProcessGroup {
             public Optional<Boolean> getModified() {
                 return StandardProcessGroup.this.isModified();
             }
-
-            @Override
-            public Optional<Boolean> getCurrent() {
-                // TODO: Implement! Need to periodically poll Flow Registry.
-                return super.getCurrent();
-            }
         };
 
         writeLock.lock();
         try {
-            this.versionControlInfo.set(svci);
             updateVersionedComponentIds(this, versionedComponentIds);
+            this.versionControlInfo.set(svci);
         } finally {
             writeLock.unlock();
         }
@@ -2928,7 +2923,7 @@ public final class StandardProcessGroup implements ProcessGroup {
     public void updateFlow(final VersionedFlowSnapshot proposedSnapshot, final String componentIdSeed) {
         writeLock.lock();
         try {
-            verifyCanUpdate(proposedSnapshot); // TODO: Should perform more verification... verifyCanDelete, verifyCanUpdate, etc.
+            verifyCanUpdate(proposedSnapshot, true); // TODO: Should perform more verification... verifyCanDelete, verifyCanUpdate, etc.
 
             final NiFiRegistryFlowMapper mapper = new NiFiRegistryFlowMapper();
             final VersionedProcessGroup versionedGroup = mapper.mapProcessGroup(this);
@@ -2961,7 +2956,6 @@ public final class StandardProcessGroup implements ProcessGroup {
 
     private void updateProcessGroup(final ProcessGroup group, final VersionedProcessGroup proposed, final String componentIdSeed,
         final Set<String> updatedVersionedComponentIds, final boolean updatePosition) throws ProcessorInstantiationException {
-        // TODO: Verify the update. ... Recursively??
 
         // TODO: Need to discover compatible bundles... See ProcessGroupResource#instantiateTemplate
 
@@ -2971,7 +2965,30 @@ public final class StandardProcessGroup implements ProcessGroup {
             group.setPosition(new Position(proposed.getPosition().getX(), proposed.getPosition().getY()));
         }
 
+        // Determine which variables have been added/removed and add/remove them from this group's variable registry.
+        // We don't worry about if a variable value has changed, because variables are designed to be 'environment specific.'
+        // As a result, once imported, we won't update variables to match the remote flow, but we will add any missing variables
+        // and remove any variables that are no longer part of the remote flow.
+        final Set<String> existingVariableNames = group.getVariableRegistry().getVariableMap().keySet().stream()
+            .map(VariableDescriptor::getName)
+            .collect(Collectors.toSet());
+
+        final Set<String> variablesRemoved = new HashSet<>(existingVariableNames);
+        variablesRemoved.removeAll(proposed.getVariables().keySet());
+        final Map<String, String> updatedVariableMap = new HashMap<>();
+        variablesRemoved.forEach(var -> updatedVariableMap.put(var, null));
+
+        // If any new variables exist in the proposed flow, add those to the variable registry.
+        for (final Map.Entry<String, String> entry : proposed.getVariables().entrySet()) {
+            if (!existingVariableNames.contains(entry.getKey())) {
+                updatedVariableMap.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        group.setVariables(updatedVariableMap);
+
         // Child groups
+        // TODO: Need to take into account if child group is under version control pointing to a different Versioned Flow and if so need to handle it differently.
         final Map<String, ProcessGroup> childGroupsByVersionedId = group.getProcessGroups().stream()
             .collect(Collectors.toMap(component -> component.getVersionedComponentId().orElse(component.getIdentifier()), Function.identity()));
         final Set<String> childGroupsRemoved = new HashSet<>(childGroupsByVersionedId.keySet());
@@ -3210,10 +3227,8 @@ public final class StandardProcessGroup implements ProcessGroup {
         for (final String removedVersionedId : childGroupsRemoved) {
             final ProcessGroup childGroup = childGroupsByVersionedId.get(removedVersionedId);
             LOG.info("Removing {} from {}", childGroup, group);
-            // TODO: Cannot remove group if it has templates. How do we handle that?
             group.removeProcessGroup(childGroup);
         }
-
     }
 
     protected String generateUuid(final String componentIdSeed) {
@@ -3254,6 +3269,23 @@ public final class StandardProcessGroup implements ProcessGroup {
             .map(name -> new Relationship.Builder().name(name).build())
             .collect(Collectors.toSet()));
         connection.setZIndex(proposed.getzIndex());
+
+        final FlowFileQueue queue = connection.getFlowFileQueue();
+        queue.setBackPressureDataSizeThreshold(proposed.getBackPressureDataSizeThreshold());
+        queue.setBackPressureObjectThreshold(proposed.getBackPressureObjectThreshold());
+        queue.setFlowFileExpiration(proposed.getFlowFileExpiration());
+
+        final List<FlowFilePrioritizer> prioritizers = proposed.getPrioritizers().stream()
+            .map(prioritizerName -> {
+                try {
+                    return flowController.createPrioritizer(prioritizerName);
+                } catch (final Exception e) {
+                    throw new RuntimeException("Failed to create Prioritizer of type " + prioritizerName + " for Connection with ID " + connection.getIdentifier());
+                }
+            })
+            .collect(Collectors.toList());
+
+        queue.setPriorities(prioritizers);
     }
 
     private Connection addConnection(final VersionedConnection proposed, final String componentIdSeed) {
@@ -3547,75 +3579,6 @@ public final class StandardProcessGroup implements ProcessGroup {
     }
 
 
-
-    public void versionControlFlow() {
-        // TODO: Workflow for this:
-        // 1. Ensure user has both READ and WRITE permissions.
-        // 2. Check if Process Group is under version control. If so, throw IllegalStateException
-        // 3. Create a VersionedFlowSnapshot of the Process Group.
-        // 4. Publish VersionedFlowSnapshot to the registry.
-        // 5. Use registry response to build VersionControlInformation that includes snapshot version.
-        // 6. Set Version Control Information (on all nodes in cluster).
-
-        // Things to consider:
-        // 1. In order to interact with the FlowRegistry, we need a FlowRegistryClient. How do we get to this?
-        //    These endpoints will be in the ProcessGroupResource, so does this live in the ProcessGroupDAO? NiFiServiceFacade?
-
-
-
-        // NOTES:
-        // - new REST Resource: /versions/process-groups/<uuid>
-        // - Need to create an update request, which will obtain a lock on all nodes.
-        //   We need to do this in case two users go to different nodes and User 1 starts Version Control on Process Group A,
-        //   while at the same time User 2 starts Version Control on Process Group B, which is a child of Process Group A.
-        //   We want to avoid this so we get a 'version control update lock' on all nodes.
-        //   This lock must be released at the end of the update cycle.
-        //   This lock must also time out!! Perhaps after 1 minute or 5 minutes.
-    }
-
-
-    public void updateFlow(final VersionedFlowSnapshot snapshot) {
-        // TODO: Workflow for this:
-        // 0. Obtain the versioned flow snapshot to use for the update
-        //    a. Contact registry to download the desired version.
-        //    b. Get Variable Registry of this Process Group and all ancestor groups
-        //    c. Perform diff to find any new variables
-        //    d. Get Variable Registry of any child Process Group in the versioned flow
-        //    e. Perform diff to find any new variables
-        //    f. Prompt user to fill in values for all new variables
-        // 1. Verify that all components in the snapshot exist on all nodes (i.e., the NAR exists)?
-        // 2. Verify that Process Group is already under version control. If not, must start Version Control instead of updateFlow
-        // 3. Verify that Process Group is not 'dirty'.
-        // 4. Determine which components would be affected (and are enabled/running)
-        //    a. Component itself is modified in some way, other than position changing.
-        //    b. Source and Destination of any Connection that is modified.
-        //    c. Any Processor or Controller Service that references a Controller Service that is modified.
-        // 5. Verify READ and WRITE permissions for user, for every component affected.
-        // 6. Stop all Processors, Funnels, Ports that are affected.
-        // 7. Wait for all of the components to finish stopping.
-        // 8. Disable all Controller Services that are affected.
-        // 9. Wait for all Controller Services to finish disabling.
-        // 10. Ensure that if any connection was deleted, that it has no data in it. Ensure that no Input Port
-        //    was removed, unless it currently has no incoming connections. Ensure that no Output Port was removed,
-        //    unless it currently has no outgoing connections. Checking ports & connections could be done before
-        //    stopping everything, but removal of Connections cannot.
-        // 11. Update variable registry to include new variables
-        //    (only new variables so don't have to worry about affected components? Or do we need to in case a processor
-        //    is already referencing the variable? In which case we need to include the affected components above in the
-        //    Set of affected components before stopping/disabling.).
-        // 12. Update components in the Process Group, update Version Control Information.
-        // 13. Re-Enable all affected Controller Services that were not removed.
-        // 14. Re-Start all Processors, Funnels, Ports that are affected and not removed.
-
-        // NOTE NOTE NOTE: Can we do all of this as a single action or do we
-        // need to do each of these as a separate web request?
-
-        // ALSO: Need to get a list of new variables and get the new values for those variables as part of the snapshot.
-
-        // ALSO: This may take quite a while. Need to ensure that this is all done asynchronously in a request w/ polling
-        // fashion, in the same manner as the Variable Registry updating was done in ProcessGroupResource.
-    }
-
     public Optional<Boolean> isModified() {
         final StandardVersionControlInformation vci = versionControlInfo.get();
 
@@ -3679,79 +3642,168 @@ public final class StandardProcessGroup implements ProcessGroup {
 
 
     @Override
-    public void verifyCanUpdate(final VersionedFlowSnapshot updatedFlow) {
+    public void verifyCanUpdate(final VersionedFlowSnapshot updatedFlow, final boolean verifyConnectionRemoval) {
         readLock.lock();
         try {
             final VersionControlInformation versionControlInfo = getVersionControlInformation();
-            if (versionControlInfo != null) {
-                if (!versionControlInfo.getFlowIdentifier().equals(updatedFlow.getSnapshotMetadata().getFlowIdentifier())) {
-                    throw new IllegalStateException(this + " is under version control but the given flow does not match the flow that this Process Group is synchronized with");
-                }
-
-                final Optional<Boolean> modifiedOption = versionControlInfo.getModified();
-                if (!modifiedOption.isPresent()) {
-                    throw new IllegalStateException(this + " cannot be updated to a different version of the flow because the local flow "
-                        + "has not yet been synchronized with the Flow Registry");
-                }
-
-                if (Boolean.TRUE.equals(modifiedOption.get())) {
-                    throw new IllegalStateException(this + " cannot be updated to a different version of the flow because the local flow "
-                        + "has been modified since it was last synchronized with the Flow Registry");
-                }
+            if (versionControlInfo == null) {
+                throw new IllegalStateException("Cannot update the Version of the flow for " + this
+                    + " because the Process Group is not currently under Version Control");
             }
 
-            // Determine which Connections have been removed.
-            final Set<String> removedConnectionIds = new HashSet<>();
-            findAllConnections().stream()
-                .forEach(conn -> removedConnectionIds.add(conn.getIdentifier()));
+            if (!versionControlInfo.getFlowIdentifier().equals(updatedFlow.getSnapshotMetadata().getFlowIdentifier())) {
+                throw new IllegalStateException(this + " is under version control but the given flow does not match the flow that this Process Group is synchronized with");
+            }
+
+            final Optional<Boolean> modifiedOption = versionControlInfo.getModified();
+            if (!modifiedOption.isPresent()) {
+                throw new IllegalStateException(this + " cannot be updated to a different version of the flow because the local flow "
+                    + "has not yet been synchronized with the Flow Registry. The Process Group must be"
+                    + " synched with the Flow Registry before continuing. This will happen periodically in the background, so please try the request again later");
+            }
+
+            if (Boolean.TRUE.equals(modifiedOption.get())) {
+                throw new IllegalStateException("Cannot change the Version of the flow for " + this
+                    + " because the Process Group has been modified since it was last synchronized with the Flow Registry. The Process Group must be"
+                    + " restored to its original form before changing the version");
+            }
 
             final VersionedProcessGroup flowContents = updatedFlow.getFlowContents();
-            final Set<String> proposedFlowConnectionIds = new HashSet<>();
-            findAllConnectionIds(flowContents, proposedFlowConnectionIds);
+            if (verifyConnectionRemoval) {
+                // Determine which Connections have been removed.
+                final Map<String, Connection> removedConnectionByVersionedId = new HashMap<>();
+                findAllConnections().stream()
+                    .filter(conn -> conn.getVersionedComponentId().isPresent())
+                    .forEach(conn -> removedConnectionByVersionedId.put(conn.getVersionedComponentId().get(), conn));
 
-            removedConnectionIds.removeAll(proposedFlowConnectionIds);
+                final Set<String> proposedFlowConnectionIds = new HashSet<>();
+                findAllConnectionIds(flowContents, proposedFlowConnectionIds);
 
-            // If any connection that was removed has data in it, throw an IllegalStateException
-            for (final String removedConnectionId : removedConnectionIds) {
-                final Connection connection = findConnection(removedConnectionId);
-                final FlowFileQueue flowFileQueue = connection.getFlowFileQueue();
-                if (!flowFileQueue.isEmpty()) {
-                    throw new IllegalStateException(this + " cannot be updated to the proposed version of the flow because the proposed version does not contain a connection with identifier "
-                        + removedConnectionId + " and the connection with that identifier currently has data in the queue.");
+                for (final String proposedConnectionId : proposedFlowConnectionIds) {
+                    removedConnectionByVersionedId.remove(proposedConnectionId);
+                }
+
+                // If any connection that was removed has data in it, throw an IllegalStateException
+                for (final Connection connection : removedConnectionByVersionedId.values()) {
+                    final FlowFileQueue flowFileQueue = connection.getFlowFileQueue();
+                    if (!flowFileQueue.isEmpty()) {
+                        throw new IllegalStateException(this + " cannot be updated to the proposed version of the flow because the "
+                            + "proposed version does not contain "
+                            + connection + " and the connection currently has data in the queue.");
+                    }
                 }
             }
 
             // Determine which input ports were removed from this process group
-            final Set<String> removedInputPortIds = new HashSet<>();
-            getInputPorts().stream().map(Port::getIdentifier).forEach(id -> removedInputPortIds.add(id));
+            final Map<String, Port> removedInputPortsByVersionId = new HashMap<>();
+            getInputPorts().stream()
+                .filter(port -> port.getVersionedComponentId().isPresent())
+                .forEach(port -> removedInputPortsByVersionId.put(port.getVersionedComponentId().get(), port));
             flowContents.getInputPorts().stream()
                 .map(VersionedPort::getIdentifier)
-                .forEach(id -> removedInputPortIds.remove(id));
+                .forEach(id -> removedInputPortsByVersionId.remove(id));
 
             // Ensure that there are no incoming connections for any Input Port that was removed.
-            for (final String removedInputPortId : removedInputPortIds) {
-                final Port inputPort = getInputPort(removedInputPortId);
+            for (final Port inputPort : removedInputPortsByVersionId.values()) {
                 final List<Connection> incomingConnections = inputPort.getIncomingConnections();
                 if (!incomingConnections.isEmpty()) {
-                    throw new IllegalStateException(this + " cannot be updated to the proposed version of the flow because the proposed version does not contain the Input Port with identifier "
-                        + removedInputPortId + " and the Input Port currently has an incoming connections");
+                    throw new IllegalStateException(this + " cannot be updated to the proposed version of the flow because the proposed version does not contain the Input Port "
+                        + inputPort + " and the Input Port currently has an incoming connections");
                 }
             }
 
             // Determine which output ports were removed from this process group
-            final Set<String> removedOutputPortIds = new HashSet<>();
-            getOutputPorts().stream().map(Port::getIdentifier).forEach(id -> removedOutputPortIds.add(id));
+            final Map<String, Port> removedOutputPortsByVersionId = new HashMap<>();
+            getOutputPorts().stream()
+                .filter(port -> port.getVersionedComponentId().isPresent())
+                .forEach(port -> removedOutputPortsByVersionId.put(port.getVersionedComponentId().get(), port));
             flowContents.getOutputPorts().stream()
                 .map(VersionedPort::getIdentifier)
-                .forEach(id -> removedOutputPortIds.remove(id));
+                .forEach(id -> removedOutputPortsByVersionId.remove(id));
 
             // Ensure that there are no outgoing connections for any Output Port that was removed.
-            for (final String removedOutputPortId : removedOutputPortIds) {
-                final Port outputPort = getOutputPort(removedOutputPortId);
+            for (final Port outputPort : removedOutputPortsByVersionId.values()) {
                 final Set<Connection> outgoingConnections = outputPort.getConnections();
                 if (!outgoingConnections.isEmpty()) {
-                    throw new IllegalStateException(this + " cannot be updated to the proposed version of the flow because the proposed version does not contain the Output Port with identifier "
-                        + removedOutputPortId + " and the Output Port currently has an outgoing connections");
+                    throw new IllegalStateException(this + " cannot be updated to the proposed version of the flow because the proposed version does not contain the Output Port "
+                        + outputPort + " and the Output Port currently has an outgoing connections");
+                }
+            }
+
+            // Find any Process Groups that may have been deleted. If we find any Process Group that was deleted, and that Process Group
+            // has Templates, then we fail because the Templates have to be removed first.
+            final Map<String, VersionedProcessGroup> proposedProcessGroups = new HashMap<>();
+            findAllProcessGroups(updatedFlow.getFlowContents(), proposedProcessGroups);
+
+            for (final ProcessGroup childGroup : findAllProcessGroups()) {
+                if (childGroup.getTemplates().isEmpty()) {
+                    continue;
+                }
+
+                final Optional<String> versionedIdOption = childGroup.getVersionedComponentId();
+                if (!versionedIdOption.isPresent()) {
+                    continue;
+                }
+
+                final String versionedId = versionedIdOption.get();
+                if (!proposedProcessGroups.containsKey(versionedId)) {
+                    // Process Group was removed.
+                    throw new IllegalStateException(this + " cannot be updated to the proposed version of the flow because the child " + childGroup
+                        + " that exists locally has one or more Templates, and the proposed flow does not contain this Process Group. "
+                        + "A Process Group cannot be deleted while it contains Templates. Please remove the Templates before attempting to chnage the version of the flow.");
+                }
+            }
+
+
+            // Ensure that all Processors are instantiate-able.
+            final Map<String, VersionedProcessor> proposedProcessors = new HashMap<>();
+            findAllProcessors(updatedFlow.getFlowContents(), proposedProcessors);
+
+            findAllProcessors().stream()
+                .filter(proc -> proc.getVersionedComponentId().isPresent())
+                .forEach(proc -> proposedProcessors.remove(proc.getVersionedComponentId().get()));
+
+            for (final VersionedProcessor processorToAdd : proposedProcessors.values()) {
+                final BundleCoordinate coordinate = toCoordinate(processorToAdd.getBundle());
+                try {
+                    flowController.createProcessor(processorToAdd.getType(), UUID.randomUUID().toString(), coordinate, false);
+                } catch (Exception e) {
+                    throw new IllegalArgumentException("Unable to create Processor of type " + processorToAdd.getType(), e);
+                }
+            }
+
+            // Ensure that all Controller Services are instantiate-able.
+            final Map<String, VersionedControllerService> proposedServices = new HashMap<>();
+            findAllControllerServices(updatedFlow.getFlowContents(), proposedServices);
+
+            findAllControllerServices().stream()
+                .filter(service -> service.getVersionedComponentId().isPresent())
+                .forEach(service -> proposedServices.remove(service.getVersionedComponentId().get()));
+
+            for (final VersionedControllerService serviceToAdd : proposedServices.values()) {
+                final BundleCoordinate coordinate = toCoordinate(serviceToAdd.getBundle());
+                try {
+                    flowController.createControllerService(serviceToAdd.getType(), UUID.randomUUID().toString(), coordinate, Collections.emptySet(), false);
+                } catch (Exception e) {
+                    throw new IllegalArgumentException("Unable to create Controller Service of type " + serviceToAdd.getType(), e);
+                }
+            }
+
+            // Ensure that all Prioritizers are instantiate-able.
+            final Map<String, VersionedConnection> proposedConnections = new HashMap<>();
+            findAllConnections(updatedFlow.getFlowContents(), proposedConnections);
+
+            findAllConnections().stream()
+                .filter(conn -> conn.getVersionedComponentId().isPresent())
+                .forEach(conn -> proposedConnections.remove(conn.getVersionedComponentId().get()));
+
+            for (final VersionedConnection connectionToAdd : proposedConnections.values()) {
+                for (final String prioritizerType : connectionToAdd.getPrioritizers()) {
+                    try {
+                        flowController.createPrioritizer(prioritizerType);
+                    } catch (Exception e) {
+                        throw new IllegalArgumentException("Unable to create Prioritizer of type " + prioritizerType, e);
+                    }
                 }
             }
         } finally {
@@ -3766,6 +3818,44 @@ public final class StandardProcessGroup implements ProcessGroup {
 
         for (final VersionedProcessGroup childGroup : group.getProcessGroups()) {
             findAllConnectionIds(childGroup, ids);
+        }
+    }
+
+    private void findAllProcessors(final VersionedProcessGroup group, final Map<String, VersionedProcessor> map) {
+        for (final VersionedProcessor processor : group.getProcessors()) {
+            map.put(processor.getIdentifier(), processor);
+        }
+
+        for (final VersionedProcessGroup childGroup : group.getProcessGroups()) {
+            findAllProcessors(childGroup, map);
+        }
+    }
+
+    private void findAllControllerServices(final VersionedProcessGroup group, final Map<String, VersionedControllerService> map) {
+        for (final VersionedControllerService service : group.getControllerServices()) {
+            map.put(service.getIdentifier(), service);
+        }
+
+        for (final VersionedProcessGroup childGroup : group.getProcessGroups()) {
+            findAllControllerServices(childGroup, map);
+        }
+    }
+
+    private void findAllConnections(final VersionedProcessGroup group, final Map<String, VersionedConnection> map) {
+        for (final VersionedConnection connection : group.getConnections()) {
+            map.put(connection.getIdentifier(), connection);
+        }
+
+        for (final VersionedProcessGroup childGroup : group.getProcessGroups()) {
+            findAllConnections(childGroup, map);
+        }
+    }
+
+    private void findAllProcessGroups(final VersionedProcessGroup group, final Map<String, VersionedProcessGroup> map) {
+        map.put(group.getIdentifier(), group);
+
+        for (final VersionedProcessGroup child : group.getProcessGroups()) {
+            findAllProcessGroups(child, map);
         }
     }
 }
