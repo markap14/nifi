@@ -110,7 +110,6 @@ import org.apache.nifi.history.History;
 import org.apache.nifi.history.HistoryQuery;
 import org.apache.nifi.history.PreviousValue;
 import org.apache.nifi.registry.ComponentVariableRegistry;
-import org.apache.nifi.registry.VariableDescriptor;
 import org.apache.nifi.registry.flow.FlowRegistry;
 import org.apache.nifi.registry.flow.FlowRegistryClient;
 import org.apache.nifi.registry.flow.UnknownResourceException;
@@ -3683,8 +3682,16 @@ public class StandardNiFiServiceFacade implements NiFiServiceFacade {
     public ProcessGroupEntity updateProcessGroup(final Revision revision, final String groupId, final VersionControlInformationDTO versionControlInfo,
         final VersionedFlowSnapshot proposedFlowSnapshot, final String componentIdSeed) {
 
+        final NiFiUser user = NiFiUserUtils.getNiFiUser();
+        return updateProcessGroup(user, revision, groupId, versionControlInfo, proposedFlowSnapshot, componentIdSeed);
+    }
+
+    @Override
+    public ProcessGroupEntity updateProcessGroup(final NiFiUser user, final Revision revision, final String groupId, final VersionControlInformationDTO versionControlInfo,
+        final VersionedFlowSnapshot proposedFlowSnapshot, final String componentIdSeed) {
+
         final ProcessGroup processGroupNode = processGroupDAO.getProcessGroup(groupId);
-        final RevisionUpdate<ProcessGroupDTO> snapshot = updateComponent(revision,
+        final RevisionUpdate<ProcessGroupDTO> snapshot = updateComponent(user, revision,
             processGroupNode,
             () -> processGroupDAO.updateProcessGroupFlow(groupId, proposedFlowSnapshot, versionControlInfo, componentIdSeed),
             processGroup -> dtoFactory.createProcessGroupDto(processGroup));

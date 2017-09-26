@@ -32,11 +32,11 @@ import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.ClassUtils;
 import org.apache.nifi.bundle.BundleCoordinate;
-import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.connectable.Connection;
 import org.apache.nifi.connectable.Funnel;
 import org.apache.nifi.connectable.Port;
+import org.apache.nifi.controller.ConfiguredComponent;
 import org.apache.nifi.controller.ControllerService;
 import org.apache.nifi.controller.ProcessorNode;
 import org.apache.nifi.controller.label.Label;
@@ -200,15 +200,22 @@ public class NiFiRegistryFlowMapper {
         versionedService.setComments(controllerService.getComments());
 
         versionedService.setControllerServiceApis(mapControllerServiceApis(controllerService));
-        versionedService.setProperties(mapProperties(controllerService.getProperties()));
+        versionedService.setProperties(mapProperties(controllerService));
         versionedService.setType(controllerService.getCanonicalClassName());
 
         return versionedService;
     }
 
-    private Map<String, String> mapProperties(final Map<PropertyDescriptor, String> properties) {
+    private Map<String, String> mapProperties(final ConfiguredComponent component) {
         final Map<String, String> mapped = new HashMap<>();
-        properties.entrySet().stream().forEach(e -> mapped.put(e.getKey().getName(), e.getValue()));
+        component.getProperties().keySet().stream()
+            .forEach(property -> {
+                String value = component.getProperty(property);
+                if (value == null) {
+                    value = property.getDefaultValue();
+                }
+                mapped.put(property.getName(), value);
+            });
         return mapped;
     }
 
@@ -303,7 +310,7 @@ public class NiFiRegistryFlowMapper {
         processor.setName(procNode.getName());
         processor.setPenaltyDuration(procNode.getPenalizationPeriod());
         processor.setPosition(mapPosition(procNode.getPosition()));
-        processor.setProperties(mapProperties(procNode.getProperties()));
+        processor.setProperties(mapProperties(procNode));
         processor.setRunDurationMillis(procNode.getRunDuration(TimeUnit.MILLISECONDS));
         processor.setSchedulingPeriod(procNode.getSchedulingPeriod());
         processor.setSchedulingStrategy(procNode.getSchedulingStrategy().name());

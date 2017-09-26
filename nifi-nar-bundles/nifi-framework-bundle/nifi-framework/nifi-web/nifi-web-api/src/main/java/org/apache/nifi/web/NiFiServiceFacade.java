@@ -1363,6 +1363,19 @@ public interface NiFiServiceFacade {
      */
     ProcessGroupEntity updateProcessGroup(Revision revision, String groupId, VersionControlInformationDTO versionControlInfo, VersionedFlowSnapshot snapshot, String componentIdSeed);
 
+    /**
+     * Updates the Process group with the given ID to match the new snapshot
+     *
+     * @param user the user performing the request
+     * @param revision the revision of the Process Group
+     * @param groupId the ID of the Process Group
+     * @param versionControlInfo the Version Control information
+     * @param snapshot the new snapshot
+     * @param componentIdSeed the seed to use for generating new component ID's
+     * @return the Process Group
+     */
+    ProcessGroupEntity updateProcessGroup(NiFiUser user, Revision revision, String groupId, VersionControlInformationDTO versionControlInfo, VersionedFlowSnapshot snapshot, String componentIdSeed);
+
     void setFlowRegistryClient(FlowRegistryClient flowRegistryClient);
 
     // ----------------------------------------
