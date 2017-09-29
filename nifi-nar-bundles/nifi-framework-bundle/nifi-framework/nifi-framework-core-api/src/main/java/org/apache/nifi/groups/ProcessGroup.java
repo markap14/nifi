@@ -776,8 +776,11 @@ public interface ProcessGroup extends ComponentAuthorizable, Positionable, Versi
      *
      * @param proposedSnapshot the proposed flow
      * @param componentIdSeed a seed value to use when generating ID's for new components
+     * @param verifyNotDirty whether or not to verify that the Process Group is not 'dirty'. If this value is <code>true</code>,
+     *            and the Process Group has been modified since it was last synchronized with the Flow Registry, then this method will
+     *            throw an IllegalStateException
      */
-    void updateFlow(VersionedFlowSnapshot proposedSnapshot, String componentIdSeed);
+    void updateFlow(VersionedFlowSnapshot proposedSnapshot, String componentIdSeed, boolean verifyNotDirty);
 
     /**
      * Verifies a template with the specified name can be created.
@@ -843,9 +846,13 @@ public interface ProcessGroup extends ComponentAuthorizable, Positionable, Versi
      * Ensure that the contents of the Process Group can be update to match the given new flow
      *
      * @param updatedFlow the updated version of the flow
-     * @param verifyConnectionRemoval whether or not to verify that connections that are not present in teh updated flow can be removed
+     * @param verifyConnectionRemoval whether or not to verify that connections that are not present in the updated flow can be removed
+     * @param verifyNotDirty whether or not to verify that the Process Group is not 'dirty'. If <code>true</code> and the Process Group has been changed since
+     *            it was last synchronized with the FlowRegistry, then this method will throw an IllegalStateException
+     *
+     * @throws IllegalStateException if the Process Group is not in a state that will allow the update
      */
-    void verifyCanUpdate(VersionedFlowSnapshot updatedFlow, boolean verifyConnectionRemoval);
+    void verifyCanUpdate(VersionedFlowSnapshot updatedFlow, boolean verifyConnectionRemoval, boolean verifyNotDirty);
 
     /**
      * Adds the given template to this Process Group

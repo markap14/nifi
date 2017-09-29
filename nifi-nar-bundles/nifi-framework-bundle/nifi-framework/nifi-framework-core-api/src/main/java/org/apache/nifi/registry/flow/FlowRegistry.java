@@ -78,4 +78,16 @@ public interface FlowRegistry {
      * @throws IllegalArgumentException if the given version is less than 1
      */
     VersionedFlowSnapshot getFlowContents(String bucketId, String flowId, int version) throws IOException, UnknownResourceException;
+
+    /**
+     * Retrieves a VersionedFlow by bucket id and flow id
+     *
+     * @param bucketId the ID of the bucket
+     * @param flowId the ID of the flow
+     * @return the VersionedFlow for the given bucket and flow ID's
+     *
+     * @throws IOException if unable to communicate with the Flow Registry
+     * @throws UnknownResourceException if unable to find a flow with the given bucket ID and flow ID
+     */
+    VersionedFlow getVersionedFlow(String bucketId, String flowId) throws IOException, UnknownResourceException;
 }

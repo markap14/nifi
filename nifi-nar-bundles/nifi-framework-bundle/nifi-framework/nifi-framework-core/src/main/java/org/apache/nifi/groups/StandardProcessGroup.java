@@ -2920,10 +2920,10 @@ public final class StandardProcessGroup implements ProcessGroup {
 
 
     @Override
-    public void updateFlow(final VersionedFlowSnapshot proposedSnapshot, final String componentIdSeed) {
+    public void updateFlow(final VersionedFlowSnapshot proposedSnapshot, final String componentIdSeed, final boolean verifyNotDirty) {
         writeLock.lock();
         try {
-            verifyCanUpdate(proposedSnapshot, true); // TODO: Should perform more verification... verifyCanDelete, verifyCanUpdate, etc.
+            verifyCanUpdate(proposedSnapshot, true, verifyNotDirty); // TODO: Should perform more verification... verifyCanDelete, verifyCanUpdate, etc.
 
             final NiFiRegistryFlowMapper mapper = new NiFiRegistryFlowMapper();
             final VersionedProcessGroup versionedGroup = mapper.mapProcessGroup(this);
@@ -2956,8 +2956,6 @@ public final class StandardProcessGroup implements ProcessGroup {
 
     private void updateProcessGroup(final ProcessGroup group, final VersionedProcessGroup proposed, final String componentIdSeed,
         final Set<String> updatedVersionedComponentIds, final boolean updatePosition) throws ProcessorInstantiationException {
-
-        // TODO: Need to discover compatible bundles... See ProcessGroupResource#instantiateTemplate
 
         group.setComments(proposed.getComments());
         group.setName(proposed.getName());
@@ -3642,7 +3640,7 @@ public final class StandardProcessGroup implements ProcessGroup {
 
 
     @Override
-    public void verifyCanUpdate(final VersionedFlowSnapshot updatedFlow, final boolean verifyConnectionRemoval) {
+    public void verifyCanUpdate(final VersionedFlowSnapshot updatedFlow, final boolean verifyConnectionRemoval, final boolean verifyNotDirty) {
         readLock.lock();
         try {
             final VersionControlInformation versionControlInfo = getVersionControlInformation();
@@ -3655,17 +3653,19 @@ public final class StandardProcessGroup implements ProcessGroup {
                 throw new IllegalStateException(this + " is under version control but the given flow does not match the flow that this Process Group is synchronized with");
             }
 
-            final Optional<Boolean> modifiedOption = versionControlInfo.getModified();
-            if (!modifiedOption.isPresent()) {
-                throw new IllegalStateException(this + " cannot be updated to a different version of the flow because the local flow "
-                    + "has not yet been synchronized with the Flow Registry. The Process Group must be"
-                    + " synched with the Flow Registry before continuing. This will happen periodically in the background, so please try the request again later");
-            }
+            if (verifyNotDirty) {
+                final Optional<Boolean> modifiedOption = versionControlInfo.getModified();
+                if (!modifiedOption.isPresent()) {
+                    throw new IllegalStateException(this + " cannot be updated to a different version of the flow because the local flow "
+                        + "has not yet been synchronized with the Flow Registry. The Process Group must be"
+                        + " synched with the Flow Registry before continuing. This will happen periodically in the background, so please try the request again later");
+                }
 
-            if (Boolean.TRUE.equals(modifiedOption.get())) {
-                throw new IllegalStateException("Cannot change the Version of the flow for " + this
-                    + " because the Process Group has been modified since it was last synchronized with the Flow Registry. The Process Group must be"
-                    + " restored to its original form before changing the version");
+                if (Boolean.TRUE.equals(modifiedOption.get())) {
+                    throw new IllegalStateException("Cannot change the Version of the flow for " + this
+                        + " because the Process Group has been modified since it was last synchronized with the Flow Registry. The Process Group must be"
+                        + " restored to its original form before changing the version");
+                }
             }
 
             final VersionedProcessGroup flowContents = updatedFlow.getFlowContents();

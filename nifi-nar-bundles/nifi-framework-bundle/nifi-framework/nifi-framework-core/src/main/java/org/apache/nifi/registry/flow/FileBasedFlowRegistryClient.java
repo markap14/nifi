@@ -24,12 +24,16 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
+import java.util.UUID;
 
 import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.JsonGenerator;
@@ -127,7 +131,7 @@ public class FileBasedFlowRegistryClient implements FlowRegistryClient, FlowRegi
             throw new IllegalArgumentException("Flow with name '" + flow.getName() + "' already exists for Bucket with ID " + flow.getBucketIdentifier());
         }
 
-        final String flowIdentifier = flow.getIdentifier();
+        final String flowIdentifier = UUID.randomUUID().toString();
         final File flowDir = new File(bucketDir, flowIdentifier);
         if (!flowDir.mkdirs()) {
             throw new IOException("Failed to create directory " + flowDir + " for new Flow");
@@ -329,5 +333,72 @@ public class FileBasedFlowRegistryClient implements FlowRegistryClient, FlowRegi
         snapshot.setSnapshotMetadata(snapshotMetadata);
 
         return snapshot;
+    }
+
+    @Override
+    public VersionedFlow getVersionedFlow(final String bucketId, final String flowId) throws IOException, UnknownResourceException {
+        // Verify that the bucket exists
+        final File bucketDir = new File(directory, bucketId);
+        if (!bucketDir.exists()) {
+            throw new UnknownResourceException("No bucket exists with ID " + bucketId);
+        }
+
+        // Verify that the flow exists
+        final File flowDir = new File(bucketDir, flowId);
+        if (!flowDir.exists()) {
+            throw new UnknownResourceException("No Flow with ID " + flowId + " exists for Bucket with ID " + flowId);
+        }
+
+        final File flowPropsFile = new File(flowDir, "flow.properties");
+        final Properties flowProperties = new Properties();
+        try (final InputStream in = new FileInputStream(flowPropsFile)) {
+            flowProperties.load(in);
+        }
+
+        final VersionedFlow flow = new VersionedFlow();
+        flow.setBucketIdentifier(bucketId);
+        flow.setCreatedTimestamp(Long.parseLong(flowProperties.getProperty("created")));
+        flow.setDescription(flowProperties.getProperty("description"));
+        flow.setIdentifier(flowId);
+        flow.setModifiedTimestamp(flowDir.lastModified());
+        flow.setName(flowProperties.getProperty("name"));
+
+        final Comparator<VersionedFlowSnapshotMetadata> versionComparator = (a, b) -> Integer.compare(a.getVersion(), b.getVersion());
+
+        final SortedSet<VersionedFlowSnapshotMetadata> snapshotMetadataSet = new TreeSet<>(versionComparator);
+        flow.setSnapshotMetadata(snapshotMetadataSet);
+
+        final File[] versionDirs = flowDir.listFiles();
+        for (final File file : versionDirs) {
+            if (!file.isDirectory()) {
+                continue;
+            }
+
+            int version;
+            try {
+                version = Integer.parseInt(file.getName());
+            } catch (final NumberFormatException nfe) {
+                // not a version. skip.
+                continue;
+            }
+
+            final File snapshotPropsFile = new File(file, "snapshot.properties");
+            final Properties snapshotProperties = new Properties();
+            try (final InputStream in = new FileInputStream(snapshotPropsFile)) {
+                snapshotProperties.load(in);
+            }
+
+            final VersionedFlowSnapshotMetadata metadata = new VersionedFlowSnapshotMetadata();
+            metadata.setBucketIdentifier(bucketId);
+            metadata.setComments(snapshotProperties.getProperty("comments"));
+            metadata.setFlowIdentifier(flowId);
+            metadata.setFlowName(snapshotProperties.getProperty("name"));
+            metadata.setTimestamp(file.lastModified());
+            metadata.setVersion(version);
+
+            snapshotMetadataSet.add(metadata);
+        }
+
+        return flow;
     }
 }

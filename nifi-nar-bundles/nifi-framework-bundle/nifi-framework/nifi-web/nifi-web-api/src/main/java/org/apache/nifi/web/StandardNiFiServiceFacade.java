@@ -110,11 +110,13 @@ import org.apache.nifi.history.History;
 import org.apache.nifi.history.HistoryQuery;
 import org.apache.nifi.history.PreviousValue;
 import org.apache.nifi.registry.ComponentVariableRegistry;
+import org.apache.nifi.registry.flow.ConnectableComponent;
 import org.apache.nifi.registry.flow.FlowRegistry;
 import org.apache.nifi.registry.flow.FlowRegistryClient;
 import org.apache.nifi.registry.flow.UnknownResourceException;
 import org.apache.nifi.registry.flow.VersionControlInformation;
 import org.apache.nifi.registry.flow.VersionedComponent;
+import org.apache.nifi.registry.flow.VersionedConnection;
 import org.apache.nifi.registry.flow.VersionedFlow;
 import org.apache.nifi.registry.flow.VersionedFlowSnapshot;
 import org.apache.nifi.registry.flow.VersionedProcessGroup;
@@ -122,8 +124,10 @@ import org.apache.nifi.registry.flow.diff.ComparableDataFlow;
 import org.apache.nifi.registry.flow.diff.DifferenceType;
 import org.apache.nifi.registry.flow.diff.FlowComparator;
 import org.apache.nifi.registry.flow.diff.FlowComparison;
+import org.apache.nifi.registry.flow.diff.FlowDifference;
 import org.apache.nifi.registry.flow.diff.StandardComparableDataFlow;
 import org.apache.nifi.registry.flow.diff.StandardFlowComparator;
+import org.apache.nifi.registry.flow.mapping.InstantiatedConnectableComponent;
 import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedComponent;
 import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedControllerService;
 import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedProcessGroup;
@@ -3433,6 +3437,7 @@ public class StandardNiFiServiceFacade implements NiFiServiceFacade {
         final InstantiatedVersionedProcessGroup versionedProcessGroup = createFlowSnapshot(groupId);
 
         final VersionedFlowDTO versionedFlowDto = requestEntity.getVersionedFlow();
+        final String flowId = versionedFlowDto.getFlowId() == null ? UUID.randomUUID().toString() : versionedFlowDto.getFlowId();
 
         final VersionedFlow versionedFlow = new VersionedFlow();
         versionedFlow.setBucketIdentifier(versionedFlowDto.getBucketId());
@@ -3440,7 +3445,7 @@ public class StandardNiFiServiceFacade implements NiFiServiceFacade {
         versionedFlow.setDescription(versionedFlowDto.getDescription());
         versionedFlow.setModifiedTimestamp(versionedFlow.getCreatedTimestamp());
         versionedFlow.setName(versionedFlowDto.getFlowName());
-        versionedFlow.setIdentifier(versionedFlowDto.getFlowId());
+        versionedFlow.setIdentifier(flowId);
 
         // Add the Versioned Flow and first snapshot to the Flow Registry
         final String registryId = requestEntity.getVersionedFlow().getRegistryId();
@@ -3449,13 +3454,18 @@ public class StandardNiFiServiceFacade implements NiFiServiceFacade {
 
         String action = "create the flow";
         try {
-            // first, create the flow in the registry
-            registeredFlow = registerVersionedFlow(registryId, versionedFlow);
+            // first, create the flow in the registry, if necessary
+            if (versionedFlowDto.getFlowId() == null) {
+                registeredFlow = registerVersionedFlow(registryId, versionedFlow);
+            } else {
+                registeredFlow = getVersionedFlow(registryId, versionedFlowDto.getBucketId(), versionedFlowDto.getFlowId());
+            }
 
             action = "add the local flow to the Flow Registry as the first Snapshot";
 
             // add first snapshot to the flow in the registry
-            registeredSnapshot = registerVersionedFlowSnapshot(registryId, registeredFlow, versionedProcessGroup, "Initial version of flow");
+            final String comments = versionedFlow.getDescription() == null ? "Initial version of flow" : versionedFlow.getDescription();
+            registeredSnapshot = registerVersionedFlowSnapshot(registryId, registeredFlow, versionedProcessGroup, comments);
         } catch (final UnknownResourceException e) {
             throw new IllegalArgumentException(e);
         } catch (final IOException ioe) {
@@ -3515,6 +3525,15 @@ public class StandardNiFiServiceFacade implements NiFiServiceFacade {
         return registry.registerVersionedFlow(flow);
     }
 
+    private VersionedFlow getVersionedFlow(final String registryId, final String bucketId, final String flowId) throws IOException, UnknownResourceException {
+        final FlowRegistry registry = flowRegistryClient.getFlowRegistry(registryId);
+        if (registry == null) {
+            throw new ResourceNotFoundException("No Flow Registry exists with ID " + registryId);
+        }
+
+        return registry.getVersionedFlow(bucketId, flowId);
+    }
+
     @Override
     public VersionedFlowSnapshot registerVersionedFlowSnapshot(final String registryId, final VersionedFlow flow,
             final VersionedProcessGroup snapshot, final String comments) throws IOException, UnknownResourceException {
@@ -3541,9 +3560,9 @@ public class StandardNiFiServiceFacade implements NiFiServiceFacade {
     }
 
     @Override
-    public void verifyCanUpdate(final String groupId, final VersionedFlowSnapshot proposedFlow, final boolean verifyConnectionRemoval) {
+    public void verifyCanUpdate(final String groupId, final VersionedFlowSnapshot proposedFlow, final boolean verifyConnectionRemoval, final boolean verifyNotDirty) {
         final ProcessGroup group = processGroupDAO.getProcessGroup(groupId);
-        group.verifyCanUpdate(proposedFlow, verifyConnectionRemoval);
+        group.verifyCanUpdate(proposedFlow, verifyConnectionRemoval, verifyNotDirty);
     }
 
     @Override
@@ -3591,7 +3610,40 @@ public class StandardNiFiServiceFacade implements NiFiServiceFacade {
             })
             .collect(Collectors.toCollection(HashSet::new));
 
+        for (final FlowDifference difference : comparison.getDifferences()) {
+            VersionedComponent component = difference.getComponentA();
+            if (component == null) {
+                component = difference.getComponentB();
+            }
+
+            if (component.getComponentType() == org.apache.nifi.registry.flow.ComponentType.CONNECTION) {
+                final VersionedConnection connection = (VersionedConnection) component;
+
+                final ConnectableComponent source = connection.getSource();
+                final ConnectableComponent destination = connection.getDestination();
+
+                affectedComponents.add(createAffectedComponentEntity((InstantiatedConnectableComponent) source, user));
+                affectedComponents.add(createAffectedComponentEntity((InstantiatedConnectableComponent) destination, user));
+            }
+        }
+
         return affectedComponents;
+    }
+
+    private String getComponentState(final InstantiatedConnectableComponent localComponent) {
+        final String componentId = localComponent.getInstanceId();
+        final String groupId = localComponent.getInstanceGroupId();
+
+        switch (localComponent.getType()) {
+            case PROCESSOR:
+                return processorDAO.getProcessor(componentId).getPhysicalScheduledState().name();
+            case REMOTE_INPUT_PORT:
+                return remoteProcessGroupDAO.getRemoteProcessGroup(groupId).getInputPort(componentId).getScheduledState().name();
+            case REMOTE_OUTPUT_PORT:
+                return remoteProcessGroupDAO.getRemoteProcessGroup(groupId).getOutputPort(componentId).getScheduledState().name();
+            default:
+                return null;
+        }
     }
 
     private AffectedComponentEntity createAffectedComponentEntity(final InstantiatedVersionedComponent instance, final String componentTypeName, final String componentState, final NiFiUser user) {
@@ -3608,6 +3660,26 @@ public class StandardNiFiServiceFacade implements NiFiServiceFacade {
         dto.setReferenceType(componentTypeName);
         dto.setProcessGroupId(instance.getInstanceGroupId());
         dto.setState(componentState);
+
+        entity.setComponent(dto);
+        return entity;
+    }
+
+    private AffectedComponentEntity createAffectedComponentEntity(final InstantiatedConnectableComponent instance, final NiFiUser user) {
+        final AffectedComponentEntity entity = new AffectedComponentEntity();
+        entity.setRevision(dtoFactory.createRevisionDTO(revisionManager.getRevision(instance.getInstanceId())));
+        entity.setId(instance.getInstanceId());
+
+        final String componentTypeName = instance.getType().name();
+        final Authorizable authorizable = getAuthorizable(componentTypeName, instance);
+        final PermissionsDTO permissionsDto = dtoFactory.createPermissionsDto(authorizable, user);
+        entity.setPermissions(permissionsDto);
+
+        final AffectedComponentDTO dto = new AffectedComponentDTO();
+        dto.setId(instance.getInstanceId());
+        dto.setReferenceType(componentTypeName);
+        dto.setProcessGroupId(instance.getInstanceGroupId());
+        dto.setState(getComponentState(instance));
 
         entity.setComponent(dto);
         return entity;
@@ -3680,20 +3752,20 @@ public class StandardNiFiServiceFacade implements NiFiServiceFacade {
 
     @Override
     public ProcessGroupEntity updateProcessGroup(final Revision revision, final String groupId, final VersionControlInformationDTO versionControlInfo,
-        final VersionedFlowSnapshot proposedFlowSnapshot, final String componentIdSeed) {
+        final VersionedFlowSnapshot proposedFlowSnapshot, final String componentIdSeed, final boolean verifyNotModified) {
 
         final NiFiUser user = NiFiUserUtils.getNiFiUser();
-        return updateProcessGroup(user, revision, groupId, versionControlInfo, proposedFlowSnapshot, componentIdSeed);
+        return updateProcessGroup(user, revision, groupId, versionControlInfo, proposedFlowSnapshot, componentIdSeed, verifyNotModified);
     }
 
     @Override
     public ProcessGroupEntity updateProcessGroup(final NiFiUser user, final Revision revision, final String groupId, final VersionControlInformationDTO versionControlInfo,
-        final VersionedFlowSnapshot proposedFlowSnapshot, final String componentIdSeed) {
+        final VersionedFlowSnapshot proposedFlowSnapshot, final String componentIdSeed, final boolean verifyNotModified) {
 
         final ProcessGroup processGroupNode = processGroupDAO.getProcessGroup(groupId);
         final RevisionUpdate<ProcessGroupDTO> snapshot = updateComponent(user, revision,
             processGroupNode,
-            () -> processGroupDAO.updateProcessGroupFlow(groupId, proposedFlowSnapshot, versionControlInfo, componentIdSeed),
+            () -> processGroupDAO.updateProcessGroupFlow(groupId, proposedFlowSnapshot, versionControlInfo, componentIdSeed, verifyNotModified),
             processGroup -> dtoFactory.createProcessGroupDto(processGroup));
 
         final PermissionsDTO permissions = dtoFactory.createPermissionsDto(processGroupNode);

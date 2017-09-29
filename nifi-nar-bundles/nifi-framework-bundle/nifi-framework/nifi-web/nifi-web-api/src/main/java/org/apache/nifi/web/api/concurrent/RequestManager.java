@@ -26,6 +26,8 @@ public interface RequestManager<T> {
     /**
      * Submits a request to be performed in the background
      *
+     * @param requestType the type of request to submit. This value can be anything and is used along with the id in order to create
+     *            a composite key for the request so that different request types may easily be managed by the RequestManager.
      * @param id the ID of the request
      * @param request the request
      * @param task the task that should be performed in the background
@@ -33,11 +35,12 @@ public interface RequestManager<T> {
      * @throws IllegalArgumentException if a request already exists with the given ID
      * @throws NullPointerException if any argument is null
      */
-    void submitRequest(String id, AsynchronousWebRequest<T> request, Consumer<AsynchronousWebRequest<T>> task);
+    void submitRequest(String requestType, String id, AsynchronousWebRequest<T> request, Consumer<AsynchronousWebRequest<T>> task);
 
     /**
      * Retrieves the request with the given ID
      *
+     * @param requestType the type of the request being retrieved
      * @param id the ID of the request
      * @param user the user who is retrieving the request
      * @return the request with the given ID
@@ -46,11 +49,12 @@ public interface RequestManager<T> {
      * @throws IllegalArgumentException if the user given is not the user that submitted the request
      * @throws NullPointerException if either the ID or the user is null
      */
-    AsynchronousWebRequest<T> getRequest(String id, NiFiUser user);
+    AsynchronousWebRequest<T> getRequest(String requestType, String id, NiFiUser user);
 
     /**
      * Removes the request with the given ID
      *
+     * @param requestType the type of the request being removed
      * @param id the ID of the request
      * @param user the user who is retrieving the request
      * @return the request with the given ID
@@ -60,6 +64,6 @@ public interface RequestManager<T> {
      * @throws IllegalStateException if the request with the given ID is not yet complete
      * @throws NullPointerException if either the ID or the user is null
      */
-    AsynchronousWebRequest<T> removeRequest(String id, NiFiUser user);
+    AsynchronousWebRequest<T> removeRequest(String requestType, String id, NiFiUser user);
 
 }

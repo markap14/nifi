@@ -47,7 +47,7 @@ public class VersionedFlowDTO {
         this.bucketId = bucketId;
     }
 
-    @ApiModelProperty(value = "The ID of the flow", readOnly = true)
+    @ApiModelProperty(value = "The ID of the flow")
     public String getFlowId() {
         return flowId;
     }

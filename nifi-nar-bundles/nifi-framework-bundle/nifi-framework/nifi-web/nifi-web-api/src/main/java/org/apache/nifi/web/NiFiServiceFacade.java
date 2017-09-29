@@ -1348,8 +1348,11 @@ public interface NiFiServiceFacade {
      * @param groupId the ID of the Process Group to update
      * @param proposedFlow the proposed flow
      * @param verifyConnectionRemoval whether or not to verify that connections that no longer exist in the proposed flow are eligible for deletion
+     * @param verifyNotDirty whether or not to verify that the Process Group is not 'dirty'. If this value is <code>true</code>,
+     *            and the Process Group has been modified since it was last synchronized with the Flow Registry, then this method will
+     *            throw an IllegalStateException
      */
-    void verifyCanUpdate(String groupId, VersionedFlowSnapshot proposedFlow, boolean verifyConnectionRemoval);
+    void verifyCanUpdate(String groupId, VersionedFlowSnapshot proposedFlow, boolean verifyConnectionRemoval, boolean verifyNotDirty);
 
     /**
      * Updates the Process group with the given ID to match the new snapshot
@@ -1361,7 +1364,8 @@ public interface NiFiServiceFacade {
      * @param componentIdSeed the seed to use for generating new component ID's
      * @return the Process Group
      */
-    ProcessGroupEntity updateProcessGroup(Revision revision, String groupId, VersionControlInformationDTO versionControlInfo, VersionedFlowSnapshot snapshot, String componentIdSeed);
+    ProcessGroupEntity updateProcessGroup(Revision revision, String groupId, VersionControlInformationDTO versionControlInfo, VersionedFlowSnapshot snapshot, String componentIdSeed,
+        boolean verifyNotModified);
 
     /**
      * Updates the Process group with the given ID to match the new snapshot
@@ -1374,7 +1378,8 @@ public interface NiFiServiceFacade {
      * @param componentIdSeed the seed to use for generating new component ID's
      * @return the Process Group
      */
-    ProcessGroupEntity updateProcessGroup(NiFiUser user, Revision revision, String groupId, VersionControlInformationDTO versionControlInfo, VersionedFlowSnapshot snapshot, String componentIdSeed);
+    ProcessGroupEntity updateProcessGroup(NiFiUser user, Revision revision, String groupId, VersionControlInformationDTO versionControlInfo, VersionedFlowSnapshot snapshot, String componentIdSeed,
+        boolean verifyNotModified);
 
     void setFlowRegistryClient(FlowRegistryClient flowRegistryClient);
 

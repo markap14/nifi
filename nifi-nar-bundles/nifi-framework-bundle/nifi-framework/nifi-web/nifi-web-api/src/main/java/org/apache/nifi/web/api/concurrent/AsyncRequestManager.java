@@ -43,7 +43,7 @@ public class AsyncRequestManager<T> implements RequestManager<T> {
 
     private final long requestExpirationMillis;
     private final int maxConcurrentRequests;
-    private final ConcurrentMap<String, AsynchronousWebRequest<T>> updateRequests = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, AsynchronousWebRequest<T>> requests = new ConcurrentHashMap<>();
 
     private final ExecutorService threadPool;
 
@@ -68,9 +68,13 @@ public class AsyncRequestManager<T> implements RequestManager<T> {
 
     }
 
+    private String getKey(final String type, final String request) {
+        return type + "/" + request;
+    }
 
     @Override
-    public void submitRequest(final String requestId, final AsynchronousWebRequest<T> request, final Consumer<AsynchronousWebRequest<T>> task) {
+    public void submitRequest(final String type, final String requestId, final AsynchronousWebRequest<T> request, final Consumer<AsynchronousWebRequest<T>> task) {
+        Objects.requireNonNull(type);
         Objects.requireNonNull(requestId);
         Objects.requireNonNull(request);
         Objects.requireNonNull(task);
@@ -78,23 +82,24 @@ public class AsyncRequestManager<T> implements RequestManager<T> {
         // before adding to the request map, purge any old requests. Must do this by creating a List of ID's
         // and then removing those ID's one-at-a-time in order to avoid ConcurrentModificationException.
         final Date oneMinuteAgo = new Date(System.currentTimeMillis() - requestExpirationMillis);
-        final List<String> completedRequestIds = updateRequests.entrySet().stream()
+        final List<String> completedRequestIds = requests.entrySet().stream()
             .filter(entry -> entry.getValue().isComplete())
             .filter(entry -> entry.getValue().getLastUpdated().before(oneMinuteAgo))
             .map(Map.Entry::getKey)
             .collect(Collectors.toList());
 
-        completedRequestIds.stream().forEach(id -> updateRequests.remove(id));
+        completedRequestIds.stream().forEach(id -> requests.remove(id));
 
-        final int requestCount = updateRequests.size();
+        final int requestCount = requests.size();
         if (requestCount > maxConcurrentRequests) {
             throw new IllegalStateException("There are already " + requestCount + " update requests for variable registries. "
                 + "Cannot issue any more requests until the older ones are deleted or expire");
         }
 
-        final AsynchronousWebRequest<T> existing = this.updateRequests.putIfAbsent(requestId, request);
+        final String key = getKey(type, requestId);
+        final AsynchronousWebRequest<T> existing = this.requests.putIfAbsent(key, request);
         if (existing != null) {
-            throw new IllegalArgumentException("A requests already exists with this ID");
+            throw new IllegalArgumentException("A requests already exists with this ID and type");
         }
 
         threadPool.submit(new Runnable() {
@@ -113,10 +118,13 @@ public class AsyncRequestManager<T> implements RequestManager<T> {
 
 
     @Override
-    public AsynchronousWebRequest<T> removeRequest(final String id, final NiFiUser user) {
+    public AsynchronousWebRequest<T> removeRequest(final String type, final String id, final NiFiUser user) {
+        Objects.requireNonNull(type);
+        Objects.requireNonNull(id);
         Objects.requireNonNull(user);
 
-        final AsynchronousWebRequest<T> request = updateRequests.get(id);
+        final String key = getKey(type, id);
+        final AsynchronousWebRequest<T> request = requests.get(key);
         if (request == null) {
             throw new ResourceNotFoundException("Could not find a Request with identifier " + id);
         }
@@ -129,14 +137,17 @@ public class AsyncRequestManager<T> implements RequestManager<T> {
             throw new IllegalStateException("Cannot remove the request because it is not yet complete");
         }
 
-        return updateRequests.remove(id);
+        return requests.remove(key);
     }
 
     @Override
-    public AsynchronousWebRequest<T> getRequest(final String id, final NiFiUser user) {
+    public AsynchronousWebRequest<T> getRequest(final String type, final String id, final NiFiUser user) {
+        Objects.requireNonNull(type);
+        Objects.requireNonNull(id);
         Objects.requireNonNull(user);
 
-        final AsynchronousWebRequest<T> request = updateRequests.get(id);
+        final String key = getKey(type, id);
+        final AsynchronousWebRequest<T> request = requests.get(key);
         if (request == null) {
             throw new ResourceNotFoundException("Could not find a Request with identifier " + id);
         }
