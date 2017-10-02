@@ -113,6 +113,7 @@ import org.apache.nifi.registry.ComponentVariableRegistry;
 import org.apache.nifi.registry.flow.ConnectableComponent;
 import org.apache.nifi.registry.flow.FlowRegistry;
 import org.apache.nifi.registry.flow.FlowRegistryClient;
+import org.apache.nifi.registry.flow.RemoteFlowCoordinates;
 import org.apache.nifi.registry.flow.UnknownResourceException;
 import org.apache.nifi.registry.flow.VersionControlInformation;
 import org.apache.nifi.registry.flow.VersionedComponent;
@@ -3511,7 +3512,7 @@ public class StandardNiFiServiceFacade implements NiFiServiceFacade {
     private InstantiatedVersionedProcessGroup createFlowSnapshot(final String processGroupId) {
         final ProcessGroup processGroup = processGroupDAO.getProcessGroup(processGroupId);
         final NiFiRegistryFlowMapper mapper = new NiFiRegistryFlowMapper();
-        final InstantiatedVersionedProcessGroup versionedGroup = mapper.mapProcessGroup(processGroup);
+        final InstantiatedVersionedProcessGroup versionedGroup = mapper.mapProcessGroup(processGroup, flowRegistryClient);
         return versionedGroup;
     }
 
@@ -3566,11 +3567,11 @@ public class StandardNiFiServiceFacade implements NiFiServiceFacade {
     }
 
     @Override
-    public Set<AffectedComponentEntity> getComponentsAffectedByVersionChange(final String processGroupId, final VersionedFlowSnapshot updatedSnapshot, final NiFiUser user) {
+    public Set<AffectedComponentEntity> getComponentsAffectedByVersionChange(final String processGroupId, final VersionedFlowSnapshot updatedSnapshot, final NiFiUser user) throws IOException {
         final ProcessGroup group = processGroupDAO.getProcessGroup(processGroupId);
 
         final NiFiRegistryFlowMapper mapper = new NiFiRegistryFlowMapper();
-        final VersionedProcessGroup localContents = mapper.mapProcessGroup(group);
+        final VersionedProcessGroup localContents = mapper.mapProcessGroup(group, flowRegistryClient);
 
         final ComparableDataFlow localFlow = new StandardComparableDataFlow("Local Flow", localContents);
         final ComparableDataFlow proposedFlow = new StandardComparableDataFlow("Proposed Flow", updatedSnapshot.getFlowContents());
@@ -3742,13 +3743,71 @@ public class StandardNiFiServiceFacade implements NiFiServiceFacade {
             throw new ResourceNotFoundException("Could not find any Flow Registry registered with identifier " + versionControlInfo.getRegistryId());
         }
 
+        final VersionedFlowSnapshot snapshot;
         try {
-            return flowRegistry.getFlowContents(versionControlInfo.getBucketId(), versionControlInfo.getFlowId(), versionControlInfo.getVersion());
+            snapshot = flowRegistry.getFlowContents(versionControlInfo.getBucketId(), versionControlInfo.getFlowId(), versionControlInfo.getVersion());
         } catch (final UnknownResourceException e) {
             throw new IllegalArgumentException("The Flow Registry with ID " + versionControlInfo.getRegistryId() + " reports that no Flow exists with Bucket "
                 + versionControlInfo.getBucketId() + ", Flow " + versionControlInfo.getFlowId() + ", Version " + versionControlInfo.getVersion());
         }
+
+        // If this Flow has a reference to a remote flow, we need to pull that remote flow as well
+        populateVersionedChildFlows(snapshot);
+
+        return snapshot;
     }
+
+    private void populateVersionedChildFlows(final VersionedFlowSnapshot snapshot) throws IOException {
+        final VersionedProcessGroup group = snapshot.getFlowContents();
+
+        for (final VersionedProcessGroup child : group.getProcessGroups()) {
+            populateVersionedFlows(child);
+        }
+    }
+
+    private void populateVersionedFlows(final VersionedProcessGroup group) throws IOException {
+        final RemoteFlowCoordinates remoteCoordinates = group.getRemoteFlowCoordinates();
+
+        if (remoteCoordinates != null) {
+            final String registryUrl = remoteCoordinates.getRegistryUrl();
+            final String registryId = flowRegistryClient.getFlowRegistryId(registryUrl);
+            if (registryId == null) {
+                throw new IllegalArgumentException("Process Group with ID " + group.getIdentifier() + " is under Version Control, referencing a Flow Registry at URL [" + registryUrl
+                    + "], but no Flow Registry is currently registered for that URL.");
+            }
+
+            final FlowRegistry flowRegistry = flowRegistryClient.getFlowRegistry(registryId);
+
+            final VersionedFlowSnapshot childSnapshot;
+            try {
+                childSnapshot = flowRegistry.getFlowContents(remoteCoordinates.getBucketId(), remoteCoordinates.getFlowId(), remoteCoordinates.getVersion());
+            } catch (final UnknownResourceException e) {
+                throw new IllegalArgumentException("The Flow Registry with ID " + registryId + " reports that no Flow exists with Bucket "
+                    + remoteCoordinates.getBucketId() + ", Flow " + remoteCoordinates.getFlowId() + ", Version " + remoteCoordinates.getVersion());
+            }
+
+            final VersionedProcessGroup fetchedGroup = childSnapshot.getFlowContents();
+            group.setComments(fetchedGroup.getComments());
+            group.setPosition(fetchedGroup.getPosition());
+            group.setName(fetchedGroup.getName());
+            group.setVariables(fetchedGroup.getVariables());
+
+            group.setConnections(new LinkedHashSet<>(fetchedGroup.getConnections()));
+            group.setControllerServices(new LinkedHashSet<>(fetchedGroup.getControllerServices()));
+            group.setFunnels(new LinkedHashSet<>(fetchedGroup.getFunnels()));
+            group.setInputPorts(new LinkedHashSet<>(fetchedGroup.getInputPorts()));
+            group.setLabels(new LinkedHashSet<>(fetchedGroup.getLabels()));
+            group.setOutputPorts(new LinkedHashSet<>(fetchedGroup.getOutputPorts()));
+            group.setProcessGroups(new LinkedHashSet<>(fetchedGroup.getProcessGroups()));
+            group.setProcessors(new LinkedHashSet<>(fetchedGroup.getProcessors()));
+            group.setRemoteProcessGroups(new LinkedHashSet<>(fetchedGroup.getRemoteProcessGroups()));
+        }
+
+        for (final VersionedProcessGroup child : group.getProcessGroups()) {
+            populateVersionedFlows(child);
+        }
+    }
+
 
     @Override
     public ProcessGroupEntity updateProcessGroup(final Revision revision, final String groupId, final VersionControlInformationDTO versionControlInfo,

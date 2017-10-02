@@ -3333,6 +3333,10 @@ public class FlowController implements EventAccess, ControllerServiceProvider, R
         return new HashSet<>(reportingTasks.values());
     }
 
+    public FlowRegistryClient getFlowRegistryClient() {
+        return flowRegistryClient;
+    }
+
     @Override
     public ControllerServiceNode createControllerService(final String type, final String id, final BundleCoordinate bundleCoordinate, final Set<URL> additionalUrls, final boolean firstTimeAdded) {
         final ControllerServiceNode serviceNode = controllerServiceProvider.createControllerService(type, id, bundleCoordinate, additionalUrls, firstTimeAdded);

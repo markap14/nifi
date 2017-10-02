@@ -22,5 +22,16 @@ import java.util.Set;
 public interface FlowRegistryClient {
     FlowRegistry getFlowRegistry(String registryId);
 
+    default String getFlowRegistryId(String registryUrl) {
+        for (final String registryClientId : getRegistryIdentifiers()) {
+            final FlowRegistry registry = getFlowRegistry(registryClientId);
+            if (registry.getURL().equals(registryUrl)) {
+                return registryClientId;
+            }
+        }
+
+        return null;
+    }
+
     Set<String> getRegistryIdentifiers();
 }

@@ -52,8 +52,12 @@ import org.apache.nifi.registry.flow.ComponentType;
 import org.apache.nifi.registry.flow.ConnectableComponent;
 import org.apache.nifi.registry.flow.ConnectableComponentType;
 import org.apache.nifi.registry.flow.ControllerServiceAPI;
+import org.apache.nifi.registry.flow.FlowRegistry;
+import org.apache.nifi.registry.flow.FlowRegistryClient;
 import org.apache.nifi.registry.flow.PortType;
 import org.apache.nifi.registry.flow.Position;
+import org.apache.nifi.registry.flow.RemoteFlowCoordinates;
+import org.apache.nifi.registry.flow.VersionControlInformation;
 import org.apache.nifi.registry.flow.VersionedConnection;
 import org.apache.nifi.registry.flow.VersionedControllerService;
 import org.apache.nifi.registry.flow.VersionedFunnel;
@@ -72,18 +76,42 @@ public class NiFiRegistryFlowMapper {
     // created before attempting to create the connection, where the ConnectableDTO is converted.
     private Map<String, String> versionedComponentIds = new HashMap<>();
 
-    public InstantiatedVersionedProcessGroup mapProcessGroup(final ProcessGroup group) {
+    public InstantiatedVersionedProcessGroup mapProcessGroup(final ProcessGroup group, final FlowRegistryClient registryClient) {
         versionedComponentIds.clear();
-        return mapGroup(group);
+        return mapGroup(group, registryClient, true);
     }
 
-    private InstantiatedVersionedProcessGroup mapGroup(final ProcessGroup group) {
+    private InstantiatedVersionedProcessGroup mapGroup(final ProcessGroup group, final FlowRegistryClient registryClient, final boolean topLevel) {
         final InstantiatedVersionedProcessGroup versionedGroup = new InstantiatedVersionedProcessGroup(group.getIdentifier(), group.getProcessGroupIdentifier());
         versionedGroup.setIdentifier(getId(group.getVersionedComponentId(), group.getIdentifier()));
         versionedGroup.setGroupIdentifier(getGroupId(group.getProcessGroupIdentifier()));
         versionedGroup.setName(group.getName());
         versionedGroup.setComments(group.getComments());
         versionedGroup.setPosition(mapPosition(group.getPosition()));
+
+        // If we are at the 'top level', meaning that the given Process Group is the group that we are creating a VersionedProcessGroup for,
+        // then we don't want to include the RemoteFlowCoordinates; we want to include the group contents. The RemoteFlowCoordinates will be used
+        // only for a child group that is itself version controlled.
+        if (!topLevel) {
+            final VersionControlInformation versionControlInfo = group.getVersionControlInformation();
+            if (versionControlInfo != null) {
+                final RemoteFlowCoordinates coordinates = new RemoteFlowCoordinates();
+                final String registryId = versionControlInfo.getRegistryIdentifier();
+                final FlowRegistry registry = registryClient.getFlowRegistry(registryId);
+                if (registry == null) {
+                    throw new IllegalStateException("Process Group refers to a Flow Registry with ID " + registryId + " but no Flow Registry exists with that ID. Cannot resolve to a URL.");
+                }
+
+                coordinates.setRegistryUrl(registry.getURL());
+                coordinates.setBucketId(versionControlInfo.getBucketIdentifier());
+                coordinates.setFlowId(versionControlInfo.getFlowIdentifier());
+                coordinates.setVersion(versionControlInfo.getVersion());
+
+                // If the Process Group itself is remotely versioned, then we don't want to include its contents
+                // because the contents are remotely managed and not part of the versioning of this Process Group
+                return versionedGroup;
+            }
+        }
 
         versionedGroup.setControllerServices(group.getControllerServices(false).stream()
             .map(this::mapControllerService)
@@ -114,7 +142,7 @@ public class NiFiRegistryFlowMapper {
             .collect(Collectors.toCollection(LinkedHashSet::new)));
 
         versionedGroup.setProcessGroups(group.getProcessGroups().stream()
-            .map(this::mapGroup)
+            .map(grp -> mapGroup(grp, registryClient, false))
             .collect(Collectors.toCollection(LinkedHashSet::new)));
 
         versionedGroup.setConnections(group.getConnections().stream()

@@ -96,6 +96,7 @@ import org.apache.nifi.registry.flow.Bundle;
 import org.apache.nifi.registry.flow.ConnectableComponent;
 import org.apache.nifi.registry.flow.FlowRegistry;
 import org.apache.nifi.registry.flow.FlowRegistryClient;
+import org.apache.nifi.registry.flow.RemoteFlowCoordinates;
 import org.apache.nifi.registry.flow.StandardVersionControlInformation;
 import org.apache.nifi.registry.flow.UnknownResourceException;
 import org.apache.nifi.registry.flow.VersionControlInformation;
@@ -2923,10 +2924,10 @@ public final class StandardProcessGroup implements ProcessGroup {
     public void updateFlow(final VersionedFlowSnapshot proposedSnapshot, final String componentIdSeed, final boolean verifyNotDirty) {
         writeLock.lock();
         try {
-            verifyCanUpdate(proposedSnapshot, true, verifyNotDirty); // TODO: Should perform more verification... verifyCanDelete, verifyCanUpdate, etc.
+            verifyCanUpdate(proposedSnapshot, true, verifyNotDirty); // TODO: Should perform more verification... verifyCanDelete, verifyCanUpdate, etc. Recursively if child is under VC also
 
             final NiFiRegistryFlowMapper mapper = new NiFiRegistryFlowMapper();
-            final VersionedProcessGroup versionedGroup = mapper.mapProcessGroup(this);
+            final VersionedProcessGroup versionedGroup = mapper.mapProcessGroup(this, flowController.getFlowRegistryClient());
 
             final ComparableDataFlow localFlow = new StandardComparableDataFlow("Local Flow", versionedGroup);
             final ComparableDataFlow remoteFlow = new StandardComparableDataFlow("Remote Flow", proposedSnapshot.getFlowContents());
@@ -2940,9 +2941,11 @@ public final class StandardProcessGroup implements ProcessGroup {
                 .collect(Collectors.toSet());
 
             if (LOG.isDebugEnabled()) {
-                LOG.info("Updating {} to {}; there are {} differences to take into account: {}", this, proposedSnapshot, flowComparison.getDifferences().size(), flowComparison.getDifferences());
+                LOG.debug("Updating {} to {}; there are {} differences to take into account: {}", this, proposedSnapshot, flowComparison.getDifferences().size(), flowComparison.getDifferences());
             } else {
-                LOG.info("Updating {} to {}; there are {} differences to take into account", this, proposedSnapshot, flowComparison.getDifferences().size());
+                // TODO: Remove the actual differences from the info level log. It can be extremely verbose. Is here only for testing purposes becuase it's much more convenient
+                // than having to remember to enable DEBUG level logging every time a full build is done.
+                LOG.info("Updating {} to {}; there are {} differences to take into account: {}", this, proposedSnapshot, flowComparison.getDifferences().size(), flowComparison.getDifferences());
             }
 
             updateProcessGroup(this, proposedSnapshot.getFlowContents(), componentIdSeed, updatedVersionedComponentIds, false);
@@ -2985,6 +2988,17 @@ public final class StandardProcessGroup implements ProcessGroup {
 
         group.setVariables(updatedVariableMap);
 
+        final RemoteFlowCoordinates remoteCoordinates = proposed.getRemoteFlowCoordinates();
+        if (remoteCoordinates != null) {
+            final String registryId = flowController.getFlowRegistryClient().getFlowRegistryId(remoteCoordinates.getRegistryUrl());
+            final String bucketId = remoteCoordinates.getBucketId();
+            final String flowId = remoteCoordinates.getFlowId();
+            final int version = remoteCoordinates.getVersion();
+
+            final VersionControlInformation vci = new StandardVersionControlInformation(registryId, bucketId, flowId, version, proposed, false, true);
+            group.setVersionControlInformation(vci, Collections.emptyMap());
+        }
+
         // Child groups
         // TODO: Need to take into account if child group is under version control pointing to a different Versioned Flow and if so need to handle it differently.
         final Map<String, ProcessGroup> childGroupsByVersionedId = group.getProcessGroups().stream()
@@ -2993,6 +3007,7 @@ public final class StandardProcessGroup implements ProcessGroup {
 
         for (final VersionedProcessGroup proposedChildGroup : proposed.getProcessGroups()) {
             final ProcessGroup childGroup = childGroupsByVersionedId.get(proposedChildGroup.getIdentifier());
+
             if (childGroup == null) {
                 final ProcessGroup added = addProcessGroup(proposedChildGroup, componentIdSeed);
                 LOG.info("Added {} to {}", added, this);
@@ -3599,7 +3614,7 @@ public final class StandardProcessGroup implements ProcessGroup {
         }
 
         final NiFiRegistryFlowMapper mapper = new NiFiRegistryFlowMapper();
-        final VersionedProcessGroup versionedGroup = mapper.mapProcessGroup(this);
+        final VersionedProcessGroup versionedGroup = mapper.mapProcessGroup(this, flowController.getFlowRegistryClient());
 
         final ComparableDataFlow currentFlow = new ComparableDataFlow() {
             @Override

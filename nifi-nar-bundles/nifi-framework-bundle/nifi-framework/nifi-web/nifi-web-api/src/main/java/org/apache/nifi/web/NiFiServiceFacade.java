@@ -1340,7 +1340,7 @@ public interface NiFiServiceFacade {
      * @param user the user making the request
      * @return the set of all components that would be affected by updating the Process Group
      */
-    Set<AffectedComponentEntity> getComponentsAffectedByVersionChange(String processGroupId, VersionedFlowSnapshot updatedSnapshot, NiFiUser user);
+    Set<AffectedComponentEntity> getComponentsAffectedByVersionChange(String processGroupId, VersionedFlowSnapshot updatedSnapshot, NiFiUser user) throws IOException;
 
     /**
      * Verifies that the Process Group with the given identifier can be updated to the proposed flow
