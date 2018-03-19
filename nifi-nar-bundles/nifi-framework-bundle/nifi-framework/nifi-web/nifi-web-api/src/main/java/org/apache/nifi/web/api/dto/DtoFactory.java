@@ -3197,7 +3197,7 @@ public final class DtoFactory {
      * Creates a ControllerServiceDiagnosticsDTO from the given Controller Service with some additional supporting information
      *
      * @param serviceNode the controller service to create diagnostics for
-     * @param bulletinRepo the bulletin repository
+     * @param serviceEntityFactory a function to convert a controller service id to a controller service entity
      * @param serviceProvider the controller service provider
      * @return ControllerServiceDiagnosticsDTO for the given Controller Service
      */
