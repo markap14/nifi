@@ -24,14 +24,14 @@ import java.io.InputStream;
 
 import org.apache.nifi.registry.flow.VersionedProcessGroup;
 
-public class LocalFileSystemOfflineFlow implements OfflineFlow {
+public class FileSystemOfflineFlow implements OfflineFlow {
     private final File directory;
     private final OfflineFlowDeserializer deserializer;
     private final int currentRevision;
     private final int minRevision;
     private final int maxRevision;
 
-    public LocalFileSystemOfflineFlow(final File directory, final OfflineFlowDeserializer deserializer, final int currentRevision, final int minRevision, final int maxRevision) {
+    public FileSystemOfflineFlow(final File directory, final OfflineFlowDeserializer deserializer, final int currentRevision, final int minRevision, final int maxRevision) {
         this.deserializer = deserializer;
         this.directory = directory;
         this.currentRevision = currentRevision;
@@ -40,7 +40,7 @@ public class LocalFileSystemOfflineFlow implements OfflineFlow {
     }
 
     @Override
-    public int getRevision() {
+    public int getCurrentRevision() {
         return currentRevision;
     }
 

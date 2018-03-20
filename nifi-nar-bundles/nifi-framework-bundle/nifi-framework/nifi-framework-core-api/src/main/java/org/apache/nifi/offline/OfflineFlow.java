@@ -33,13 +33,13 @@ public interface OfflineFlow {
      * @throws IOException if unable to read to understand flow contents
      */
     default VersionedProcessGroup getCurrentFlow() throws IOException {
-        return getFlow(getRevision());
+        return getFlow(getCurrentRevision());
     }
 
     /**
      * @return the current revision of the flow
      */
-    int getRevision();
+    int getCurrentRevision();
 
     /**
      * @return the revision of the oldest version of the flow that is available

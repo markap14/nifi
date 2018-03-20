@@ -40,6 +40,11 @@
         <property name="properties" ref="nifiProperties" />
     </bean>
 
+    <bean id="workspaceRepository" class="org.apache.nifi.offline.FileSystemWorkspaceRepositoryFactoryBean">
+        <property name="properties" ref="nifiProperties" />
+        <property name="flowRegistryClient" ref="flowRegistryClient" />
+    </bean>
+
     <!-- flow controller -->
     <bean id="flowController" class="org.apache.nifi.spring.FlowControllerFactoryBean">
         <property name="properties" ref="nifiProperties"/>

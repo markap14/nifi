@@ -18,13 +18,29 @@
 package org.apache.nifi.offline;
 
 import java.io.IOException;
+import java.util.Set;
 
 import org.apache.nifi.authorization.AccessDeniedException;
+import org.apache.nifi.offline.exception.NoSuchWorkspaceException;
 import org.apache.nifi.offline.exception.WorkspaceAlreadyExistsException;
 import org.apache.nifi.registry.flow.FlowRegistry;
 import org.apache.nifi.registry.flow.VersionedProcessGroup;
 
 public interface WorkspaceRepository {
+
+    /**
+     * Initializes the repository, recovering any workspaces that exist
+     *
+     * @throws IOException if unable to read any of the workspaces
+     */
+    void initialize() throws IOException;
+
+    /**
+     * Returns a Set of all Workspaces that exist
+     *
+     * @return a Set of all Workspaces that exist
+     */
+    Set<Workspace> getWorkspaces();
 
     /**
      * Creates a new Workspace that can be used to update the flow for the given label.
@@ -41,16 +57,17 @@ public interface WorkspaceRepository {
     Workspace createWorkspace(String owner, String label, C2Server c2Server, FlowRegistry flowRegistry) throws IOException, WorkspaceAlreadyExistsException;
 
     /**
-     * Retrieves the Workspace with the given identifier
+     * Retrieves the Workspace with the given identifier, or returns null if no such workspace exists
      *
      * @param identifier the id of the workspace
      * @param user the owner of the workspace
      * @return the Workspace with the given ID or <code>null</code> if no such workspace exists
      *
      * @throws IOException if an IO failure occurs when attempting to access the workspace
+     * @throws NoSuchWorkspaceException if no workspace exists with the given identifier
      * @throws AccessDeniedException if the given user is not the owner of the workspace
      */
-    Workspace getWorkspace(String identifier, String user) throws IOException;
+    Workspace getWorkspace(String identifier, String user) throws IOException, NoSuchWorkspaceException;
 
     /**
      * Deletes the workspace with the given identifier
@@ -60,8 +77,9 @@ public interface WorkspaceRepository {
      *
      * @throws IOException if an IO failure occurs when attempting to delete the workspace
      * @throws AccessDeniedException if the given user is not the owner of the workspace
+     * @throws NoSuchWorkspaceException if no workspace exists with the given identifier
      */
-    void deleteWorkspace(String identifier, String user) throws IOException;
+    void deleteWorkspace(String identifier, String user) throws IOException, NoSuchWorkspaceException;
 
     /**
      * Saves the given updated flow as the workspace's new flow, returning a new Workspace object that is updated
@@ -70,11 +88,14 @@ public interface WorkspaceRepository {
      * is greater than the current revision will immediately be removed.
      *
      * @param workspace the workspace to save
+     * @param updatedFlow the new contents of the flow
+     * @param user the user performing the action
      * @return a new Workspace object that is updated to reflect the newest version of the flow
      *
      * @throws IOException if unable to persist the data
+     * @throws NoSuchWorkspaceException if the workspace no longer exists
      */
-    Workspace saveWorkspace(Workspace workspace, VersionedProcessGroup updatedFlow) throws IOException;
+    Workspace saveWorkspace(Workspace workspace, VersionedProcessGroup updatedFlow, String user) throws IOException, NoSuchWorkspaceException;
 
     /**
      * Saves the flow so that it will now point to the given flow revision. This can be used to change which revision
@@ -82,10 +103,12 @@ public interface WorkspaceRepository {
      *
      * @param workspace the workspace to save
      * @param flowRevision the revision of the flow that should be used
+     * @param user the user performing the action
      * @return a new Workspace object that is updated to point to the given flow revision
      *
      * @throws IOException if unable to persist the data
+     * @throws NoSuchWorkspaceException if no workspace exists with the given identifier
      * @throws IllegalArgumentException if the flowRevision is not valid for the given workspace
      */
-    Workspace saveWorkspace(Workspace workspace, int flowRevision) throws IOException;
+    Workspace saveWorkspace(Workspace workspace, int flowRevision, String user) throws IOException, NoSuchWorkspaceException;
 }
