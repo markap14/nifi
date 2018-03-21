@@ -17,10 +17,10 @@
 
 package org.apache.nifi.offline;
 
+import static java.util.Objects.requireNonNull;
+
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -35,14 +35,12 @@ import org.apache.nifi.offline.exception.NoSuchWorkspaceException;
 import org.apache.nifi.offline.exception.WorkspaceAlreadyExistsException;
 import org.apache.nifi.registry.flow.FlowRegistry;
 import org.apache.nifi.registry.flow.VersionedProcessGroup;
-import org.apache.nifi.stream.io.GZIPOutputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class FileSystemWorkspaceRepository implements WorkspaceRepository {
     private static final Logger logger = LoggerFactory.getLogger(FileSystemWorkspaceRepository.class);
     private static final String FLOW_DIRECTORY_NAME = "flow";
-    private static final String FLOW_FILE_EXTENSION = ".xml.gz";
     private static final Pattern UUID_PATTERN = Pattern.compile("[a-f0-9\\\\-]{36}");
 
     private final WorkspaceSerializer serializer;
@@ -95,6 +93,11 @@ public class FileSystemWorkspaceRepository implements WorkspaceRepository {
     public synchronized Workspace createWorkspace(final String owner, final String label, final C2Server c2Server, final FlowRegistry flowRegistry)
         throws IOException, WorkspaceAlreadyExistsException {
 
+        requireNonNull(owner);
+        requireNonNull(label);
+        requireNonNull(c2Server);
+        requireNonNull(flowRegistry);
+
         final boolean alreadyExists = workspaces.values().stream()
             .filter(workspace -> workspace.getC2Server().equals(c2Server))
             .anyMatch(workspace -> workspace.getLabel().equals(label));
@@ -108,7 +111,7 @@ public class FileSystemWorkspaceRepository implements WorkspaceRepository {
         final File workspaceDirectory = getWorkspaceDirectory(workspaceId);
 
         final File flowDirectory = new File(workspaceDirectory, FLOW_DIRECTORY_NAME);
-        final OfflineFlow offlineFlow = new FileSystemOfflineFlow(flowDirectory, flowDeserializer, 0, 0, 0);
+        final FileSystemOfflineFlow offlineFlow = new FileSystemOfflineFlow(flowDirectory, flowSerializer, flowDeserializer, 0, 0, 0);
 
         final Workspace workspace = new StandardWorkspace(workspaceId, owner, label, flowRegistry, c2Server, offlineFlow);
         save(workspace);
@@ -118,14 +121,12 @@ public class FileSystemWorkspaceRepository implements WorkspaceRepository {
     }
 
     @Override
-    public synchronized Workspace getWorkspace(final String identifier, final String user) throws IOException, NoSuchWorkspaceException {
+    public synchronized Workspace getWorkspace(final String identifier, final String user) throws NoSuchWorkspaceException {
+        requireNonNull(identifier);
+        requireNonNull(user);
+
         final Workspace workspace = workspaces.get(identifier);
         if (workspace == null) {
-            throw new NoSuchWorkspaceException("No workspace exists with identifier " + identifier);
-        }
-
-        final File workspaceDirectory = getWorkspaceDirectory(identifier);
-        if (!workspaceDirectory.exists()) {
             throw new NoSuchWorkspaceException("No workspace exists with identifier " + identifier);
         }
 
@@ -142,15 +143,21 @@ public class FileSystemWorkspaceRepository implements WorkspaceRepository {
         // use getWorkspace to ensure that the workspace exists and that the user is the proper owner
         getWorkspace(identifier, user);
 
+        workspaces.remove(identifier);
+
         final File workspaceDirectory = getWorkspaceDirectory(identifier);
         FileUtils.deleteDirectory(workspaceDirectory);
 
-        workspaces.remove(identifier);
         logger.debug("Deleted workspace with ID {}", identifier);
     }
 
     @Override
-    public synchronized Workspace saveWorkspace(final Workspace workspace, final VersionedProcessGroup updatedFlow, final String user) throws IOException, NoSuchWorkspaceException {
+    public synchronized Workspace saveWorkspace(final Workspace workspace, final VersionedProcessGroup updatedFlow, final String user, final String changeDescription)
+            throws IOException, NoSuchWorkspaceException {
+        requireNonNull(workspace);
+        requireNonNull(updatedFlow);
+        requireNonNull(user);
+
         // call getWorkspace to verify that the workspace exists and that the user is the owner.
         getWorkspace(workspace.getIdentifier(), user);
 
@@ -158,56 +165,35 @@ public class FileSystemWorkspaceRepository implements WorkspaceRepository {
         final File workspaceDirectory = getWorkspaceDirectory(workspaceId);
 
         final File flowDirectory = new File(workspaceDirectory, FLOW_DIRECTORY_NAME);
+        if (!flowDirectory.exists()) {
+            Files.createDirectories(flowDirectory.toPath());
+        }
+
         final OfflineFlow currentOfflineFlow = workspace.getFlow();
 
         final int currentRevision = currentOfflineFlow.getCurrentRevision();
         final int newRevision = currentRevision + 1;
-        final File newRevisionFile = new File(flowDirectory, newRevision + FLOW_FILE_EXTENSION);
 
-        // If there are any versions later than the new version, then those must be deleted first.
-        final File[] flows = flowDirectory.listFiles();
-        for (final File flow : flows) {
-            // Filter out any files that are not flows
-            final String fileName = flow.getName();
-            final int extensionIndex = fileName.indexOf(FLOW_FILE_EXTENSION);
-            if (extensionIndex < 1) {
-                continue;
-            }
-
-            final int revision;
-            try {
-                revision = Integer.parseInt(fileName.substring(0, extensionIndex));
-            } catch (final NumberFormatException nfe) {
-                continue;
-            }
-
-            if (revision > newRevision) {
-                logger.debug("Deleting Offline Flow revision {} at {} because new flow is being saved as revision {}", revision, flow, newRevision);
-                Files.delete(flow.toPath());
-            }
-        }
-
-        // Write the new version of the flow to disk
-        try (final OutputStream fos = new FileOutputStream(newRevisionFile);
-            final OutputStream gzipOut = new GZIPOutputStream(fos, 1)) {
-
-            flowSerializer.serialize(updatedFlow, gzipOut);
-        }
+        // Write the updated flow to disk
+        final FileSystemOfflineFlow updatedOfflineFlow = new FileSystemOfflineFlow(flowDirectory, flowSerializer, flowDeserializer, newRevision, 0, newRevision);
+        updatedOfflineFlow.writeFlow(updatedFlow, changeDescription);
 
         // Create the new workspace that is updated
-        final OfflineFlow updatedOfflineFlow = new FileSystemOfflineFlow(flowDirectory, flowDeserializer, newRevision, 0, newRevision);
         final Workspace updatedWorkspace = new StandardWorkspace(workspace.getIdentifier(), workspace.getOwner(), workspace.getLabel(), workspace.getFlowRegistry(),
             workspace.getC2Server(), updatedOfflineFlow);
 
         // Save the updated workspace and return it
         save(updatedWorkspace);
 
-        logger.info("Saved new version of Offline Flow with revision {} at {}", newRevision, newRevisionFile);
+        logger.info("Saved new version of Offline Flow with revision {} for workspace {}", newRevision, updatedWorkspace.getIdentifier());
         return updatedWorkspace;
     }
 
     @Override
     public synchronized Workspace saveWorkspace(final Workspace workspace, final int flowRevision, final String user) throws IOException, NoSuchWorkspaceException {
+        requireNonNull(workspace);
+        requireNonNull(user);
+
         // call getWorkspace to verify that the workspace exists and that the user is the owner.
         final Workspace existingWorkspace = getWorkspace(workspace.getIdentifier(), user);
 

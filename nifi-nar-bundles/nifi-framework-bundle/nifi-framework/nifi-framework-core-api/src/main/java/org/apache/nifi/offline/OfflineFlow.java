@@ -18,6 +18,7 @@
 package org.apache.nifi.offline;
 
 import java.io.IOException;
+import java.util.List;
 
 import org.apache.nifi.registry.flow.VersionedProcessGroup;
 
@@ -30,7 +31,7 @@ public interface OfflineFlow {
 
     /**
      * @return the current version of the Flow
-     * @throws IOException if unable to read to understand flow contents
+     * @throws IOException if unable to read or understand flow contents
      */
     default VersionedProcessGroup getCurrentFlow() throws IOException {
         return getFlow(getCurrentRevision());
@@ -58,7 +59,20 @@ public interface OfflineFlow {
      * @return the VersionedProcessGroup that represents the flow for the given revision
      *
      * @throws IllegalArgumentException if the given revision is not valid for this OfflineFlow
-     * @throws IOException if unable to read to understand flow contents
+     * @throws IOException if unable to read or understand flow contents
      */
     VersionedProcessGroup getFlow(int revision) throws IOException;
+
+    /**
+     * Returns a List of all changes that occurred between the given revisions
+     *
+     * @param fromRevision the earliest revision to include
+     * @param toRevision the latest revision to include
+     *
+     * @return a List of all changes that occurred between the given revisions
+     * @throws IOException if unable to read or understand flow changes
+     * @throws IllegalArgumentException if fromRevision is less than the minimum available revision, or if toRevision is greater than the max revision,
+     *             or if fromRevision is not less than toRevision
+     */
+    List<OfflineFlowChange> getChanges(int fromRevision, int toRevision) throws IOException;
 }

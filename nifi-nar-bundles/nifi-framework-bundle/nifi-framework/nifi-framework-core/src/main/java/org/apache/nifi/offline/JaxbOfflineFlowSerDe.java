@@ -26,15 +26,13 @@ import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
 import javax.xml.bind.Marshaller;
 
-import org.apache.nifi.registry.flow.VersionedProcessGroup;
-
 public class JaxbOfflineFlowSerDe implements OfflineFlowSerializer, OfflineFlowDeserializer {
 
     private static final JAXBContext jaxbContext;
 
     static {
         try {
-            jaxbContext = JAXBContext.newInstance(VersionedProcessGroup.class);
+            jaxbContext = JAXBContext.newInstance(OfflineFlowRevision.class);
         } catch (final Exception e) {
             throw new RuntimeException("Failed to initialize JAX-B Context for Serializing and Deserializing Offline Flows", e);
         }
@@ -42,17 +40,17 @@ public class JaxbOfflineFlowSerDe implements OfflineFlowSerializer, OfflineFlowD
 
 
     @Override
-    public VersionedProcessGroup deserialize(final InputStream in) throws IOException {
+    public OfflineFlowRevision deserialize(final InputStream in) throws IOException {
         final BufferedInputStream bufferedIn = new BufferedInputStream(in);
         try {
-            return (VersionedProcessGroup) jaxbContext.createUnmarshaller().unmarshal(bufferedIn);
+            return (OfflineFlowRevision) jaxbContext.createUnmarshaller().unmarshal(bufferedIn);
         } catch (final JAXBException e) {
             throw new IOException("Could not parse Offline Flow", e);
         }
     }
 
     @Override
-    public void serialize(final VersionedProcessGroup flow, final OutputStream destination) throws IOException {
+    public void serialize(final OfflineFlowRevision flow, final OutputStream destination) throws IOException {
         try {
             final Marshaller marshaller = jaxbContext.createMarshaller();
             marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.TRUE);

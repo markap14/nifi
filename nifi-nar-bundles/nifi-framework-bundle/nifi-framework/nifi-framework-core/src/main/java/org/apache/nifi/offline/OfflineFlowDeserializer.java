@@ -20,8 +20,6 @@ package org.apache.nifi.offline;
 import java.io.IOException;
 import java.io.InputStream;
 
-import org.apache.nifi.registry.flow.VersionedProcessGroup;
-
 public interface OfflineFlowDeserializer {
 
     /**
@@ -34,6 +32,6 @@ public interface OfflineFlowDeserializer {
      * @return the VersionedProcessGroup that was read from the stream
      * @throws IOException if unable to read the necessary data from the stream or parse it
      */
-    VersionedProcessGroup deserialize(InputStream in) throws IOException;
+    OfflineFlowRevision deserialize(InputStream in) throws IOException;
 
 }

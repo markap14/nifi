@@ -15,20 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.nifi.offline;
+package org.apache.nifi.offline.util;
 
 import java.io.IOException;
-import java.io.OutputStream;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 
-public interface OfflineFlowSerializer {
+import org.apache.nifi.offline.Workspace;
+import org.apache.nifi.offline.WorkspaceDeserializer;
+import org.apache.nifi.offline.WorkspaceSerializer;
 
-    /**
-     * Writes the given flow to the given Output Stream. This method will not close the given OutputStream.
-     *
-     * @param flow the flow to serialize
-     * @param destination the OutputStream to write the serialized flow to
-     * @throws IOException if unable to write the flow to the output stream
-     */
-    void serialize(OfflineFlowRevision flow, OutputStream destination) throws IOException;
+public class InMemoryWorkspaceSerDe implements WorkspaceSerializer, WorkspaceDeserializer {
+    private Map<String, Workspace> workspaces = new HashMap<>();
 
+    @Override
+    public void serialize(Workspace workspace, String location) throws IOException {
+        workspaces.put(location, workspace);
+    }
+
+    @Override
+    public Workspace getWorkspace(String location) throws IOException {
+        return workspaces.get(location);
+    }
+
+    public Set<String> getStorageLocations() {
+        return workspaces.keySet();
+    }
 }

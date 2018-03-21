@@ -25,6 +25,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Files;
 import java.util.Properties;
 import java.util.UUID;
 
@@ -77,6 +78,10 @@ public class PropertiesFileWorkspaceSerDe implements WorkspaceSerializer, Worksp
     @Override
     public void serialize(final Workspace workspace, final String location) throws IOException {
         final File workspaceDir = new File(location);
+        if (!workspaceDir.exists()) {
+            Files.createDirectories(workspaceDir.toPath());
+        }
+
         final File propertiesFile = new File(workspaceDir, PROPERTIES_FILENAME);
 
         final Properties properties = toProperties(workspace);

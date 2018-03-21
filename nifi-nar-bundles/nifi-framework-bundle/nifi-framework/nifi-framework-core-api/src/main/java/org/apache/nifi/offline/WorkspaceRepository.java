@@ -90,12 +90,13 @@ public interface WorkspaceRepository {
      * @param workspace the workspace to save
      * @param updatedFlow the new contents of the flow
      * @param user the user performing the action
+     * @param changeDescription a description of how the flow changed from the previous version
      * @return a new Workspace object that is updated to reflect the newest version of the flow
      *
      * @throws IOException if unable to persist the data
      * @throws NoSuchWorkspaceException if the workspace no longer exists
      */
-    Workspace saveWorkspace(Workspace workspace, VersionedProcessGroup updatedFlow, String user) throws IOException, NoSuchWorkspaceException;
+    Workspace saveWorkspace(Workspace workspace, VersionedProcessGroup updatedFlow, String user, String changeDescription) throws IOException, NoSuchWorkspaceException;
 
     /**
      * Saves the flow so that it will now point to the given flow revision. This can be used to change which revision

@@ -17,18 +17,32 @@
 
 package org.apache.nifi.offline;
 
-import java.io.IOException;
-import java.io.OutputStream;
+import java.util.Date;
 
-public interface OfflineFlowSerializer {
+public class StandardOfflineFlowChange implements OfflineFlowChange {
 
-    /**
-     * Writes the given flow to the given Output Stream. This method will not close the given OutputStream.
-     *
-     * @param flow the flow to serialize
-     * @param destination the OutputStream to write the serialized flow to
-     * @throws IOException if unable to write the flow to the output stream
-     */
-    void serialize(OfflineFlowRevision flow, OutputStream destination) throws IOException;
+    private final int revision;
+    private final Date timestamp;
+    private final String description;
 
+    public StandardOfflineFlowChange(final int revision, final Date timestamp, final String description) {
+        this.revision = revision;
+        this.timestamp = timestamp;
+        this.description = description;
+    }
+
+    @Override
+    public int getRevision() {
+        return revision;
+    }
+
+    @Override
+    public Date getTimestamp() {
+        return timestamp;
+    }
+
+    @Override
+    public String getDescription() {
+        return description;
+    }
 }
