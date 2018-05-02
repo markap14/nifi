@@ -1,0 +1,179 @@
+{
+	"name": "ethernetPacket",
+	"namespace": "org.apache.nifi",
+	"type": "record",
+	"fields": [
+	  {
+	  	"name": "header",
+	  	"type": {
+	  	  "name": "ethernetHeader",
+	  	  "type": "record",
+	  	  "fields": [
+	  	      { "name": "etherTypeName", "type": ["null", "string"] },
+	  	      { "name": "etherTypeNumber", "type": ["null", "int"] },
+	  	      { "name": "srcAddr", "type": {
+	  	      		"name": "macAddress",
+	  	      		"type": "record",
+	  	      		"fields": [
+	  	      		    { "name": "address", "type": "string" },
+	  	      		    { "name": "unicast", "type": "boolean" },
+	  	      		    { "name": "globallyUnique", "type": "boolean" },
+	  	      		    { "name": "ouiName", "type": "string" },
+	  	      		    { "name": "ouiNumber", "type": "int" }
+	  	      		]
+	  	      }},
+	  	      { "name": "dstAddr", "type": "macAddress" }
+	  	  ]
+	  	}
+	  }, {
+	    "name": "ip",
+	    "type": [ "null", {
+				"name": "ipv4",
+				"type": "record",
+				"fields": [
+					{ 
+						"name": "header", "type": {
+						    "name": "ipv4Header",
+						    "type": "record",
+						    "fields": [
+									{ "name": "dontFragmentFlag", "type": "boolean" },
+									{ "name": "dstAddr", "type": {
+									    "name": "ipv4Address",
+									    "type": "record",
+									    "fields": [
+									        { "name": "address", "type": "string" },
+									        { "name": "hostname", "type": "string" },
+									        { "name": "anyLocalAddress", "type": "boolean" },
+									        { "name": "linkLocalAddress", "type": "boolean" },
+									        { "name": "loopbackAddress", "type": "boolean" },
+									        { "name": "mcGlobal", "type": "boolean" },
+									        { "name": "mcLinkLocal", "type": "boolean" },
+									        { "name": "mcNodeLocal", "type": "boolean" },
+									        { "name": "mcOrgLocal", "type": "boolean" },
+									        { "name": "mcSiteLocal", "type": "boolean" },
+									        { "name": "multicastAddress", "type": "boolean" },
+									        { "name": "siteLocalAddress", "type": "boolean" }
+									    ]
+									}},
+									{ "name": "srcAddr", "type": "ipv4Address" },
+									
+									{ "name": "identification", "type": "int" },
+									{ "name": "ihl", "type": "int" },
+									{ "name": "moreFragmentFlag", "type": "boolean" },
+									
+
+									{ "name": "options", "type": {
+						    			    "type": "array",
+						    			    "items": {
+						    			        "name": "ipv4Option",
+						    			        "type": "record",
+						    			        "fields": [
+						    			            { "name": "name", "type": "string" },
+						    			            { "name": "number", "type": "int" }
+						    			        ]
+						    			    }
+						    			}},
+						    												
+									{ "name": "protocolName", "type": ["null", "string"] },
+									{ "name": "protocolNumber", "type": ["null", "int"] },
+									{ "name": "reservedFlag", "type": "boolean" },
+									{ "name": "tos", "type": "int" },
+									{ "name": "totalLength", "type": "int" },
+									{ "name": "ttl", "type": "int" },
+									{ "name": "validChecksum", "type": "boolean" }
+						    ]
+						}
+					}, {
+						"name": "tcp", "type": ["null", {
+						    "name": "tcp",
+						    "type": "record",
+						    "fields": [
+						    			{ "name": "ack", "type": "boolean" },
+						    			{ "name": "acknowledgementNumber", "type": "long" },
+						    			{ "name": "fin", "type": "boolean" },
+						    			{ "name": "psh", "type": "boolean" },
+						    			{ "name": "rst", "type": "boolean" },
+						    			{ "name": "sequenceNumber", "type": "long" },
+						    			{ "name": "syn", "type": ["null", "boolean"] },
+						    			{ "name": "urg", "type": "boolean" },
+						    			{ "name": "urgentPointer", "type": "int" },
+						    			{ "name": "window", "type": "int" },
+						    			{ "name": "dstPort", "type": "int" },
+						    			{ "name": "srcPort", "type": "int" },
+						    			{ "name": "options", "type": {
+						    			    "type": "array",
+						    			    "items": {
+						    			        "name": "tcpOption",
+						    			        "type": "record",
+						    			        "fields": [
+						    			            { "name": "name", "type": "string" },
+						    			            { "name": "number", "type": ["null", "int"] }
+						    			        ]
+						    			    }
+						    			}},
+						    			{ "name": "reserved", "type": "int" }
+						    ]
+						}]
+					}, {
+						"name": "udp", "type": ["null", {
+						    "name": "udp",
+						    "type": "record",
+						    "fields": [
+						        { "name": "srcPort", "type": "int" },
+						        { "name": "dstPort", "type": "int" },
+						        { "name": "length", "type": "int" }
+							]
+						}]
+					}
+				]
+	    		}, {
+	    		    "name": "ipv6",
+				"type": "record",
+				"fields": [
+					{ 
+						"name": "header", "type": {
+						    "name": "ipv6Header",
+						    "type": "record",
+						    "fields": [
+									{ "name": "flowLabel", "type": ["null", "int"] },
+									{ "name": "dstAddr", "type": {
+									    "name": "ipv6Address",
+									    "type": "record",
+									    "fields": [
+									        { "name": "address", "type": "string" },
+									        { "name": "hostname", "type": "string" },
+									        { "name": "anyLocalAddress", "type": "boolean" },
+									        { "name": "linkLocalAddress", "type": "boolean" },
+									        { "name": "loopbackAddress", "type": "boolean" },
+									        { "name": "mcGlobal", "type": "boolean" },
+									        { "name": "mcLinkLocal", "type": "boolean" },
+									        { "name": "mcNodeLocal", "type": "boolean" },
+									        { "name": "mcOrgLocal", "type": "boolean" },
+									        { "name": "mcSiteLocal", "type": "boolean" },
+									        { "name": "multicastAddress", "type": "boolean" },
+									        { "name": "siteLocalAddress", "type": "boolean" },
+									        { "name": "ipV4Compatiable", "type": "boolean" }
+									    ]
+									}},
+									{ "name": "srcAddr", "type": "ipv6Address" },
+									
+									{ "name": "hopLimit", "type": "int" },
+									{ "name": "payloadLength", "type": "int" },
+									{ "name": "protocolName", "type": ["null", "string"] },
+									{ "name": "protocolNumber", "type": ["null", "int"] },
+									{ "name": "nextHeaderName", "type":  ["null", "string"] },
+									{ "name": "nextHeaderNumber", "type": ["null", "int"] },
+									{ "name": "trafficClass", "type": ["null", "int"] }
+						    ]
+						}
+					}, {
+						"name": "tcp", "type": "tcp"
+					}, {
+					    "name": "udp", "type": "udp"
+					}
+				]
+	    		}
+	    ]
+	  }
+	]
+}
