@@ -279,7 +279,7 @@ You can use the following command line options with the `tls-toolkit` in client 
 
 After running the client you will have the CA’s certificate, a keystore, a truststore, and a `config.json` with information about them as well as their passwords.
 
-For a client certificate that can be easily imported into the browser, specify: `-T PKCS12`. 
+For a client certificate that can be easily imported into the browser, specify: `-T PKCS12`.
 
 ==== Using An Existing Intermediate Certificate Authority (CA)
 
@@ -288,11 +288,11 @@ In some enterprise scenarios, a security/IT team may provide a signing certifica
 . Generate or obtain the signed intermediate CA keys in the following format (see additional commands below):
   * Public certificate in PEM format: `nifi-cert.pem`
   * Private key in PEM format: `nifi-key.key`
-. Place the files in the *toolkit working directory*. This is the directory where the tool is configured to output the signed certificates. *This is not necessarily the directory where the binary is located or invoked*. 
-  * For example, given the following scenario, the toolkit command can be run from its location as long as the output directory `-o` is `../hardcoded/`, and the existing `nifi-cert.pem` and `nifi-key.key` will be used.  
-  ** e.g. `$ ./toolkit/bin/tls-toolkit.sh standalone -o ./hardcoded/ -n 'node4.nifi.apache.org' -P thisIsABadPassword -S thisIsABadPassword -O` will result in a new directory at `./hardcoded/node4.nifi.apache.org` with a keystore and truststore containing a certificate signed by `./hardcoded/nifi-key.key`  
+. Place the files in the *toolkit working directory*. This is the directory where the tool is configured to output the signed certificates. *This is not necessarily the directory where the binary is located or invoked*.
+  * For example, given the following scenario, the toolkit command can be run from its location as long as the output directory `-o` is `../hardcoded/`, and the existing `nifi-cert.pem` and `nifi-key.key` will be used.
+  ** e.g. `$ ./toolkit/bin/tls-toolkit.sh standalone -o ./hardcoded/ -n 'node4.nifi.apache.org' -P thisIsABadPassword -S thisIsABadPassword -O` will result in a new directory at `./hardcoded/node4.nifi.apache.org` with a keystore and truststore containing a certificate signed by `./hardcoded/nifi-key.key`
   * If the `-o` argument is not provided, the default working directory (`.`) must contain `nifi-cert.pem` and `nifi-key.key`
-  ** e.g. `$ cd ./hardcoded/ && ../toolkit/bin/tls-toolkit.sh standalone -n 'node5.nifi.apache.org' -P thisIsABadPassword -S thisIsABadPassword -O` 
+  ** e.g. `$ cd ./hardcoded/ && ../toolkit/bin/tls-toolkit.sh standalone -n 'node5.nifi.apache.org' -P thisIsABadPassword -S thisIsABadPassword -O`
 
 ```
 # Example directory structure *before* commands above are run
@@ -552,19 +552,19 @@ coefficient:
   * `keytool -importkeystore -srckeystore keystore.jks -destkeystore keystore.p12 -srcstoretype JKS -deststoretype PKCS12 -destkeypass "$P12_PASSWORD" -deststorepass "$P12_PASSWORD" -srcstorepass "$JKS_PASSWORD" -srcalias "$ALIAS" -destalias "$ALIAS"`
   * Follow the steps above to convert from `keystore.p12` to `cert.pem` and `key.key`
 . To convert from PKCS #8 PEM format to PKCS #1 PEM format:
-  * If the private key is provided in PKCS #8 format (the file begins with `-----BEGIN PRIVATE KEY-----` rather than `-----BEGIN RSA PRIVATE KEY-----`), the following command will convert it to PKCS #1 format, move the original to `nifi-key-pkcs8.key`, and rename the PKCS #1 version as `nifi-key.key`: 
+  * If the private key is provided in PKCS #8 format (the file begins with `-----BEGIN PRIVATE KEY-----` rather than `-----BEGIN RSA PRIVATE KEY-----`), the following command will convert it to PKCS #1 format, move the original to `nifi-key-pkcs8.key`, and rename the PKCS #1 version as `nifi-key.key`:
   ** `openssl rsa -in nifi-key.key -out nifi-key-pkcs1.key && mv nifi-key.key nifi-key-pkcs8.key && mv nifi-key-pkcs1.key nifi-key.key`
 
 ===== Signing with Externally-signed CA Certificates
 
-To sign generated certificates with a certificate authority (CA) generated outside of the TLS Toolkit, ensure the necessary files are in the right format and location (see above). For example, an organization *Large Organization* has an internal CA (`CN=ca.large.org, OU=Certificate Authority`). This *root CA* is offline and only used to sign other internal CAs. The Large IT team generates an *intermediate CA* (`CN=nifi_ca.large.org, OU=NiFi, OU=Certificate Authority`) to be used to sign all NiFi node certificates (`CN=node1.nifi.large.org, OU=NiFi`, `CN=node2.nifi.large.org, OU=NiFi`, etc.). 
+To sign generated certificates with a certificate authority (CA) generated outside of the TLS Toolkit, ensure the necessary files are in the right format and location (see above). For example, an organization *Large Organization* has an internal CA (`CN=ca.large.org, OU=Certificate Authority`). This *root CA* is offline and only used to sign other internal CAs. The Large IT team generates an *intermediate CA* (`CN=nifi_ca.large.org, OU=NiFi, OU=Certificate Authority`) to be used to sign all NiFi node certificates (`CN=node1.nifi.large.org, OU=NiFi`, `CN=node2.nifi.large.org, OU=NiFi`, etc.).
 
 To use the toolkit to generate these certificates and sign them using the *intermediate CA*, ensure that the following files are present (see <<additional-commands>> above):
 
 * `nifi-cert.pem` -- the public certificate of the *intermediate CA* in PEM format
 * `nifi-key.key` -- the Base64-encoded private key of the *intermediate CA* in PKCS #1 PEM format
 
-If the *intermediate CA* was the *root CA*, it would be *self-signed* -- the signature over the certificate would be issued from the same key. In that case (the same as a toolkit-generated CA), no additional arguments are necessary. However, because the *intermediate CA* is signed by the *root CA*, the public certificate of the *root CA* needs to be provided as well to validate the signature. The `--additionalCACertificate` parameter is used to specify the path to the signing public certificate. The value should be the absolute path to the *root CA* public certificate. 
+If the *intermediate CA* was the *root CA*, it would be *self-signed* -- the signature over the certificate would be issued from the same key. In that case (the same as a toolkit-generated CA), no additional arguments are necessary. However, because the *intermediate CA* is signed by the *root CA*, the public certificate of the *root CA* needs to be provided as well to validate the signature. The `--additionalCACertificate` parameter is used to specify the path to the signing public certificate. The value should be the absolute path to the *root CA* public certificate.
 
 Example:
 
@@ -3924,6 +3924,13 @@ from the remote node before considering the communication with the node a failur
 to the cluster. It provides an additional layer of security. This value is blank by default, meaning that no firewall file is to be used.
 |`nifi.cluster.flow.election.max.wait.time`|Specifies the amount of time to wait before electing a Flow as the "correct" Flow. If the number of Nodes that have voted is equal to the number specified by the `nifi.cluster.flow.election.max.candidates` property, the cluster will not wait this long. The default value is `5 mins`. Note that the time starts as soon as the first vote is cast.
 |`nifi.cluster.flow.election.max.candidates`|Specifies the number of Nodes required in the cluster to cause early election of Flows. This allows the Nodes in the cluster to avoid having to wait a long time before starting processing if we reach at least this number of nodes in the cluster.
+|`nifi.cluster.flow.election.max.wait.time`|Specifies the amount of time to wait before electing a Flow as the "correct" Flow. If the number of Nodes that have voted is equal to the number specified
+ by the `nifi.cluster.flow.election.max.candidates` property, the cluster will not wait this long. The default value is `5 mins`. Note that the time starts as soon as the first vote is cast.
+|`nifi.cluster.flow.election.max.candidates`|Specifies the number of Nodes required in the cluster to cause early election of Flows. This allows the Nodes in the cluster to avoid having to wait a
+long time before starting processing if we reach at least this number of nodes in the cluster.
+|`nifi.cluster.load.balance.port`|Specifies the port to listen on for incoming connections for load balancing data across the cluster. The default value is `6342`.|
+|`nifi.cluster.load.balance.host`|Specifies the hostname to listen on for incoming connections for load balancing data across the cluster. If not specified, will default to the value used by the `nifi
+.cluster.node.address` property.|
 |====
 
 [[claim_management]]
