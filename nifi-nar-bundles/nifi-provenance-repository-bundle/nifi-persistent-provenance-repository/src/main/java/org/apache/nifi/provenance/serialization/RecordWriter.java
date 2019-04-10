@@ -16,12 +16,14 @@
  */
 package org.apache.nifi.provenance.serialization;
 
+import org.apache.nifi.provenance.ProvenanceEventRecord;
+import org.apache.nifi.provenance.toc.TocWriter;
+
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
-
-import org.apache.nifi.provenance.ProvenanceEventRecord;
-import org.apache.nifi.provenance.toc.TocWriter;
+import java.util.HashMap;
+import java.util.Map;
 
 public interface RecordWriter extends Closeable {
 
@@ -41,6 +43,23 @@ public interface RecordWriter extends Closeable {
      * @throws IOException if unable to write the record to the stream
      */
     StorageSummary writeRecord(ProvenanceEventRecord record) throws IOException;
+
+    default Map<ProvenanceEventRecord, StorageSummary> writeRecords(Iterable<ProvenanceEventRecord> events) throws IOException {
+        final Map<ProvenanceEventRecord, StorageSummary> summaries = new HashMap<>();
+
+        int numEvents = 0;
+        for (final ProvenanceEventRecord nextEvent : events) {
+            final StorageSummary summary = writeRecord(nextEvent);
+            summaries.put(nextEvent, summary);
+            numEvents++;
+        }
+
+        if (numEvents > 0) {
+            flush();
+        }
+
+        return summaries;
+    }
 
     /**
      * Flushes any data that is held in a buffer to the underlying storage mechanism

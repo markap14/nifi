@@ -297,20 +297,23 @@ public class WriteAheadStorePartition implements EventStorePartition {
         try {
             long maxId = -1L;
             int numEvents = 0;
-            for (final ProvenanceEventRecord nextEvent : events) {
-                final StorageSummary writerSummary = writer.writeRecord(nextEvent);
-                final StorageSummary summaryWithIndex = new StorageSummary(writerSummary.getEventId(), writerSummary.getStorageLocation(), this.partitionName,
+
+            final Map<ProvenanceEventRecord, StorageSummary> writerSummaries = writer.writeRecords(events);
+            for (final Map.Entry<ProvenanceEventRecord, StorageSummary> entry : writerSummaries.entrySet()) {
+                final ProvenanceEventRecord event = entry.getKey();
+                final StorageSummary writerSummary = entry.getValue();
+
+                final StorageSummary summaryWithPartition = new StorageSummary(writerSummary.getEventId(), writerSummary.getStorageLocation(), this.partitionName,
                     writerSummary.getBlockIndex(), writerSummary.getSerializedLength(), writerSummary.getBytesWritten());
-                locationMap.put(nextEvent, summaryWithIndex);
-                maxId = summaryWithIndex.getEventId();
+
+                locationMap.put(event, summaryWithPartition);
+                maxId = Math.max(maxId, summaryWithPartition.getEventId());
                 numEvents++;
             }
 
             if (numEvents == 0) {
                 return locationMap;
             }
-
-            writer.flush();
 
             // Update max event id to be equal to be the greater of the current value or the
             // max value just written.
