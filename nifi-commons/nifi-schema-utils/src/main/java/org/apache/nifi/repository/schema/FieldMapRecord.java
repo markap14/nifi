@@ -30,8 +30,12 @@ public class FieldMapRecord implements Record {
     }
 
     public FieldMapRecord(final RecordSchema schema, final Map<String, Object> values) {
+        this(schema, values, true);
+    }
+
+    public FieldMapRecord(final RecordSchema schema, final Map<String, Object> values, final boolean copyValues) {
         this.schema = schema;
-        this.values = new HashMap<>(values);
+        this.values = copyValues ? new HashMap<>(values) : values;
     }
 
     private static Map<String, Object> convertFieldToName(final Map<RecordField, Object> map) {

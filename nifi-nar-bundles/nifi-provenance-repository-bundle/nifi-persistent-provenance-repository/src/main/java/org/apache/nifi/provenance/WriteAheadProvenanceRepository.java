@@ -89,7 +89,7 @@ import java.util.Set;
  */
 public class WriteAheadProvenanceRepository implements ProvenanceRepository {
     private static final Logger logger = LoggerFactory.getLogger(WriteAheadProvenanceRepository.class);
-    static final int BLOCK_SIZE = 1024 * 32;
+    static final int BLOCK_SIZE = 1024 * 1024;
     public static final String EVENT_CATEGORY = "Provenance Repository";
 
     private final RepositoryConfiguration config;

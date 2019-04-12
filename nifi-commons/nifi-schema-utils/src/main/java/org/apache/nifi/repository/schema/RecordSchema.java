@@ -41,13 +41,17 @@ public class RecordSchema {
     private static final String SUBFIELD_TYPE = "SubFieldList";
 
     private final List<RecordField> fields;
-
-    public RecordSchema(final List<RecordField> fields) {
-        this.fields = fields;
-    }
+    private final Map<String, RecordField> fieldByName = new HashMap<>();
 
     public RecordSchema(final RecordField... fields) {
         this(Arrays.asList(fields));
+    }
+
+    public RecordSchema(final List<RecordField> fields) {
+        this.fields = fields;
+        for (final RecordField field : fields) {
+            fieldByName.put(field.getFieldName(), field);
+        }
     }
 
     public List<RecordField> getFields() {
@@ -55,10 +59,7 @@ public class RecordSchema {
     }
 
     public RecordField getField(final String fieldName) {
-        return fields.stream()
-            .filter(field -> field.getFieldName().equals(fieldName))
-            .findFirst()
-            .orElse(null);
+        return fieldByName.get(fieldName);
     }
 
     public void writeTo(final OutputStream out) throws IOException {

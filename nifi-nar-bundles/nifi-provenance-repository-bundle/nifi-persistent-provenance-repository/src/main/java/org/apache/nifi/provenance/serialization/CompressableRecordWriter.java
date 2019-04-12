@@ -17,14 +17,6 @@
 
 package org.apache.nifi.provenance.serialization;
 
-import java.io.BufferedOutputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.util.concurrent.atomic.AtomicLong;
-
 import org.apache.nifi.provenance.AbstractRecordWriter;
 import org.apache.nifi.provenance.ProvenanceEventRecord;
 import org.apache.nifi.provenance.toc.TocWriter;
@@ -33,6 +25,14 @@ import org.apache.nifi.stream.io.GZIPOutputStream;
 import org.apache.nifi.stream.io.NonCloseableOutputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.BufferedOutputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.util.concurrent.atomic.AtomicLong;
 
 public abstract class CompressableRecordWriter extends AbstractRecordWriter {
     private static final Logger logger = LoggerFactory.getLogger(CompressableRecordWriter.class);
@@ -50,7 +50,7 @@ public abstract class CompressableRecordWriter extends AbstractRecordWriter {
 
 
     public CompressableRecordWriter(final File file, final AtomicLong idGenerator, final TocWriter writer, final boolean compressed,
-        final int uncompressedBlockSize) throws IOException {
+                    final int uncompressedBlockSize) throws IOException {
         super(file, writer);
         logger.trace("Creating Record Writer for {}", file.getName());
 
@@ -62,7 +62,7 @@ public abstract class CompressableRecordWriter extends AbstractRecordWriter {
     }
 
     public CompressableRecordWriter(final OutputStream out, final String storageLocation, final AtomicLong idGenerator, final TocWriter tocWriter, final boolean compressed,
-        final int uncompressedBlockSize) throws IOException {
+                    final int uncompressedBlockSize) throws IOException {
         super(storageLocation, tocWriter);
         this.fos = null;
 
@@ -127,7 +127,7 @@ public abstract class CompressableRecordWriter extends AbstractRecordWriter {
                     tocWriter.addBlockOffset(rawOutStream.getBytesWritten(), eventId);
                 }
 
-                final OutputStream writableStream = new BufferedOutputStream(new GZIPOutputStream(new NonCloseableOutputStream(rawOutStream), 1), 65536);
+                final OutputStream writableStream = new GZIPOutputStream(new NonCloseableOutputStream(rawOutStream), 1);
                 this.byteCountingOut = new ByteCountingOutputStream(writableStream, byteOffset);
             } else {
                 if (tocWriter != null && eventId != null) {

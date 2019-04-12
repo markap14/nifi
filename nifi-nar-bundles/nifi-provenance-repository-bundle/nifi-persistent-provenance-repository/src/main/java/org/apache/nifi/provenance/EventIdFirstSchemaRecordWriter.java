@@ -17,7 +17,6 @@
 
 package org.apache.nifi.provenance;
 
-import org.apache.nifi.provenance.schema.EventFieldNames;
 import org.apache.nifi.provenance.schema.EventIdFirstHeaderSchema;
 import org.apache.nifi.provenance.schema.LookupTableEventRecord;
 import org.apache.nifi.provenance.schema.LookupTableEventSchema;
@@ -59,8 +58,6 @@ public class EventIdFirstSchemaRecordWriter extends CompressableRecordWriter {
     private static final Logger logger = LoggerFactory.getLogger(EventIdFirstSchemaRecordWriter.class);
 
     private static final RecordSchema eventSchema = LookupTableEventSchema.EVENT_SCHEMA;
-    private static final RecordSchema contentClaimSchema = new RecordSchema(eventSchema.getField(EventFieldNames.CONTENT_CLAIM).getSubFields());
-    private static final RecordSchema previousContentClaimSchema = new RecordSchema(eventSchema.getField(EventFieldNames.PREVIOUS_CONTENT_CLAIM).getSubFields());
     private static final RecordSchema headerSchema = EventIdFirstHeaderSchema.SCHEMA;
 
     public static final int SERIALIZATION_VERSION = 1;
@@ -152,22 +149,42 @@ public class EventIdFirstSchemaRecordWriter extends CompressableRecordWriter {
         }
     }
 
+//    private SerializedEvents serializeEvents(final Iterable<ProvenanceEventRecord> events) throws IOException {
+//        final long start = System.nanoTime();
+//
+//        final Map<ProvenanceEventRecord, byte[]> serializedEvents = new LinkedHashMap<>();
+//        final ByteArrayDataOutputStream bados = streamCache.checkOut();
+//        try {
+//            for (final ProvenanceEventRecord event : events) {
+//                writeRecord(event, 0L, bados.getDataOutputStream());
+//
+//                final ByteArrayOutputStream baos = bados.getByteArrayOutputStream();
+//                final byte[] serializedEvent = baos.toByteArray();
+//                serializedEvents.put(event, serializedEvent);
+//                baos.reset();
+//            }
+//        } finally {
+//            streamCache.checkIn(bados);
+//        }
+//
+//        final long end = System.nanoTime();
+//        serializeTimes.add(new TimestampedLong(end - start));
+//
+//        return new SerializedEvents(serializedEvents, serializedEventIdGenerator.getAndIncrement());
+//    }
+
     private SerializedEvents serializeEvents(final Iterable<ProvenanceEventRecord> events) throws IOException {
         final long start = System.nanoTime();
 
         final Map<ProvenanceEventRecord, byte[]> serializedEvents = new LinkedHashMap<>();
-        final ByteArrayDataOutputStream bados = streamCache.checkOut();
-        try {
-            for (final ProvenanceEventRecord event : events) {
-                writeRecord(event, 0L, bados.getDataOutputStream());
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        final DataOutputStream dos = new DataOutputStream(baos);
+        for (final ProvenanceEventRecord event : events) {
+            writeRecord(event, 0L, dos, null);
 
-                final ByteArrayOutputStream baos = bados.getByteArrayOutputStream();
-                final byte[] serializedEvent = baos.toByteArray();
-                serializedEvents.put(event, serializedEvent);
-                baos.reset();
-            }
-        } finally {
-            streamCache.checkIn(bados);
+            final byte[] serializedEvent = baos.toByteArray();
+            serializedEvents.put(event, serializedEvent);
+            baos.reset();
         }
 
         final long end = System.nanoTime();
@@ -263,15 +280,25 @@ public class EventIdFirstSchemaRecordWriter extends CompressableRecordWriter {
     }
 
     protected Record createRecord(final ProvenanceEventRecord event, final long eventId) {
-        return new LookupTableEventRecord(event, eventId, eventSchema, contentClaimSchema, previousContentClaimSchema, firstEventId, systemTimeOffset,
+        return new LookupTableEventRecord(event, eventId, eventSchema, firstEventId, systemTimeOffset,
             componentIdMap, componentTypeMap, queueIdMap, eventTypeMap);
     }
 
     @Override
     protected void writeRecord(final ProvenanceEventRecord event, final long eventId, final DataOutputStream out) throws IOException {
-        final Record eventRecord = createRecord(event, eventId);
-        schemaRecordWriter.writeRecord(eventRecord, out);
+        writeRecord(event, eventId, out, null);
     }
+
+    protected void writeRecord(final ProvenanceEventRecord event, final long eventId, final DataOutputStream out, final byte[] buffer) throws IOException {
+        final Record eventRecord = createRecord(event, eventId);
+
+        if (buffer == null) {
+            schemaRecordWriter.writeRecord(eventRecord, out);
+        } else {
+            schemaRecordWriter.writeRecord(eventRecord, out, buffer);
+        }
+    }
+
 
     @Override
     protected synchronized void writeHeader(final long firstEventId, final DataOutputStream out) throws IOException {
@@ -319,15 +346,6 @@ public class EventIdFirstSchemaRecordWriter extends CompressableRecordWriter {
     }
 
     /* Getters for internal state written to by subclass EncryptedSchemaRecordWriter */
-
-    IdentifierLookup getIdLookup() {
-        return idLookup;
-    }
-
-    SchemaRecordWriter getSchemaRecordWriter() {
-        return schemaRecordWriter;
-    }
-
     AtomicInteger getRecordCount() {
         return recordCount;
     }
@@ -354,10 +372,6 @@ public class EventIdFirstSchemaRecordWriter extends CompressableRecordWriter {
 
     long getFirstEventId() {
         return firstEventId;
-    }
-
-    long getSystemTimeOffset() {
-        return systemTimeOffset;
     }
 
 
@@ -411,24 +425,27 @@ public class EventIdFirstSchemaRecordWriter extends CompressableRecordWriter {
         private final ReentrantLock lock = new ReentrantLock();
 
         public EventPhase register(final SerializedEvents events) {
+            boolean addToQueue = false;
+            final EventPhase phase;
+
             lock.lock();
             try {
-                final EventPhase phase = currentPhase;
+                phase = currentPhase;
                 phase.addEvents(events);
 
                 if (currentPhase.getByteCount() >= DESIRED_BYTES_PER_PHASE || phaseQueue.isEmpty()) {
-                    incrementPhase();
+                    addToQueue = true;
+                    currentPhase = new EventPhase();
                 }
-
-                return phase;
             } finally {
                 lock.unlock();
             }
-        }
 
-        private void incrementPhase() {
-            phaseQueue.offer(currentPhase);
-            currentPhase = new EventPhase();
+            if (addToQueue) {
+                phaseQueue.offer(phase);
+            }
+
+            return phase;
         }
 
         public boolean isEmpty() {
@@ -458,6 +475,7 @@ public class EventIdFirstSchemaRecordWriter extends CompressableRecordWriter {
 
 
 
+
     private class WriteEventTask implements Runnable {
         private final PhaseManager phaseManager;
         private final String location;
@@ -481,10 +499,13 @@ public class EventIdFirstSchemaRecordWriter extends CompressableRecordWriter {
                     final EventPhase eventPhase = phaseManager.nextPhase();
                     if (eventPhase == null) {
                         if (isClosed() && phaseManager.isEmpty()) {
-                            final long seconds = (System.currentTimeMillis() - startTime) / 1000;
-                            final long mbWritten = totalBytesWritten / 1000000;
-                            logger.info("Wrote {} events to {} in {} phases (average of {} events/phase), {} MB in {} seconds = {} MB/sec", eventsWritten, location, phasesWritten,
-                                (double) eventsWritten / phasesWritten, mbWritten, seconds, mbWritten / seconds);
+                            if (phasesWritten > 0) {
+                                final long millis = System.currentTimeMillis() - startTime;
+                                final long seconds = millis / 1000;
+                                final long mbWritten = totalBytesWritten / 1000000;
+                                logger.info("Wrote {} events to {} in {} phases (average of {} events/phase), {} MB in {} seconds = {} MB/sec", eventsWritten, location, phasesWritten,
+                                    (double) eventsWritten / phasesWritten, mbWritten, seconds, mbWritten * 1000.0D / Math.max(1D, millis));
+                            }
 
                             return;
                         }
@@ -495,10 +516,12 @@ public class EventIdFirstSchemaRecordWriter extends CompressableRecordWriter {
                     final Map<Long, Map<ProvenanceEventRecord, StorageSummary>> storageSummaries;
                     try {
                         storageSummaries = writeEvents(eventPhase);
-                        eventPhase.complete(storageSummaries);
+
                         phasesWritten++;
-                        eventsWritten += eventPhase.getEvents().size();
+                        eventsWritten += eventPhase.getEventCount();
                         totalBytesWritten += eventPhase.getByteCount();
+
+                        eventPhase.complete(storageSummaries);
                     } catch (final Throwable t) {
                         markDirty();
                         logger.error("Failed to write Provenance Events to {}", location, t);
@@ -557,7 +580,6 @@ public class EventIdFirstSchemaRecordWriter extends CompressableRecordWriter {
 
                         final int recordIdOffset = (int) (recordIdentifier - firstEventId);
                         out.writeInt(recordIdOffset);
-
                         out.writeInt(serializedBytes.length);
                         out.write(serializedBytes);
 
@@ -568,7 +590,7 @@ public class EventIdFirstSchemaRecordWriter extends CompressableRecordWriter {
                         final Integer blockIndex = tocWriter == null ? null : tocWriter.getCurrentBlockIndex();
                         final StorageSummary storageSummary = new StorageSummary(recordIdentifier, storageLocation, blockIndex, serializedLength, endBytes);
                         storageSummaryMap.put(event, storageSummary);
-                        byteCount += endBytes - startBytes;
+                        byteCount += endBytes - startBytes + 8; // + 8 for record id & serialized byte length
                     }
                 }
 
@@ -605,11 +627,12 @@ public class EventIdFirstSchemaRecordWriter extends CompressableRecordWriter {
         private final CompletableFuture<Map<Long, Map<ProvenanceEventRecord, StorageSummary>>> future = new CompletableFuture<>();
         private final List<SerializedEvents> events = new ArrayList<>();
         private long byteCount = 0L;
-
+        private int eventCount = 0;
 
         public void addEvents(final SerializedEvents events) {
             this.events.add(events);
             this.byteCount += events.getByteCount();
+            this.eventCount += events.getEvents().size();
         }
 
         public List<SerializedEvents> getEvents() {
@@ -622,6 +645,10 @@ public class EventIdFirstSchemaRecordWriter extends CompressableRecordWriter {
 
         public long getByteCount() {
             return byteCount;
+        }
+
+        public int getEventCount() {
+            return eventCount;
         }
 
         public void complete(final Map<Long, Map<ProvenanceEventRecord, StorageSummary>> storageSummaries) {

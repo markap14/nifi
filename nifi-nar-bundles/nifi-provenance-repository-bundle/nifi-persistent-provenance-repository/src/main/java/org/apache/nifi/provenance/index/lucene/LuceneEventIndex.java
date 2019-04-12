@@ -17,25 +17,6 @@
 
 package org.apache.nifi.provenance.index.lucene;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Date;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
@@ -74,6 +55,26 @@ import org.apache.nifi.util.timebuffer.TimedBuffer;
 import org.apache.nifi.util.timebuffer.TimestampedLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Date;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 public class LuceneEventIndex implements EventIndex {
@@ -296,8 +297,8 @@ public class LuceneEventIndex implements EventIndex {
             boolean added = false;
             while (!added && !closed) {
 
-                added = documentQueue.offer(doc);
-                if (!added) {
+//                added = documentQueue.offer(doc);
+//                if (!added) {
                     final long start = System.nanoTime();
                     try {
                         added = documentQueue.offer(doc, 1, TimeUnit.SECONDS);
@@ -308,11 +309,11 @@ public class LuceneEventIndex implements EventIndex {
                     }
                     final long nanos = System.nanoTime() - start;
                     queuePauseNanos.add(new TimestampedLong(nanos));
-                }
+//                }
 
-                if (added) {
+                if (added && logger.isDebugEnabled()) {
                     final long totalEventCount = eventCount.incrementAndGet();
-                    if (totalEventCount % 1_000_000 == 0 && logger.isDebugEnabled()) {
+                    if (totalEventCount % 1_000_000 == 0) {
                         incrementAndReportStats();
                     }
                 }

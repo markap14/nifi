@@ -17,6 +17,12 @@
 
 package org.apache.nifi.provenance.index.lucene;
 
+import org.apache.nifi.provenance.RepositoryConfiguration;
+import org.apache.nifi.provenance.util.DirectoryUtils;
+import org.apache.nifi.util.Tuple;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.io.FileFilter;
 import java.util.ArrayList;
@@ -32,12 +38,6 @@ import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-
-import org.apache.nifi.provenance.RepositoryConfiguration;
-import org.apache.nifi.provenance.util.DirectoryUtils;
-import org.apache.nifi.util.Tuple;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class IndexDirectoryManager {
     private static final Logger logger = LoggerFactory.getLogger(IndexDirectoryManager.class);
@@ -119,7 +119,7 @@ public class IndexDirectoryManager {
         // An index cannot be expired if it is the latest index in the storage directory. As a result, we need to
         // separate the indexes by Storage Directory so that we can easily determine if this is the case.
         final Map<String, List<IndexLocation>> startTimeWithFileByStorageDirectory = flattenDirectoriesByTimestamp().stream()
-            .collect(Collectors.groupingBy(indexLoc -> indexLoc.getPartitionName()));
+            .collect(Collectors.groupingBy(IndexLocation::getPartitionName));
 
         // Scan through the index directories and the associated index event start time.
         // If looking at index N, we can determine the index end time by assuming that it is the same as the
@@ -135,7 +135,7 @@ public class IndexDirectoryManager {
                     continue;
                 }
 
-                final Long indexStartTime = indexLoc.getIndexStartTimestamp();
+                final long indexStartTime = indexLoc.getIndexStartTimestamp();
                 if (indexStartTime > timestamp) {
                     // If the first timestamp in the index is later than the desired timestamp,
                     // then we are done. We can do this because the list is ordered by monotonically
@@ -169,9 +169,7 @@ public class IndexDirectoryManager {
     private List<IndexLocation> flattenDirectoriesByTimestamp() {
         final List<IndexLocation> startTimeWithFile = new ArrayList<>();
         for (final Map.Entry<Long, List<IndexLocation>> entry : indexLocationByTimestamp.entrySet()) {
-            for (final IndexLocation indexLoc : entry.getValue()) {
-                startTimeWithFile.add(indexLoc);
-            }
+            startTimeWithFile.addAll(entry.getValue());
         }
 
         return startTimeWithFile;
@@ -183,7 +181,7 @@ public class IndexDirectoryManager {
         // An index cannot be expired if it is the latest index in the partition. As a result, we need to
         // separate the indexes by partition so that we can easily determine if this is the case.
         final Map<String, List<IndexLocation>> startTimeWithFileByStorageDirectory = flattenDirectoriesByTimestamp().stream()
-            .collect(Collectors.groupingBy(indexLoc -> indexLoc.getPartitionName()));
+            .collect(Collectors.groupingBy(IndexLocation::getPartitionName));
 
         for (final List<IndexLocation> locationList : startTimeWithFileByStorageDirectory.values()) {
             selected.addAll(getDirectories(startTime, endTime, locationList));
@@ -196,7 +194,7 @@ public class IndexDirectoryManager {
         // An index cannot be expired if it is the latest index in the partition. As a result, we need to
         // separate the indexes by partition so that we can easily determine if this is the case.
         final Map<String, List<IndexLocation>> startTimeWithFileByStorageDirectory = flattenDirectoriesByTimestamp().stream()
-            .collect(Collectors.groupingBy(indexLoc -> indexLoc.getPartitionName()));
+            .collect(Collectors.groupingBy(IndexLocation::getPartitionName));
 
         final List<IndexLocation> indexLocations = startTimeWithFileByStorageDirectory.get(partitionName);
         if (indexLocations == null) {
@@ -342,13 +340,12 @@ public class IndexDirectoryManager {
     }
 
     private File createIndex(final long earliestTimestamp, final String partitionName) {
-        final File storageDir = repoConfig.getStorageDirectories().entrySet().stream()
-            .filter(e -> e.getKey().equals(partitionName))
-            .map(Map.Entry::getValue)
-            .findFirst()
-            .orElseThrow(() -> new IllegalArgumentException("Invalid Partition: " + partitionName));
-        final File indexDir = new File(storageDir, "index-" + earliestTimestamp);
+        final File storageDir = repoConfig.getStorageDirectories().get(partitionName);
+        if (storageDir == null) {
+            throw new IllegalArgumentException("Invalid Partition: " + partitionName);
+        }
 
+        final File indexDir = new File(storageDir, "index-" + earliestTimestamp);
         return indexDir;
     }
 }

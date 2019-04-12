@@ -17,12 +17,6 @@
 
 package org.apache.nifi.provenance.schema;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Supplier;
-
 import org.apache.nifi.flowfile.attributes.CoreAttributes;
 import org.apache.nifi.provenance.ProvenanceEventRecord;
 import org.apache.nifi.provenance.ProvenanceEventType;
@@ -33,7 +27,18 @@ import org.apache.nifi.repository.schema.Record;
 import org.apache.nifi.repository.schema.RecordField;
 import org.apache.nifi.repository.schema.RecordSchema;
 
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
+
 public class LookupTableEventRecord implements Record {
+    private static final RecordSchema CONTENT_CLAIM_SCHEMA = new RecordSchema(LookupTableEventSchema.EVENT_SCHEMA.getField(EventFieldNames.CONTENT_CLAIM).getSubFields());
+    private static final RecordSchema PREVIOUS_CONTENT_CLAIM_SCHEMA = new RecordSchema(LookupTableEventSchema.EVENT_SCHEMA.getField(EventFieldNames.PREVIOUS_CONTENT_CLAIM).getSubFields());
+    private static final Record EMPTY_CONTENT_CLAIM_RECORD;
+    private static final NamedValue NULL_NAMED_VALUE;
+
     private final RecordSchema schema;
     private final ProvenanceEventRecord event;
     private final long eventId;
@@ -47,15 +52,24 @@ public class LookupTableEventRecord implements Record {
     private final Map<String, Integer> queueIdMap;
     private final Map<String, Integer> eventTypeMap;
 
-    public LookupTableEventRecord(final ProvenanceEventRecord event, final long eventId, final RecordSchema schema, final RecordSchema contentClaimSchema,
-        final RecordSchema previousContentClaimSchema, final long eventIdStartOffset, final long startTimeOffset, final Map<String, Integer> componentIdMap,
-        final Map<String, Integer> componentTypeMap, final Map<String, Integer> queueIdMap, final Map<String, Integer> eventTypeMap) {
+    static {
+        final Map<RecordField, Object> noValueMap = Collections.singletonMap(LookupTableEventRecordFields.NO_VALUE, EventFieldNames.NO_VALUE);
+        final List<RecordField> noValueFields = Collections.singletonList(CONTENT_CLAIM_SCHEMA.getField(EventFieldNames.NO_VALUE));
+        EMPTY_CONTENT_CLAIM_RECORD = new FieldMapRecord(noValueMap, new RecordSchema(noValueFields));
+
+        final Record record = new FieldMapRecord(noValueMap, LookupTableEventSchema.NO_VALUE_SCHEMA);
+        NULL_NAMED_VALUE = new NamedValue(EventFieldNames.NO_VALUE, record);
+    }
+
+    public LookupTableEventRecord(final ProvenanceEventRecord event, final long eventId, final RecordSchema schema, final long eventIdStartOffset,
+                                  final long startTimeOffset, final Map<String, Integer> componentIdMap,
+                                  final Map<String, Integer> componentTypeMap, final Map<String, Integer> queueIdMap, final Map<String, Integer> eventTypeMap) {
         this.schema = schema;
         this.event = event;
         this.eventId = eventId;
-        this.previousClaimRecord = createPreviousContentClaimRecord(previousContentClaimSchema, event.getPreviousContentClaimContainer(), event.getPreviousContentClaimSection(),
+        this.previousClaimRecord = createPreviousContentClaimRecord(PREVIOUS_CONTENT_CLAIM_SCHEMA, event.getPreviousContentClaimContainer(), event.getPreviousContentClaimSection(),
             event.getPreviousContentClaimIdentifier(), event.getPreviousContentClaimOffset(), event.getPreviousFileSize());
-        this.contentClaimRecord = createContentClaimRecord(contentClaimSchema, event.getContentClaimContainer(), event.getContentClaimSection(),
+        this.contentClaimRecord = createContentClaimRecord(CONTENT_CLAIM_SCHEMA, event.getContentClaimContainer(), event.getContentClaimSection(),
             event.getContentClaimIdentifier(), event.getContentClaimOffset(), event.getFileSize());
 
         this.eventIdStartOffset = eventIdStartOffset;
@@ -93,9 +107,7 @@ public class LookupTableEventRecord implements Record {
             final String identifier, final Long offset, final Long size) {
 
         if (container == null || section == null || identifier == null) {
-            final Map<RecordField, Object> lookupValues = Collections.singletonMap(LookupTableEventRecordFields.NO_VALUE, EventFieldNames.NO_VALUE);
-            final List<RecordField> noValueFields = Collections.singletonList(contentClaimSchema.getField(EventFieldNames.NO_VALUE));
-            return new FieldMapRecord(lookupValues, new RecordSchema(noValueFields));
+            return EMPTY_CONTENT_CLAIM_RECORD;
         }
 
         final Map<RecordField, Object> fieldValues = new HashMap<>();
@@ -141,21 +153,18 @@ public class LookupTableEventRecord implements Record {
 
     private NamedValue createLookupValue(final String literalValue, final Map<String, Integer> lookup) {
         if (literalValue == null) {
-            final Map<RecordField, Object> lookupValues = Collections.singletonMap(LookupTableEventRecordFields.NO_VALUE, EventFieldNames.NO_VALUE);
-            final Record record = new FieldMapRecord(lookupValues, LookupTableEventSchema.NO_VALUE_SCHEMA);
-            final NamedValue namedValue = new NamedValue(EventFieldNames.NO_VALUE, record);
-            return namedValue;
+            return NULL_NAMED_VALUE;
         }
 
         final Integer index = lookup.get(literalValue);
         if (index == null) {
-            final Map<RecordField, Object> lookupValues = Collections.singletonMap(LookupTableEventRecordFields.EXPLICIT_STRING, literalValue);
-            final Record record = new FieldMapRecord(lookupValues, LookupTableEventSchema.EXPLICIT_STRING_SCHEMA);
+            final Map<String, Object> lookupValues = Collections.singletonMap(LookupTableEventRecordFields.EXPLICIT_STRING.getFieldName(), literalValue);
+            final Record record = new FieldMapRecord(LookupTableEventSchema.EXPLICIT_STRING_SCHEMA, lookupValues, false);
             final NamedValue namedValue = new NamedValue(EventFieldNames.EXPLICIT_VALUE, record);
             return namedValue;
         } else {
-            final Map<RecordField, Object> lookupValues = Collections.singletonMap(LookupTableEventRecordFields.LOOKUP_VALUE, index);
-            final Record record = new FieldMapRecord(lookupValues, LookupTableEventSchema.LOOKUP_VALUE_SCHEMA);
+            final Map<String, Object> lookupValues = Collections.singletonMap(LookupTableEventRecordFields.LOOKUP_VALUE.getFieldName(), index);
+            final Record record = new FieldMapRecord(LookupTableEventSchema.LOOKUP_VALUE_SCHEMA, lookupValues, false);
             final NamedValue namedValue = new NamedValue(EventFieldNames.LOOKUP_VALUE, record);
             return namedValue;
         }
@@ -163,13 +172,10 @@ public class LookupTableEventRecord implements Record {
 
     private NamedValue createExplicitSameOrNoneValue(final Record newValue, final Record oldValue, final Supplier<Record> recordSupplier) {
         if (newValue == null || EventFieldNames.NO_VALUE.equals(newValue.getSchema().getFields().get(0).getFieldName())) {
-            final Map<RecordField, Object> lookupValues = Collections.singletonMap(LookupTableEventRecordFields.NO_VALUE, EventFieldNames.NO_VALUE);
-            final Record record = new FieldMapRecord(lookupValues, LookupTableEventSchema.NO_VALUE_SCHEMA);
-            final NamedValue namedValue = new NamedValue(EventFieldNames.NO_VALUE, record);
-            return namedValue;
+            return NULL_NAMED_VALUE;
         } else if (newValue.equals(oldValue)) {
-            final Map<RecordField, Object> lookupValues = Collections.singletonMap(LookupTableEventRecordFields.UNCHANGED_VALUE, EventFieldNames.UNCHANGED_VALUE);
-            final Record record = new FieldMapRecord(lookupValues, LookupTableEventSchema.UNCHANGED_VALUE_SCHEMA);
+            final Map<String, Object> lookupValues = Collections.singletonMap(LookupTableEventRecordFields.UNCHANGED_VALUE.getFieldName(), EventFieldNames.UNCHANGED_VALUE);
+            final Record record = new FieldMapRecord(LookupTableEventSchema.UNCHANGED_VALUE_SCHEMA, lookupValues, false);
             final NamedValue namedValue = new NamedValue(EventFieldNames.UNCHANGED_VALUE, record);
             return namedValue;
         }

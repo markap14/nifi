@@ -40,31 +40,35 @@ public class SchemaRecordWriter {
     private static final int CACHE_BUFFER_SIZE = 65536;
     private static final ByteArrayCache byteArrayCache = new ByteArrayCache(32, CACHE_BUFFER_SIZE);
 
-    public void writeRecord(final Record record, final OutputStream out) throws IOException {
-        // write sentinel value to indicate that there is a record. This allows the reader to then read one
-        // byte and check if -1. If so, the reader knows there are no more records. If not, then the reader
-        // knows that it should be able to continue reading.
-        out.write(INLINE_RECORD_INDICATOR);
 
+    public void writeRecord(final Record record, final OutputStream out) throws IOException {
         final byte[] buffer = byteArrayCache.checkOut();
         try {
-            writeRecordFields(record, out, buffer);
+            final DataOutputStream dos = out instanceof DataOutputStream ? (DataOutputStream) out : new DataOutputStream(out);
+            writeRecord(record, dos, buffer);
         } finally {
             byteArrayCache.checkIn(buffer);
         }
     }
 
-    private void writeRecordFields(final Record record, final OutputStream out, final byte[] buffer) throws IOException {
+    public void writeRecord(final Record record, final DataOutputStream out, final byte[] reusableBuffer) throws IOException {
+        // write sentinel value to indicate that there is a record. This allows the reader to then read one
+        // byte and check if -1. If so, the reader knows there are no more records. If not, then the reader
+        // knows that it should be able to continue reading.
+        out.write(INLINE_RECORD_INDICATOR);
+        writeRecordFields(record, out, reusableBuffer);
+    }
+
+    private void writeRecordFields(final Record record, final DataOutputStream out, final byte[] buffer) throws IOException {
         writeRecordFields(record, record.getSchema(), out, buffer);
     }
 
-    private void writeRecordFields(final Record record, final RecordSchema schema, final OutputStream out, final byte[] buffer) throws IOException {
-        final DataOutputStream dos = out instanceof DataOutputStream ? (DataOutputStream) out : new DataOutputStream(out);
+    private void writeRecordFields(final Record record, final RecordSchema schema, final DataOutputStream out, final byte[] buffer) throws IOException {
         for (final RecordField field : schema.getFields()) {
             final Object value = record.getFieldValue(field);
 
             try {
-                writeFieldRepetitionAndValue(field, value, dos, buffer);
+                writeFieldRepetitionAndValue(field, value, out, buffer);
             } catch (final Exception e) {
                 throw new IOException("Failed to write field '" + field.getFieldName() + "'", e);
             }
