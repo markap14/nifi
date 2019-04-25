@@ -23,19 +23,19 @@ import org.apache.nifi.controller.tasks.InvocationResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.TimeUnit;
-
 class ConnectableDelayedInvocation implements DelayedInvocation {
     private static final Logger logger = LoggerFactory.getLogger(ConnectableDelayedInvocation.class);
 
     private final ConnectableTask connectableTask;
     private final Connectable connectable;
     private final long boredYieldNanos;
+    private final ScheduleCalculator scheduleCalculator;
 
-    public ConnectableDelayedInvocation(final ConnectableTask connectableTask, final long boredYieldNanos) {
+    public ConnectableDelayedInvocation(final ConnectableTask connectableTask, final long boredYieldNanos, final ScheduleCalculator scheduleCalculator) {
         this.connectableTask = connectableTask;
         this.connectable = connectableTask.getConnectable();
         this.boredYieldNanos = boredYieldNanos;
+        this.scheduleCalculator = scheduleCalculator;
     }
 
 
@@ -55,9 +55,7 @@ class ConnectableDelayedInvocation implements DelayedInvocation {
     private long getNextTriggerTime(final InvocationResult invocationResult) {
         final long yieldExpiration = connectable.getYieldExpiration();
         final long now = System.nanoTime();
-
-        final long schedulingNanos = connectable.getSchedulingPeriod(TimeUnit.NANOSECONDS);
-        final long nextScheduledExecution = now + schedulingNanos;
+        final long nextScheduledExecution = scheduleCalculator.calculateNextTriggerTime();
 
         if (yieldExpiration > now) {
             return Math.max(yieldExpiration, nextScheduledExecution);

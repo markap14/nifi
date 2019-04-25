@@ -69,7 +69,7 @@ public class LifecycleState {
         return scheduled.get();
     }
 
-    void setScheduled(final boolean scheduled) {
+    public void setScheduled(final boolean scheduled) {
         this.scheduled.set(scheduled);
         mustCallOnStoppedMethods.set(true);
 

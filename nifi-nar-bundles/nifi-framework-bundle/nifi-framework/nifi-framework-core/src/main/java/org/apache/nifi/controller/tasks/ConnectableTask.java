@@ -102,7 +102,7 @@ public class ConnectableTask {
         // after one yield period, the scheduling agent could call this again when
         // yieldExpiration == currentTime, and we don't want that to still be considered 'yielded'
         // so this uses ">" instead of ">="
-        return connectable.getYieldExpiration() > System.currentTimeMillis();
+        return connectable.getYieldExpiration() > System.nanoTime();
     }
 
     /**

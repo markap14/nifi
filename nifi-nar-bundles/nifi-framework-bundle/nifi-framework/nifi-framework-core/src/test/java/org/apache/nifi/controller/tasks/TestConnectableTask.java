@@ -17,16 +17,6 @@
 
 package org.apache.nifi.controller.tasks;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.when;
-
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
-
 import org.apache.nifi.components.state.StateManagerProvider;
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.connectable.ConnectableType;
@@ -37,13 +27,24 @@ import org.apache.nifi.controller.ProcessorNode;
 import org.apache.nifi.controller.queue.FlowFileQueue;
 import org.apache.nifi.controller.repository.FlowFileEventRepository;
 import org.apache.nifi.controller.repository.RepositoryContext;
-import org.apache.nifi.controller.scheduling.RepositoryContextFactory;
 import org.apache.nifi.controller.scheduling.LifecycleState;
+import org.apache.nifi.controller.scheduling.RepositoryContextFactory;
 import org.apache.nifi.controller.scheduling.SchedulingAgent;
 import org.apache.nifi.encrypt.StringEncryptor;
+import org.apache.nifi.nar.ExtensionManager;
 import org.apache.nifi.processor.Processor;
 import org.junit.Test;
 import org.mockito.Mockito;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.when;
 
 public class TestConnectableTask {
 
@@ -51,6 +52,7 @@ public class TestConnectableTask {
     private ConnectableTask createTask(final Connectable connectable) {
         final FlowController flowController = Mockito.mock(FlowController.class);
         Mockito.when(flowController.getStateManagerProvider()).thenReturn(Mockito.mock(StateManagerProvider.class));
+        Mockito.when(flowController.getExtensionManager()).thenReturn(Mockito.mock(ExtensionManager.class));
 
         final RepositoryContext repoContext = Mockito.mock(RepositoryContext.class);
         Mockito.when(repoContext.getFlowFileEventRepository()).thenReturn(Mockito.mock(FlowFileEventRepository.class));
@@ -58,17 +60,16 @@ public class TestConnectableTask {
         final RepositoryContextFactory contextFactory = Mockito.mock(RepositoryContextFactory.class);
         Mockito.when(contextFactory.newProcessContext(Mockito.any(Connectable.class), Mockito.any(AtomicLong.class))).thenReturn(repoContext);
 
-        final LifecycleState scheduleState = new LifecycleState();
+        final LifecycleState lifecycleState = new LifecycleState();
         final StringEncryptor encryptor = Mockito.mock(StringEncryptor.class);
 
-        return new ConnectableTask(Mockito.mock(SchedulingAgent.class), connectable,
-                flowController, contextFactory, scheduleState, encryptor);
+        return new ConnectableTask(Mockito.mock(SchedulingAgent.class), connectable, flowController, contextFactory, lifecycleState, encryptor);
     }
 
     @Test
     public void testIsWorkToDo() {
         final ProcessorNode procNode = Mockito.mock(ProcessorNode.class);
-        Mockito.when(procNode.hasIncomingConnection()).thenReturn(false);
+        Mockito.when(procNode.hasNonLoopConnection()).thenReturn(false);
 
         final Processor processor = Mockito.mock(Processor.class);
         Mockito.when(procNode.getIdentifier()).thenReturn("123");
@@ -104,6 +105,8 @@ public class TestConnectableTask {
 
         when(emptyConnection.getFlowFileQueue()).thenReturn(flowFileQueue);
         when(procNode.getIncomingConnections()).thenReturn(Collections.singletonList(emptyConnection));
+        when(procNode.hasIncomingConnection()).thenReturn(true);
+        when(procNode.hasNonLoopConnection()).thenReturn(true);
 
         assertTrue(task.invoke().isYield());
 
@@ -174,9 +177,10 @@ public class TestConnectableTask {
         final FlowFileQueue nonEmptyQueue = Mockito.mock(FlowFileQueue.class);
         when(nonEmptyQueue.isActiveQueueEmpty()).thenReturn(false);
         when(incomingFromAnotherComponent.getFlowFileQueue()).thenReturn(nonEmptyQueue);
+        when(funnel.hasNonLoopConnection()).thenReturn(true );
+
         assertFalse("When a Funnel has both incoming and outgoing connections and FlowFiles to process, then it should be executed.",
                 task.invoke().isYield());
-
     }
 
 }

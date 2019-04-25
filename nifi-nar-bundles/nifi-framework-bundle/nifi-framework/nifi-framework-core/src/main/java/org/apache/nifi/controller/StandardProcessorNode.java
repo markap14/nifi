@@ -519,8 +519,7 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
             break;
         case PRIMARY_NODE_ONLY:
         case TIMER_DRIVEN: {
-            final long schedulingNanos = FormatUtils.getTimeDuration(requireNonNull(schedulingPeriod),
-                    TimeUnit.NANOSECONDS);
+            final long schedulingNanos = FormatUtils.getTimeDuration(requireNonNull(schedulingPeriod), TimeUnit.NANOSECONDS);
             if (schedulingNanos < 0) {
                 throw new IllegalArgumentException("Scheduling Period must be positive");
             }
@@ -1658,6 +1657,7 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
                 public void run() {
                     try {
                         if (scheduleState.isScheduled()) {
+                            scheduleState.setScheduled(false);
                             schedulingAgent.unschedule(StandardProcessorNode.this, scheduleState);
 
                             activateThread();

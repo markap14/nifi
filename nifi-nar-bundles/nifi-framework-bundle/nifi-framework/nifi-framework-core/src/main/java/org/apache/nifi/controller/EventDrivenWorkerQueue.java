@@ -245,7 +245,7 @@ public class EventDrivenWorkerQueue implements WorkerQueue {
                 return DelayProcessingReason.NOT_RUNNING;
             }
 
-            if (connectable.getYieldExpiration() > System.currentTimeMillis()) {
+            if (connectable.getYieldExpiration() > System.nanoTime()) {
                 return DelayProcessingReason.YIELDED;
             }
 

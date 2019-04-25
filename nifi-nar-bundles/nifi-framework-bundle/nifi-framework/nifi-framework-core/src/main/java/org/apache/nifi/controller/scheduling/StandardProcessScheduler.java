@@ -221,6 +221,7 @@ public final class StandardProcessScheduler implements ProcessScheduler {
                             ReflectionUtils.invokeMethodsWithAnnotation(OnScheduled.class, reportingTask, taskNode.getConfigurationContext());
                         }
 
+                        lifecycleState.setScheduled(true);
                         agent.schedule(taskNode, lifecycleState);
                     }
                 } catch (final Exception e) {
@@ -279,6 +280,7 @@ public final class StandardProcessScheduler implements ProcessScheduler {
                         LOG.error("", cause);
                     }
 
+                    lifecycleState.setScheduled(false);
                     agent.unschedule(taskNode, lifecycleState);
 
                     if (lifecycleState.getActiveThreadCount() == 0 && lifecycleState.mustCallOnStoppedMethods()) {
@@ -310,6 +312,7 @@ public final class StandardProcessScheduler implements ProcessScheduler {
             @Override
             public void trigger() {
                 lifecycleState.clearTerminationFlag();
+                lifecycleState.setScheduled(true);
                 getSchedulingAgent(procNode).schedule(procNode, lifecycleState);
                 future.complete(null);
             }
@@ -478,8 +481,8 @@ public final class StandardProcessScheduler implements ProcessScheduler {
         }
 
         lifecycleState.clearTerminationFlag();
-        getSchedulingAgent(connectable).schedule(connectable, lifecycleState);
         lifecycleState.setScheduled(true);
+        getSchedulingAgent(connectable).schedule(connectable, lifecycleState);
     }
 
     private synchronized void stopConnectable(final Connectable connectable) {

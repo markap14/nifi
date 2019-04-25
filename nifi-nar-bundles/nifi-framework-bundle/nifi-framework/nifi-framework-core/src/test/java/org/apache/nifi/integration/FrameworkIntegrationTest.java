@@ -49,13 +49,8 @@ import org.apache.nifi.controller.repository.WriteAheadFlowFileRepository;
 import org.apache.nifi.controller.repository.claim.ResourceClaimManager;
 import org.apache.nifi.controller.repository.claim.StandardResourceClaimManager;
 import org.apache.nifi.controller.repository.metrics.RingBufferEventRepository;
-import org.apache.nifi.controller.scheduling.RepositoryContextFactory;
-import org.apache.nifi.controller.scheduling.SchedulingAgent;
 import org.apache.nifi.controller.scheduling.StandardProcessScheduler;
-import org.apache.nifi.controller.scheduling.TimerDrivenSchedulingAgent;
 import org.apache.nifi.controller.service.ControllerServiceNode;
-import org.apache.nifi.controller.service.ControllerServiceProvider;
-import org.apache.nifi.controller.service.StandardControllerServiceProvider;
 import org.apache.nifi.controller.state.providers.local.WriteAheadLocalStateProvider;
 import org.apache.nifi.controller.status.history.ComponentStatusRepository;
 import org.apache.nifi.controller.status.history.VolatileComponentStatusRepository;
@@ -79,7 +74,6 @@ import org.apache.nifi.provenance.WriteAheadProvenanceRepository;
 import org.apache.nifi.registry.VariableRegistry;
 import org.apache.nifi.registry.flow.FlowRegistryClient;
 import org.apache.nifi.reporting.BulletinRepository;
-import org.apache.nifi.scheduling.SchedulingStrategy;
 import org.apache.nifi.util.FileUtils;
 import org.apache.nifi.util.NiFiProperties;
 import org.junit.After;
@@ -104,7 +98,7 @@ import java.util.function.BiConsumer;
 import static org.junit.Assert.assertEquals;
 
 public class FrameworkIntegrationTest {
-    //@Rule
+//    @Rule
     public Timeout globalTimeout = Timeout.seconds(20);
 
     private ResourceClaimManager resourceClaimManager;
@@ -174,13 +168,8 @@ public class FrameworkIntegrationTest {
         flowController = FlowController.createStandaloneInstance(flowFileEventRepository, nifiProperties, authorizer, auditService, encryptor, bulletinRepo,
             VariableRegistry.ENVIRONMENT_SYSTEM_REGISTRY, flowRegistryClient, extensionManager);
 
-        processScheduler = new StandardProcessScheduler(flowEngine, flowController, encryptor, flowController.getStateManagerProvider(), nifiProperties);
-
-        final RepositoryContextFactory repositoryContextFactory = flowController.getRepositoryContextFactory();
-        final SchedulingAgent timerDrivenSchedulingAgent = new TimerDrivenSchedulingAgent(flowController, flowEngine, repositoryContextFactory, encryptor, nifiProperties);
-        processScheduler.setSchedulingAgent(SchedulingStrategy.TIMER_DRIVEN, timerDrivenSchedulingAgent);
-
-        final ControllerServiceProvider controllerServiceProvider = new StandardControllerServiceProvider(flowController, processScheduler, bulletinRepo);
+        flowController.setMaxTimerDrivenThreadCount(10);
+        processScheduler = flowController.getProcessScheduler();
 
         rootProcessGroup = flowController.getFlowManager().createProcessGroup(UUID.randomUUID().toString());
         ((StandardFlowManager) flowController.getFlowManager()).setRootGroup(rootProcessGroup);
@@ -423,7 +412,7 @@ public class FrameworkIntegrationTest {
             // We will only trigger the Processor to run once per hour. So we need to ensure that
             // we don't trigger the Processor while it's yielded. So if its yield expiration is in the future,
             // wait until the yield expires.
-            while (processor.getYieldExpiration() > System.currentTimeMillis()) {
+            while (processor.getYieldExpiration() > System.nanoTime()) {
                 Thread.sleep(1L);
             }
 

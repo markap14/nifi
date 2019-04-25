@@ -24,42 +24,40 @@ import org.apache.nifi.controller.tasks.DelayedInvocation;
 import org.apache.nifi.controller.tasks.ReportingTaskWrapper;
 import org.apache.nifi.encrypt.StringEncryptor;
 import org.apache.nifi.engine.FlowEngine;
+import org.apache.nifi.scheduling.SchedulingStrategy;
 import org.apache.nifi.util.FormatUtils;
 import org.apache.nifi.util.NiFiProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.DelayQueue;
 import java.util.concurrent.Delayed;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
-public class TimerDrivenSchedulingAgent extends AbstractSchedulingAgent {
+public class TimerDrivenSchedulingAgent implements SchedulingAgent {
 
     private static final Logger logger = LoggerFactory.getLogger(TimerDrivenSchedulingAgent.class);
     private final long noWorkYieldNanos;
+    private final FlowEngine flowEngine;
 
     private final FlowController flowController;
     private final RepositoryContextFactory contextFactory;
     private final StringEncryptor encryptor;
 
     private volatile String adminYieldDuration = "1 sec";
-    private final DelayQueue<DelayedConnectableTask> taskQueue = new DelayQueue<DelayedConnectableTask>();
-    private final AtomicBoolean tasksInitialized = new AtomicBoolean(false);
+    private final DelayQueue<DelayedTriggerTask> taskQueue = new DelayQueue<>();
 
     private int maxThreads = 0;
 
     // TODO: Ensure this is done: Must separate out any other tasks into a different executor because this will use all of the threads in the Timer-Driven thread pool.
-    // TODO: Review Lifecycle management of processors
 
     public TimerDrivenSchedulingAgent(final FlowController flowController, final FlowEngine flowEngine, final RepositoryContextFactory contextFactory,
             final StringEncryptor encryptor, final NiFiProperties nifiProperties) {
-        super(flowEngine);
+        this.flowEngine = flowEngine;
         this.flowController = flowController;
         this.contextFactory = contextFactory;
         this.encryptor = encryptor;
@@ -78,32 +76,41 @@ public class TimerDrivenSchedulingAgent extends AbstractSchedulingAgent {
     }
 
     @Override
-    public void doSchedule(final ReportingTaskNode taskNode, final LifecycleState lifecycleState) {
-        // TODO: IMPLEMENT THIS.
+    public void schedule(final ReportingTaskNode taskNode, final LifecycleState lifecycleState) {
+        final ReportingTaskWrapper reportingTaskWrapper = new ReportingTaskWrapper(taskNode, lifecycleState, flowController.getExtensionManager());
 
-        final Runnable reportingTaskWrapper = new ReportingTaskWrapper(taskNode, lifecycleState, flowController.getExtensionManager());
-        final long schedulingNanos = taskNode.getSchedulingPeriod(TimeUnit.NANOSECONDS);
+        final ScheduleCalculator scheduleCalculator = createScheduleCalculator(taskNode, taskNode.getSchedulingStrategy(), taskNode.getSchedulingPeriod(),
+            taskNode.getSchedulingPeriod(TimeUnit.NANOSECONDS));
 
-        final ScheduledFuture<?> future = flowEngine.scheduleWithFixedDelay(reportingTaskWrapper, 0L, schedulingNanos, TimeUnit.NANOSECONDS);
-        final List<ScheduledFuture<?>> futures = new ArrayList<>(1);
-        futures.add(future);
-//        scheduleState.setFutures(futures);
+        final ReportingTaskDelayedInvocation invocation = new ReportingTaskDelayedInvocation(reportingTaskWrapper, scheduleCalculator);
+        final DelayedTriggerTask task = new DelayedTriggerTask(taskNode, invocation, scheduleCalculator.getInitialTriggerTime());
 
+        final boolean added = taskQueue.add(task);
+        if (!added) {
+            // Should never happen because the queue is unbounded.
+            throw new IllegalStateException("Failed to schedule " + task + " to run because was unable to add its task to the queue");
+        }
+
+        lifecycleState.setComponentTasks(Collections.singleton(task));
         logger.info("{} started.", taskNode.getReportingTask());
     }
 
     @Override
-    public void doSchedule(final Connectable connectable, final LifecycleState lifecycleState) {
+    public void schedule(final Connectable connectable, final LifecycleState lifecycleState) {
         final ConnectableTask connectableTask = new ConnectableTask(this, connectable, flowController, contextFactory, lifecycleState, encryptor);
+
+        final ScheduleCalculator scheduleCalculator = createScheduleCalculator(connectable, connectable.getSchedulingStrategy(), connectable.getSchedulingPeriod(),
+            connectable.getSchedulingPeriod(TimeUnit.NANOSECONDS));
 
         final Set<ComponentTask> componentTasks = new HashSet<>();
         for (int i = 0; i < connectable.getMaxConcurrentTasks(); i++) {
-            final ConnectableDelayedInvocation invocation = new ConnectableDelayedInvocation(connectableTask, noWorkYieldNanos);
-            final DelayedConnectableTask task = new DelayedConnectableTask(connectable, invocation);
+            final ConnectableDelayedInvocation invocation = new ConnectableDelayedInvocation(connectableTask, noWorkYieldNanos, scheduleCalculator);
+            final DelayedTriggerTask task = new DelayedTriggerTask(connectable, invocation, scheduleCalculator.getInitialTriggerTime());
             componentTasks.add(task);
 
             final boolean added = taskQueue.add(task);
             if (!added) {
+                // Should never happen because the queue is unbounded.
                 throw new IllegalStateException("Failed to schedule " + connectable + " to run because was unable to add its task to the queue");
             }
         }
@@ -112,9 +119,25 @@ public class TimerDrivenSchedulingAgent extends AbstractSchedulingAgent {
         logger.info("Scheduled {} to run with {} threads", connectable, connectable.getMaxConcurrentTasks());
     }
 
+    private ScheduleCalculator createScheduleCalculator(final Object component, final SchedulingStrategy schedulingStrategy, final String schedulingPeriod, final long schedulingNanos) {
+        switch (schedulingStrategy) {
+            case TIMER_DRIVEN:
+            case PRIMARY_NODE_ONLY:
+                return new PeriodicScheduleCalculator(0L, schedulingNanos);
+            case CRON_DRIVEN:
+                try {
+                    return new CronScheduleCalculator(schedulingPeriod);
+                } catch (final Exception pe) {
+                    throw new IllegalStateException("Cannot schedule " + component + " to run because its scheduling period is not valid");
+                }
+        }
+
+        return null;
+    }
+
 
     @Override
-    public void doUnschedule(final Connectable connectable, final LifecycleState scheduleState) {
+    public void unschedule(final Connectable connectable, final LifecycleState scheduleState) {
         // stop scheduling to run but do not interrupt currently running tasks.
         scheduleState.getComponentTasks().forEach(ComponentTask::cancel);
 
@@ -122,7 +145,7 @@ public class TimerDrivenSchedulingAgent extends AbstractSchedulingAgent {
     }
 
     @Override
-    public void doUnschedule(final ReportingTaskNode taskNode, final LifecycleState scheduleState) {
+    public void unschedule(final ReportingTaskNode taskNode, final LifecycleState scheduleState) {
         // stop scheduling to run but do not interrupt currently running tasks.
         scheduleState.getComponentTasks().forEach(ComponentTask::cancel);
 
@@ -180,16 +203,26 @@ public class TimerDrivenSchedulingAgent extends AbstractSchedulingAgent {
     }
 
 
-    private class DelayedConnectableTask<T> implements Delayed, ComponentTask {
-        private volatile long nextTriggerTime = 0L;
+    private class DelayedTriggerTask implements Delayed, ComponentTask {
+        private volatile long nextTriggerTime;
         private volatile boolean canceled = false;
 
         private final Object component;
         private final DelayedInvocation invocation;
+        private final AtomicLong invocationCount;
+        private final long maxInvocationCount;
 
-        public DelayedConnectableTask(final Object component, final DelayedInvocation invocation) {
+        public DelayedTriggerTask(final Object component, final DelayedInvocation invocation, final long firstTriggerTimeNanos) {
+            this(component, invocation, firstTriggerTimeNanos, new AtomicLong(0L), -1L);
+        }
+
+        public DelayedTriggerTask(final Object component, final DelayedInvocation invocation, final long firstTriggerTimeNanos, final AtomicLong invocationCounter, final long maxInvocationCount) {
             this.component = component;
             this.invocation = invocation;
+            this.nextTriggerTime = firstTriggerTimeNanos;
+
+            this.invocationCount = invocationCounter;
+            this.maxInvocationCount = maxInvocationCount;
         }
 
         @Override
@@ -198,7 +231,7 @@ public class TimerDrivenSchedulingAgent extends AbstractSchedulingAgent {
         }
 
         public boolean isCanceled() {
-            return canceled;
+            return canceled || (maxInvocationCount > 0 && invocationCount.get() >= maxInvocationCount);
         }
 
         @Override
@@ -210,14 +243,25 @@ public class TimerDrivenSchedulingAgent extends AbstractSchedulingAgent {
 
         @Override
         public int compareTo(final Delayed delayed) {
-            if (delayed instanceof DelayedConnectableTask) {
-                final DelayedConnectableTask other = (DelayedConnectableTask) delayed;
+            if (delayed instanceof DelayedTriggerTask) {
+                final DelayedTriggerTask other = (DelayedTriggerTask) delayed;
                 return Long.compare(this.nextTriggerTime, other.nextTriggerTime);
             }
+
             return 0;
         }
 
         public void invoke() {
+            if (maxInvocationCount > 0L ) {
+                final long invocations = invocationCount.incrementAndGet();
+                if (invocations > maxInvocationCount) {
+                    logger.debug("Invocation triggered for {} but will not trigger component because it's been invoked {} times, which meets or exceeds its max invocations of {}",
+                        component, invocations, maxInvocationCount);
+
+                    return;
+                }
+            }
+
             this.nextTriggerTime = invocation.invoke();
         }
 
@@ -243,7 +287,7 @@ public class TimerDrivenSchedulingAgent extends AbstractSchedulingAgent {
         public void run() {
             while (!flowEngine.isShutdown()) {
                 try {
-                    final DelayedConnectableTask task = taskQueue.poll(1, TimeUnit.SECONDS);
+                    final DelayedTriggerTask task = taskQueue.poll(1, TimeUnit.SECONDS);
                     if (task == null) {
                         logger.debug("No task to run");
                         continue;

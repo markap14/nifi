@@ -37,6 +37,10 @@ public class ReportingTaskWrapper implements Runnable {
         this.extensionManager = extensionManager;
     }
 
+    public ReportingTaskNode getReportingTaskNode() {
+        return taskNode;
+    }
+
     public synchronized void run() {
         lifecycleState.incrementActiveThreadCount(null);
         try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, taskNode.getReportingTask().getClass(), taskNode.getIdentifier())) {

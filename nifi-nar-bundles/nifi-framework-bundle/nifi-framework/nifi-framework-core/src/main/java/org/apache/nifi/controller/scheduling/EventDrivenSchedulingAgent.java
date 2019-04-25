@@ -55,7 +55,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class EventDrivenSchedulingAgent extends AbstractSchedulingAgent {
+public class EventDrivenSchedulingAgent implements SchedulingAgent {
 
     private static final Logger logger = LoggerFactory.getLogger(EventDrivenSchedulingAgent.class);
 
@@ -67,6 +67,7 @@ public class EventDrivenSchedulingAgent extends AbstractSchedulingAgent {
     private final AtomicInteger activeThreadCount = new AtomicInteger(0);
     private final StringEncryptor encryptor;
     private final ExtensionManager extensionManager;
+    private final FlowEngine flowEngine;
 
     private volatile String adminYieldDuration = "1 sec";
 
@@ -76,7 +77,7 @@ public class EventDrivenSchedulingAgent extends AbstractSchedulingAgent {
     public EventDrivenSchedulingAgent(final FlowEngine flowEngine, final ControllerServiceProvider serviceProvider, final StateManagerProvider stateManagerProvider,
                                       final EventDrivenWorkerQueue workerQueue, final RepositoryContextFactory contextFactory, final int maxThreadCount,
                                       final StringEncryptor encryptor, final ExtensionManager extensionManager) {
-        super(flowEngine);
+        this.flowEngine = flowEngine;
         this.serviceProvider = serviceProvider;
         this.stateManagerProvider = stateManagerProvider;
         this.workerQueue = workerQueue;
@@ -105,24 +106,24 @@ public class EventDrivenSchedulingAgent extends AbstractSchedulingAgent {
     }
 
     @Override
-    public void doSchedule(final ReportingTaskNode taskNode, LifecycleState scheduleState) {
+    public void schedule(final ReportingTaskNode taskNode, LifecycleState scheduleState) {
         throw new UnsupportedOperationException("ReportingTasks cannot be scheduled in Event-Driven Mode");
     }
 
     @Override
-    public void doUnschedule(ReportingTaskNode taskNode, LifecycleState scheduleState) {
+    public void unschedule(ReportingTaskNode taskNode, LifecycleState scheduleState) {
         throw new UnsupportedOperationException("ReportingTasks cannot be scheduled in Event-Driven Mode");
     }
 
     @Override
-    public void doSchedule(final Connectable connectable, final LifecycleState scheduleState) {
+    public void schedule(final Connectable connectable, final LifecycleState scheduleState) {
         workerQueue.resumeWork(connectable);
         logger.info("Scheduled {} to run in Event-Driven mode", connectable);
         scheduleStates.put(connectable, scheduleState);
     }
 
     @Override
-    public void doUnschedule(final Connectable connectable, final LifecycleState scheduleState) {
+    public void unschedule(final Connectable connectable, final LifecycleState scheduleState) {
         workerQueue.suspendWork(connectable);
         logger.info("Stopped scheduling {} to run", connectable);
     }
