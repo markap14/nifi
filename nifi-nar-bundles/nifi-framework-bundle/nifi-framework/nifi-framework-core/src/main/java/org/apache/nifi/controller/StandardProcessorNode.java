@@ -607,8 +607,8 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
 
     @Override
     public void yield(final long period, final TimeUnit timeUnit) {
-        final long yieldMillis = TimeUnit.MILLISECONDS.convert(period, timeUnit);
-        yieldExpiration.set(Math.max(yieldExpiration.get(), System.currentTimeMillis() + yieldMillis));
+        final long yieldNanos = TimeUnit.NANOSECONDS.convert(period, timeUnit);
+        yieldExpiration.set(Math.max(yieldExpiration.get(), System.nanoTime() + yieldNanos));
 
         processScheduler.yield(this);
     }

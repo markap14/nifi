@@ -16,23 +16,22 @@
  */
 package org.apache.nifi.controller.scheduling;
 
+import org.apache.nifi.annotation.lifecycle.OnStopped;
+import org.apache.nifi.controller.repository.ActiveProcessSessionFactory;
+import org.apache.nifi.processor.exception.TerminatedTaskException;
+
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import org.apache.nifi.annotation.lifecycle.OnStopped;
-import org.apache.nifi.controller.repository.ActiveProcessSessionFactory;
-import org.apache.nifi.processor.exception.TerminatedTaskException;
 
 public class LifecycleState {
 
     private final AtomicInteger activeThreadCount = new AtomicInteger(0);
     private final AtomicBoolean scheduled = new AtomicBoolean(false);
-    private final Set<ScheduledFuture<?>> futures = new HashSet<>();
+    private final Set<ComponentTask> componentTasks = new HashSet<>();
     private final AtomicBoolean mustCallOnStoppedMethods = new AtomicBoolean(false);
     private volatile long lastStopTime = -1;
     private volatile boolean terminated = false;
@@ -85,8 +84,7 @@ public class LifecycleState {
 
     @Override
     public String toString() {
-        return new StringBuilder().append("activeThreads:").append(activeThreadCount.get()).append("; ")
-                .append("scheduled:").append(scheduled.get()).append("; ").toString();
+        return "LifecycleState[activeThreads=" + activeThreadCount.get() + ", scheduled=" + scheduled.get() + "]";
     }
 
     /**
@@ -101,22 +99,17 @@ public class LifecycleState {
     }
 
     /**
-     * Establishes the list of relevant futures for this processor. Replaces any previously held futures.
+     * Establishes the list of relevant componentTasks for this processor. Replaces any previously held componentTasks.
      *
-     * @param newFutures futures
+     * @param tasks the updated collection of component tasks
      */
-    public synchronized void setFutures(final Collection<ScheduledFuture<?>> newFutures) {
-        futures.clear();
-        futures.addAll(newFutures);
+    public synchronized void setComponentTasks(final Collection<ComponentTask> tasks) {
+        componentTasks.clear();
+        componentTasks.addAll(tasks);
     }
 
-    public synchronized void replaceFuture(final ScheduledFuture<?> oldFuture, final ScheduledFuture<?> newFuture) {
-        futures.remove(oldFuture);
-        futures.add(newFuture);
-    }
-
-    public synchronized Set<ScheduledFuture<?>> getFutures() {
-        return Collections.unmodifiableSet(futures);
+    public synchronized Set<ComponentTask> getComponentTasks() {
+        return Collections.unmodifiableSet(componentTasks);
     }
 
     public synchronized void terminate() {

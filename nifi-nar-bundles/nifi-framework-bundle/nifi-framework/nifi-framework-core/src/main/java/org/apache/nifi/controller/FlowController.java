@@ -200,6 +200,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -234,6 +235,7 @@ public class FlowController implements ReportingTaskProvider, Authorizable, Node
     private final AtomicInteger maxEventDrivenThreads;
     private final AtomicReference<FlowEngine> timerDrivenEngineRef;
     private final AtomicReference<FlowEngine> eventDrivenEngineRef;
+    private final AtomicReference<FlowEngine> lifecycleThreadPoolRef;
     private final EventDrivenSchedulingAgent eventDrivenSchedulingAgent;
 
     private final ContentRepository contentRepository;
@@ -483,7 +485,9 @@ public class FlowController implements ReportingTaskProvider, Authorizable, Node
             throw new RuntimeException(e);
         }
 
-        processScheduler = new StandardProcessScheduler(timerDrivenEngineRef.get(), this, encryptor, stateManagerProvider, this.nifiProperties);
+        final FlowEngine lifecycleThreadPool = new FlowEngine(8, "Component Lifecycle Thread");
+        lifecycleThreadPoolRef = new AtomicReference<>(lifecycleThreadPool);
+        processScheduler = new StandardProcessScheduler(lifecycleThreadPool, this, encryptor, stateManagerProvider, this.nifiProperties);
         eventDrivenWorkerQueue = new EventDrivenWorkerQueue(false, false, processScheduler);
 
         repositoryContextFactory = new RepositoryContextFactory(contentRepository, flowFileRepository, flowFileEventRepository, counterRepositoryRef.get(), provenanceRepository);
@@ -495,6 +499,7 @@ public class FlowController implements ReportingTaskProvider, Authorizable, Node
             eventDrivenEngineRef.get(), controllerServiceProvider, stateManagerProvider, eventDrivenWorkerQueue, repositoryContextFactory, maxEventDrivenThreads.get(), encryptor, extensionManager);
         processScheduler.setSchedulingAgent(SchedulingStrategy.EVENT_DRIVEN, eventDrivenSchedulingAgent);
 
+        // TODO: Account for CRON scheduling
         final QuartzSchedulingAgent quartzSchedulingAgent = new QuartzSchedulingAgent(this, timerDrivenEngineRef.get(), repositoryContextFactory, encryptor);
         final TimerDrivenSchedulingAgent timerDrivenAgent = new TimerDrivenSchedulingAgent(this, timerDrivenEngineRef.get(), repositoryContextFactory, encryptor, this.nifiProperties);
         processScheduler.setSchedulingAgent(SchedulingStrategy.TIMER_DRIVEN, timerDrivenAgent);
@@ -585,7 +590,7 @@ public class FlowController implements ReportingTaskProvider, Authorizable, Node
 
         eventAccess = new StandardEventAccess(this, flowFileEventRepository);
         componentStatusRepository = createComponentStatusRepository();
-        timerDrivenEngineRef.get().scheduleWithFixedDelay(new Runnable() {
+        lifecycleThreadPoolRef.get().scheduleWithFixedDelay(new Runnable() {
             @Override
             public void run() {
                 try {
@@ -799,7 +804,7 @@ public class FlowController implements ReportingTaskProvider, Authorizable, Node
 
             notifyComponentsConfigurationRestored();
 
-            timerDrivenEngineRef.get().scheduleWithFixedDelay(new Runnable() {
+            lifecycleThreadPoolRef.get().scheduleWithFixedDelay(new Runnable() {
                 @Override
                 public void run() {
                     try {
@@ -813,7 +818,7 @@ public class FlowController implements ReportingTaskProvider, Authorizable, Node
                 }
             }, 0L, 30L, TimeUnit.SECONDS);
 
-            timerDrivenEngineRef.get().scheduleWithFixedDelay(new Runnable() {
+            lifecycleThreadPoolRef.get().scheduleWithFixedDelay(new Runnable() {
                 @Override
                 public void run() {
                     final ProcessGroup rootGroup = flowManager.getRootGroup();
@@ -1132,10 +1137,12 @@ public class FlowController implements ReportingTaskProvider, Authorizable, Node
             if (kill) {
                 this.timerDrivenEngineRef.get().shutdownNow();
                 this.eventDrivenEngineRef.get().shutdownNow();
+                this.lifecycleThreadPoolRef.get().shutdownNow();
                 LOG.info("Initiated immediate shutdown of flow controller...");
             } else {
                 this.timerDrivenEngineRef.get().shutdown();
                 this.eventDrivenEngineRef.get().shutdown();
+                this.lifecycleThreadPoolRef.get().shutdown();
                 LOG.info("Initiated graceful shutdown of flow controller...waiting up to " + gracefulShutdownSeconds + " seconds");
             }
 
@@ -1176,6 +1183,7 @@ public class FlowController implements ReportingTaskProvider, Authorizable, Node
             try {
                 this.timerDrivenEngineRef.get().awaitTermination(gracefulShutdownSeconds / 2, TimeUnit.SECONDS);
                 this.eventDrivenEngineRef.get().awaitTermination(gracefulShutdownSeconds / 2, TimeUnit.SECONDS);
+                this.lifecycleThreadPoolRef.get().awaitTermination(gracefulShutdownSeconds / 2, TimeUnit.SECONDS);
             } catch (final InterruptedException ie) {
                 LOG.info("Interrupted while waiting for controller termination.");
             }
@@ -1186,7 +1194,7 @@ public class FlowController implements ReportingTaskProvider, Authorizable, Node
                 LOG.warn("Unable to shut down FlowFileRepository due to {}", new Object[]{t});
             }
 
-            if (this.timerDrivenEngineRef.get().isTerminated() && eventDrivenEngineRef.get().isTerminated()) {
+            if (this.timerDrivenEngineRef.get().isTerminated() && eventDrivenEngineRef.get().isTerminated() && lifecycleThreadPoolRef.get().isTerminated()) {
                 LOG.info("Controller has been terminated successfully.");
             } else {
                 LOG.warn("Controller hasn't terminated properly.  There exists an uninterruptable thread that "
@@ -1331,6 +1339,7 @@ public class FlowController implements ReportingTaskProvider, Authorizable, Node
         writeLock.lock();
         try {
             setMaxThreadCount(maxThreadCount, this.timerDrivenEngineRef.get(), this.maxTimerDrivenThreads);
+            processScheduler.setMaxThreadCount(SchedulingStrategy.TIMER_DRIVEN, maxThreadCount);
         } finally {
             writeLock.unlock("setMaxTimerDrivenThreadCount");
         }

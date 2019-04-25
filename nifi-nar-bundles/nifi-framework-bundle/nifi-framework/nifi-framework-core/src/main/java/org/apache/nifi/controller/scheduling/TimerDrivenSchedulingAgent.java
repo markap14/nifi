@@ -20,7 +20,7 @@ import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.controller.FlowController;
 import org.apache.nifi.controller.ReportingTaskNode;
 import org.apache.nifi.controller.tasks.ConnectableTask;
-import org.apache.nifi.controller.tasks.InvocationResult;
+import org.apache.nifi.controller.tasks.DelayedInvocation;
 import org.apache.nifi.controller.tasks.ReportingTaskWrapper;
 import org.apache.nifi.encrypt.StringEncryptor;
 import org.apache.nifi.engine.FlowEngine;
@@ -30,10 +30,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.DelayQueue;
+import java.util.concurrent.Delayed;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class TimerDrivenSchedulingAgent extends AbstractSchedulingAgent {
 
@@ -45,6 +49,13 @@ public class TimerDrivenSchedulingAgent extends AbstractSchedulingAgent {
     private final StringEncryptor encryptor;
 
     private volatile String adminYieldDuration = "1 sec";
+    private final DelayQueue<DelayedConnectableTask> taskQueue = new DelayQueue<DelayedConnectableTask>();
+    private final AtomicBoolean tasksInitialized = new AtomicBoolean(false);
+
+    private int maxThreads = 0;
+
+    // TODO: Ensure this is done: Must separate out any other tasks into a different executor because this will use all of the threads in the Timer-Driven thread pool.
+    // TODO: Review Lifecycle management of processors
 
     public TimerDrivenSchedulingAgent(final FlowController flowController, final FlowEngine flowEngine, final RepositoryContextFactory contextFactory,
             final StringEncryptor encryptor, final NiFiProperties nifiProperties) {
@@ -67,131 +78,53 @@ public class TimerDrivenSchedulingAgent extends AbstractSchedulingAgent {
     }
 
     @Override
-    public void doSchedule(final ReportingTaskNode taskNode, final LifecycleState scheduleState) {
-        final Runnable reportingTaskWrapper = new ReportingTaskWrapper(taskNode, scheduleState, flowController.getExtensionManager());
+    public void doSchedule(final ReportingTaskNode taskNode, final LifecycleState lifecycleState) {
+        // TODO: IMPLEMENT THIS.
+
+        final Runnable reportingTaskWrapper = new ReportingTaskWrapper(taskNode, lifecycleState, flowController.getExtensionManager());
         final long schedulingNanos = taskNode.getSchedulingPeriod(TimeUnit.NANOSECONDS);
 
         final ScheduledFuture<?> future = flowEngine.scheduleWithFixedDelay(reportingTaskWrapper, 0L, schedulingNanos, TimeUnit.NANOSECONDS);
         final List<ScheduledFuture<?>> futures = new ArrayList<>(1);
         futures.add(future);
-        scheduleState.setFutures(futures);
+//        scheduleState.setFutures(futures);
 
         logger.info("{} started.", taskNode.getReportingTask());
     }
 
     @Override
-    public void doSchedule(final Connectable connectable, final LifecycleState scheduleState) {
-        final List<ScheduledFuture<?>> futures = new ArrayList<>();
-        final ConnectableTask connectableTask = new ConnectableTask(this, connectable, flowController, contextFactory, scheduleState, encryptor);
+    public void doSchedule(final Connectable connectable, final LifecycleState lifecycleState) {
+        final ConnectableTask connectableTask = new ConnectableTask(this, connectable, flowController, contextFactory, lifecycleState, encryptor);
 
+        final Set<ComponentTask> componentTasks = new HashSet<>();
         for (int i = 0; i < connectable.getMaxConcurrentTasks(); i++) {
-            // Determine the task to run and create it.
-            final AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>();
+            final ConnectableDelayedInvocation invocation = new ConnectableDelayedInvocation(connectableTask, noWorkYieldNanos);
+            final DelayedConnectableTask task = new DelayedConnectableTask(connectable, invocation);
+            componentTasks.add(task);
 
-            final Runnable trigger = createTrigger(connectableTask, scheduleState, futureRef);
-
-            // Schedule the task to run
-            final ScheduledFuture<?> future = flowEngine.scheduleWithFixedDelay(trigger, 0L,
-                connectable.getSchedulingPeriod(TimeUnit.NANOSECONDS), TimeUnit.NANOSECONDS);
-
-            // now that we have the future, set the atomic reference so that if the component is yielded we
-            // are able to then cancel this future.
-            futureRef.set(future);
-
-            // Keep track of the futures so that we can update the ScheduleState.
-            futures.add(future);
+            final boolean added = taskQueue.add(task);
+            if (!added) {
+                throw new IllegalStateException("Failed to schedule " + connectable + " to run because was unable to add its task to the queue");
+            }
         }
 
-        scheduleState.setFutures(futures);
+        lifecycleState.setComponentTasks(componentTasks);
         logger.info("Scheduled {} to run with {} threads", connectable, connectable.getMaxConcurrentTasks());
     }
 
 
-    private Runnable createTrigger(final ConnectableTask connectableTask, final LifecycleState scheduleState, final AtomicReference<ScheduledFuture<?>> futureRef) {
-        final Connectable connectable = connectableTask.getConnectable();
-        final Runnable yieldDetectionRunnable = new Runnable() {
-            @Override
-            public void run() {
-                // Call the task. It will return a boolean indicating whether or not we should yield
-                // based on a lack of work for to do for the component.
-                final InvocationResult invocationResult = connectableTask.invoke();
-                if (invocationResult.isYield()) {
-                    logger.debug("Yielding {} due to {}", connectable, invocationResult.getYieldExplanation());
-                }
-
-                // If the component is yielded, cancel its future and re-submit it to run again
-                // after the yield has expired.
-                final long newYieldExpiration = connectable.getYieldExpiration();
-                final long now = System.currentTimeMillis();
-                if (newYieldExpiration > now) {
-                    final long yieldMillis = newYieldExpiration - now;
-                    final long scheduleMillis = connectable.getSchedulingPeriod(TimeUnit.MILLISECONDS);
-                    final ScheduledFuture<?> scheduledFuture = futureRef.get();
-                    if (scheduledFuture == null) {
-                        return;
-                    }
-
-                    // If we are able to cancel the future, create a new one and update the ScheduleState so that it has
-                    // an accurate accounting of which futures are outstanding; we must then also update the futureRef
-                    // so that we can do this again the next time that the component is yielded.
-                    if (scheduledFuture.cancel(false)) {
-                        final long yieldNanos = Math.max(TimeUnit.MILLISECONDS.toNanos(scheduleMillis), TimeUnit.MILLISECONDS.toNanos(yieldMillis));
-
-                        synchronized (scheduleState) {
-                            if (scheduleState.isScheduled()) {
-                                final long schedulingNanos = connectable.getSchedulingPeriod(TimeUnit.NANOSECONDS);
-                                final ScheduledFuture<?> newFuture = flowEngine.scheduleWithFixedDelay(this, yieldNanos, schedulingNanos, TimeUnit.NANOSECONDS);
-
-                                scheduleState.replaceFuture(scheduledFuture, newFuture);
-                                futureRef.set(newFuture);
-                            }
-                        }
-                    }
-                } else if (noWorkYieldNanos > 0L && invocationResult.isYield()) {
-                    // Component itself didn't yield but there was no work to do, so the framework will choose
-                    // to yield the component automatically for a short period of time.
-                    final ScheduledFuture<?> scheduledFuture = futureRef.get();
-                    if (scheduledFuture == null) {
-                        return;
-                    }
-
-                    // If we are able to cancel the future, create a new one and update the ScheduleState so that it has
-                    // an accurate accounting of which futures are outstanding; we must then also update the futureRef
-                    // so that we can do this again the next time that the component is yielded.
-                    if (scheduledFuture.cancel(false)) {
-                        synchronized (scheduleState) {
-                            if (scheduleState.isScheduled()) {
-                                final ScheduledFuture<?> newFuture = flowEngine.scheduleWithFixedDelay(this, noWorkYieldNanos,
-                                    connectable.getSchedulingPeriod(TimeUnit.NANOSECONDS), TimeUnit.NANOSECONDS);
-
-                                scheduleState.replaceFuture(scheduledFuture, newFuture);
-                                futureRef.set(newFuture);
-                            }
-                        }
-                    }
-                }
-            }
-        };
-
-        return yieldDetectionRunnable;
-    }
-
     @Override
     public void doUnschedule(final Connectable connectable, final LifecycleState scheduleState) {
-        for (final ScheduledFuture<?> future : scheduleState.getFutures()) {
-            // stop scheduling to run but do not interrupt currently running tasks.
-            future.cancel(false);
-        }
+        // stop scheduling to run but do not interrupt currently running tasks.
+        scheduleState.getComponentTasks().forEach(ComponentTask::cancel);
 
         logger.info("Stopped scheduling {} to run", connectable);
     }
 
     @Override
     public void doUnschedule(final ReportingTaskNode taskNode, final LifecycleState scheduleState) {
-        for (final ScheduledFuture<?> future : scheduleState.getFutures()) {
-            // stop scheduling to run but do not interrupt currently running tasks.
-            future.cancel(false);
-        }
+        // stop scheduling to run but do not interrupt currently running tasks.
+        scheduleState.getComponentTasks().forEach(ComponentTask::cancel);
 
         logger.info("Stopped scheduling {} to run", taskNode.getReportingTask());
     }
@@ -216,7 +149,15 @@ public class TimerDrivenSchedulingAgent extends AbstractSchedulingAgent {
     }
 
     @Override
-    public void setMaxThreadCount(final int maxThreads) {
+    public synchronized void setMaxThreadCount(final int maxThreadCount) {
+        if (maxThreadCount > this.maxThreads) {
+            final int added = maxThreadCount - this.maxThreads;
+            for (int i=0; i < added; i++) {
+                addRunComponentTask();
+            }
+        }
+
+        this.maxThreads = maxThreadCount;
     }
 
     @Override
@@ -227,5 +168,106 @@ public class TimerDrivenSchedulingAgent extends AbstractSchedulingAgent {
         }
 
         flowEngine.setCorePoolSize(corePoolSize + toAdd);
+
+        for (int i=0; i < toAdd; i++) {
+            addRunComponentTask();
+        }
+    }
+
+    private void addRunComponentTask() {
+        final RunComponentTask task = new RunComponentTask();
+        flowEngine.submit(task);
+    }
+
+
+    private class DelayedConnectableTask<T> implements Delayed, ComponentTask {
+        private volatile long nextTriggerTime = 0L;
+        private volatile boolean canceled = false;
+
+        private final Object component;
+        private final DelayedInvocation invocation;
+
+        public DelayedConnectableTask(final Object component, final DelayedInvocation invocation) {
+            this.component = component;
+            this.invocation = invocation;
+        }
+
+        @Override
+        public void cancel() {
+            canceled = true;
+        }
+
+        public boolean isCanceled() {
+            return canceled;
+        }
+
+        @Override
+        public long getDelay(final TimeUnit unit) {
+            final long now = System.nanoTime();
+            final long delayNanos = nextTriggerTime - now;
+            return unit.convert(delayNanos, TimeUnit.NANOSECONDS);
+        }
+
+        @Override
+        public int compareTo(final Delayed delayed) {
+            if (delayed instanceof DelayedConnectableTask) {
+                final DelayedConnectableTask other = (DelayedConnectableTask) delayed;
+                return Long.compare(this.nextTriggerTime, other.nextTriggerTime);
+            }
+            return 0;
+        }
+
+        public void invoke() {
+            this.nextTriggerTime = invocation.invoke();
+        }
+
+        @Override
+        public String toString() {
+            return "DelayedComponentTask[component=" + component + ", Delay=" + getDelay(TimeUnit.NANOSECONDS) + " ns]";
+        }
+
+        @Override
+        public int hashCode() {
+            return 17 + 13 * component.hashCode();
+        }
+
+        @Override
+        public boolean equals(final Object obj) {
+            return obj == this;
+        }
+    }
+
+
+    private class RunComponentTask implements Runnable {
+        @Override
+        public void run() {
+            while (!flowEngine.isShutdown()) {
+                try {
+                    final DelayedConnectableTask task = taskQueue.poll(1, TimeUnit.SECONDS);
+                    if (task == null) {
+                        logger.debug("No task to run");
+                        continue;
+                    }
+
+                    if (task.isCanceled()) {
+                        logger.debug("Will not invoke canceled task {}", task);
+                        continue;
+                    }
+
+                    logger.debug("Triggering task {}", task);
+                    task.invoke();
+
+                    final boolean added = taskQueue.offer(task);
+                    if (!added) {
+                        logger.error("Failed to add component task {} to task queue", task);
+                    }
+                } catch (final InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return;
+                } catch (final Throwable t) {
+                    logger.error("Failed to trigger component task", t);
+                }
+            }
+        }
     }
 }

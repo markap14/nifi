@@ -14,38 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nifi.controller.tasks;
 
-public interface InvocationResult {
-    boolean isYield();
-
-    String getYieldExplanation();
-
-
-    InvocationResult DO_NOT_YIELD = new InvocationResult() {
-        @Override
-        public boolean isYield() {
-            return false;
-        }
-
-        @Override
-        public String getYieldExplanation() {
-            return null;
-        }
-    };
-
-    static InvocationResult yield(final String explanation) {
-        return new InvocationResult() {
-            @Override
-            public boolean isYield() {
-                return true;
-            }
-
-            @Override
-            public String getYieldExplanation() {
-                return explanation;
-            }
-        };
-    }
+public interface DelayedInvocation {
+    long invoke();
 }

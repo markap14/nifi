@@ -499,8 +499,8 @@ public abstract class AbstractPort implements Port {
 
     @Override
     public void yield(final long yieldDuration, final TimeUnit timeUnit) {
-        final long yieldMillis = timeUnit.toMillis(yieldDuration);
-        yieldExpiration.set(Math.max(yieldExpiration.get(), System.currentTimeMillis() + yieldMillis));
+        final long yieldNanos = timeUnit.toNanos(yieldDuration);
+        yieldExpiration.set(Math.max(yieldExpiration.get(), System.nanoTime() + yieldNanos));
     }
 
     @Override

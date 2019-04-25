@@ -1061,6 +1061,9 @@ public final class StandardProcessSession implements ProcessSession, ProvenanceE
             }
         }
 
+        // TODO: Do we have a bug here in the way that we are acknowleding records? We are ignoring
+        // unacknowledged records in checkpoint and not clearing this.unacknowledgedRecords when
+        // we reset state.
         acknowledgeRecords();
         resetState();
     }
@@ -3349,8 +3352,8 @@ public final class StandardProcessSession implements ProcessSession, ProvenanceE
         private final Set<ProvenanceEventRecord> reportedEvents = new LinkedHashSet<>();
 
         private final Map<Long, StandardRepositoryRecord> records = new ConcurrentHashMap<>();
-        private final Map<String, StandardFlowFileEvent> connectionCounts = new ConcurrentHashMap<>();
-        private final Map<FlowFileQueue, Set<FlowFileRecord>> unacknowledgedFlowFiles = new ConcurrentHashMap<>();
+        private final Map<String, StandardFlowFileEvent> connectionCounts = new HashMap<>();
+        private final Map<FlowFileQueue, Set<FlowFileRecord>> unacknowledgedFlowFiles = new HashMap<>();
 
         private Map<String, Long> countersOnCommit = new HashMap<>();
         private Map<String, Long> immediateCounters = new HashMap<>();

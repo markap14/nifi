@@ -14,38 +14,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.nifi.controller.scheduling;
 
-package org.apache.nifi.controller.tasks;
+public interface ComponentTask {
+    /**
+     * Mark the task as canceled so that it should not be invoked again
+     */
+    void cancel();
 
-public interface InvocationResult {
-    boolean isYield();
+    /**
+     * Indicates whether or not the task has been canceled
+     * @return <code>true</code> if the task has been canceled, <code>false</code> otherwise
+     */
+    boolean isCanceled();
 
-    String getYieldExplanation();
-
-
-    InvocationResult DO_NOT_YIELD = new InvocationResult() {
-        @Override
-        public boolean isYield() {
-            return false;
-        }
-
-        @Override
-        public String getYieldExplanation() {
-            return null;
-        }
-    };
-
-    static InvocationResult yield(final String explanation) {
-        return new InvocationResult() {
-            @Override
-            public boolean isYield() {
-                return true;
-            }
-
-            @Override
-            public String getYieldExplanation() {
-                return explanation;
-            }
-        };
-    }
+    /**
+     * Invokes the component's trigger to be run
+     */
+    void invoke();
 }

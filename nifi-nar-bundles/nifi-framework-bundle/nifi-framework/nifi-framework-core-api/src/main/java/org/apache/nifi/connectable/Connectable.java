@@ -238,7 +238,7 @@ public interface Connectable extends Triggerable, ComponentAuthorizable, Positio
     void yield(long yieldDuration, TimeUnit timeUnit);
 
     /**
-     * @return the time in milliseconds since Epoch at which this Connectable
+     * @return the System nanoTime at which this Connectable
      * should no longer yield its threads
      */
     long getYieldExpiration();
