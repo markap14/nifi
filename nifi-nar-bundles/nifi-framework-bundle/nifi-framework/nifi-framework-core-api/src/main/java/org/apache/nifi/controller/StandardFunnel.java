@@ -91,6 +91,7 @@ public class StandardFunnel implements Funnel {
 
     final int maxIterations;
     private final int maxConcurrentTasks;
+    private volatile boolean hasNonLoopConnection;
 
     public StandardFunnel(final String identifier, final NiFiProperties nifiProperties) {
         this.identifier = identifier;
@@ -181,6 +182,8 @@ public class StandardFunnel implements Funnel {
                     outgoingConnections.add(connection);
                 }
             }
+
+            this.hasNonLoopConnection = Funnel.super.hasNonLoopConnection();
         } finally {
             writeLock.unlock();
         }
@@ -239,6 +242,8 @@ public class StandardFunnel implements Funnel {
             if (!removed) {
                 throw new IllegalStateException(connection.getIdentifier() + " is not registered with " + this.getIdentifier());
             }
+
+            this.hasNonLoopConnection = Funnel.super.hasNonLoopConnection();
         } finally {
             writeLock.unlock();
         }
@@ -276,6 +281,11 @@ public class StandardFunnel implements Funnel {
         } finally {
             readLock.unlock();
         }
+    }
+
+    @Override
+    public boolean hasNonLoopConnection() {
+        return hasNonLoopConnection;
     }
 
     @Override

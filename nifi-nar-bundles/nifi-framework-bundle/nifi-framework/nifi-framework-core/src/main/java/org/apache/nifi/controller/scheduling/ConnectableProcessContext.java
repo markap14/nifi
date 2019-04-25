@@ -16,14 +16,6 @@
  */
 package org.apache.nifi.controller.scheduling;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.PropertyValue;
 import org.apache.nifi.components.state.StateManager;
@@ -38,7 +30,14 @@ import org.apache.nifi.processor.DataUnit;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
-import org.apache.nifi.util.Connectables;
+
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 /**
  * This class is essentially an empty shell for {@link Connectable}s that are not Processors
@@ -241,7 +240,7 @@ public class ConnectableProcessContext implements ProcessContext {
 
     @Override
     public boolean hasNonLoopConnection() {
-        return Connectables.hasNonLoopConnection(connectable);
+        return connectable.hasNonLoopConnection();
     }
 
     @Override

@@ -109,6 +109,19 @@ public interface Connectable extends Triggerable, ComponentAuthorizable, Positio
     Set<Connection> getConnections(Relationship relationship);
 
     /**
+     * @return <code>true</code> if the Connectable has an incoming Connection that is not a self-loop, <code>false</code> otherwise
+     */
+    default boolean hasNonLoopConnection() {
+        for (final Connection connection : getIncomingConnections()) {
+            if (!connection.getSource().equals(this)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @return the name of this Connectable
      */
     String getName();

@@ -31,7 +31,6 @@ import org.apache.nifi.controller.lifecycle.TaskTermination;
 import org.apache.nifi.controller.service.ControllerServiceProvider;
 import org.apache.nifi.encrypt.StringEncryptor;
 import org.apache.nifi.processor.exception.TerminatedTaskException;
-import org.apache.nifi.util.Connectables;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -250,7 +249,7 @@ public class StandardProcessContext implements ProcessContext, ControllerService
     @Override
     public boolean hasNonLoopConnection() {
         verifyTaskActive();
-        return Connectables.hasNonLoopConnection(procNode);
+        return procNode.hasNonLoopConnection();
     }
 
     @Override

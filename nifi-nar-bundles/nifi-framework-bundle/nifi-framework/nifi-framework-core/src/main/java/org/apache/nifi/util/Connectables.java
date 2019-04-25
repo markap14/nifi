@@ -16,12 +16,11 @@
  */
 package org.apache.nifi.util;
 
-import java.util.Collection;
-import java.util.List;
-
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.connectable.Connection;
 import org.apache.nifi.processor.Relationship;
+
+import java.util.Collection;
 
 public class Connectables {
 
@@ -48,17 +47,6 @@ public class Connectables {
             }
 
             if (available) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    public static boolean hasNonLoopConnection(final Connectable connectable) {
-        final List<Connection> connections = connectable.getIncomingConnections();
-        for (final Connection connection : connections) {
-            if (!connection.getSource().equals(connectable)) {
                 return true;
             }
         }

@@ -93,6 +93,8 @@ public abstract class AbstractPort implements Port {
     private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final Lock readLock = rwLock.readLock();
     private final Lock writeLock = rwLock.writeLock();
+    private volatile boolean hasNonLoopConnection;
+
 
     public AbstractPort(final String id, final String name, final ProcessGroup processGroup, final ConnectableType type, final ProcessScheduler scheduler) {
         this.id = requireNonNull(id);
@@ -227,6 +229,8 @@ public abstract class AbstractPort implements Port {
             if (!outgoingConnections.contains(connection)) {
                 outgoingConnections.add(connection);
             }
+
+            this.hasNonLoopConnection = Port.super.hasNonLoopConnection();
         } finally {
             writeLock.unlock();
         }
@@ -308,6 +312,8 @@ public abstract class AbstractPort implements Port {
             if (!removed) {
                 throw new IllegalStateException("Connection " + connection.getIdentifier() + " is not registered with " + this.getIdentifier());
             }
+
+            this.hasNonLoopConnection = Port.super.hasNonLoopConnection();
         } finally {
             writeLock.unlock();
         }
@@ -364,6 +370,11 @@ public abstract class AbstractPort implements Port {
         } finally {
             readLock.unlock();
         }
+    }
+
+    @Override
+    public boolean hasNonLoopConnection() {
+        return hasNonLoopConnection;
     }
 
     @Override

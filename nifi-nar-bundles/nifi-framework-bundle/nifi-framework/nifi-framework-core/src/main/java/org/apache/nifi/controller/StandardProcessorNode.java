@@ -143,6 +143,7 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
     private volatile long yieldNanos;
     private volatile ScheduledState desiredState = ScheduledState.STOPPED;
     private volatile LogLevel bulletinLevel = LogLevel.WARN;
+    private volatile boolean hasNonLoopConnection = false;
 
     private SchedulingStrategy schedulingStrategy; // guarded by read/write lock
                                                    // ??????? NOT any more
@@ -150,6 +151,7 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
     private final Map<Thread, ActiveTask> activeThreads = new HashMap<>(48);
     private final int hashCode;
     private volatile boolean hasActiveThreads = false;
+    private volatile boolean hasIncomingConnection = false;
 
     public StandardProcessorNode(final LoggableComponent<Processor> processor, final String uuid,
                                  final ValidationContextFactory validationContextFactory, final ProcessScheduler scheduler,
@@ -711,6 +713,11 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
     }
 
     @Override
+    public boolean hasNonLoopConnection() {
+        return hasNonLoopConnection;
+    }
+
+    @Override
     public Set<Connection> getConnections(final Relationship relationship) {
         final Set<Connection> applicableConnections = connections.get(relationship);
         return (applicableConnections == null) ? Collections.<Connection> emptySet()
@@ -770,6 +777,8 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
             if (updatedIncoming != null) {
                 setIncomingConnections(Collections.unmodifiableList(updatedIncoming));
             }
+
+            this.hasNonLoopConnection = Connectable.super.hasNonLoopConnection();
         } finally {
             LOG.debug("Resetting Validation State of {} due to connection added", this);
             resetValidationState();
@@ -778,7 +787,7 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
 
     @Override
     public boolean hasIncomingConnection() {
-        return !getIncomingConnections().isEmpty();
+        return hasIncomingConnection;
     }
 
     @Override
@@ -890,12 +899,15 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
                     "Cannot remove a connection from a ProcessorNode for which the ProcessorNode is not the Source");
         }
 
+        this.hasNonLoopConnection = Connectable.super.hasNonLoopConnection();
+
         LOG.debug("Resetting Validation State of {} due to connection removed", this);
         resetValidationState();
     }
 
     private void setIncomingConnections(final List<Connection> incoming) {
         this.incomingConnections.set(incoming);
+        this.hasIncomingConnection = !incoming.isEmpty();
         LOG.debug("Resetting Validation State of {} due to setting incoming connections", this);
         resetValidationState();
     }
