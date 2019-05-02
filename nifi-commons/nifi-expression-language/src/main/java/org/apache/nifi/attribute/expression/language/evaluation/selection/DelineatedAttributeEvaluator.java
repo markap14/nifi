@@ -16,8 +16,7 @@
  */
 package org.apache.nifi.attribute.expression.language.evaluation.selection;
 
-import java.util.Map;
-
+import org.apache.nifi.attribute.expression.language.EvaluationContext;
 import org.apache.nifi.attribute.expression.language.evaluation.Evaluator;
 import org.apache.nifi.attribute.expression.language.evaluation.QueryResult;
 import org.apache.nifi.attribute.expression.language.evaluation.StringQueryResult;
@@ -38,15 +37,15 @@ public class DelineatedAttributeEvaluator extends MultiAttributeEvaluator {
     }
 
     @Override
-    public QueryResult<String> evaluate(final Map<String, String> attributes) {
+    public QueryResult<String> evaluate(final EvaluationContext evaluationContext) {
         if (delineatedValues == null) {
-            final QueryResult<String> subjectValue = subjectEvaluator.evaluate(attributes);
+            final QueryResult<String> subjectValue = subjectEvaluator.evaluate(evaluationContext);
             if (subjectValue.getValue() == null) {
                 evaluationsLeft = 0;
                 return new StringQueryResult(null);
             }
 
-            final QueryResult<String> delimiterValue = delimiterEvaluator.evaluate(attributes);
+            final QueryResult<String> delimiterValue = delimiterEvaluator.evaluate(evaluationContext);
             if (subjectValue.getValue() == null) {
                 evaluationsLeft = 0;
                 return new StringQueryResult(null);

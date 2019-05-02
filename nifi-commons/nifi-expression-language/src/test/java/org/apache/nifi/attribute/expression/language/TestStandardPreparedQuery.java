@@ -16,9 +16,9 @@
  */
 package org.apache.nifi.attribute.expression.language;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import org.apache.nifi.parameter.ParameterLookup;
+import org.junit.Ignore;
+import org.junit.Test;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -26,8 +26,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
-import org.junit.Ignore;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class TestStandardPreparedQuery {
 
@@ -58,7 +59,7 @@ public class TestStandardPreparedQuery {
         final StandardPreparedQuery prepared = (StandardPreparedQuery) Query.prepare("${xx}");
         final long start = System.nanoTime();
         for (int i = 0; i < 10000000; i++) {
-            assertEquals("world", prepared.evaluateExpressions(attrs, null));
+            assertEquals("world", prepared.evaluateExpressions(new StandardEvaluationContext(attrs), null));
         }
         final long nanos = System.nanoTime() - start;
         System.out.println(TimeUnit.NANOSECONDS.toMillis(nanos));
@@ -72,7 +73,7 @@ public class TestStandardPreparedQuery {
 
         final long start = System.nanoTime();
         for (int i = 0; i < 10000000; i++) {
-            assertEquals("world", Query.evaluateExpressions("${xx}", attrs));
+            assertEquals("world", Query.evaluateExpressions("${xx}", attrs, ParameterLookup.EMPTY));
         }
         final long nanos = System.nanoTime() - start;
         System.out.println(TimeUnit.NANOSECONDS.toMillis(nanos));
@@ -126,7 +127,7 @@ public class TestStandardPreparedQuery {
     }
 
     private String evaluate(final String query, final Map<String, String> attrs) {
-        final String evaluated = ((StandardPreparedQuery) Query.prepare(query)).evaluateExpressions(attrs, null);
+        final String evaluated = ((StandardPreparedQuery) Query.prepare(query)).evaluateExpressions(new StandardEvaluationContext(attrs), null);
         return evaluated;
     }
 

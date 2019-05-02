@@ -16,13 +16,13 @@
  */
 package org.apache.nifi.attribute.expression.language.evaluation.selection;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
+import org.apache.nifi.attribute.expression.language.EvaluationContext;
 import org.apache.nifi.attribute.expression.language.evaluation.Evaluator;
 import org.apache.nifi.attribute.expression.language.evaluation.QueryResult;
 import org.apache.nifi.attribute.expression.language.evaluation.StringQueryResult;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class MultiNamedAttributeEvaluator extends MultiAttributeEvaluator {
 
@@ -37,14 +37,14 @@ public class MultiNamedAttributeEvaluator extends MultiAttributeEvaluator {
     }
 
     @Override
-    public QueryResult<String> evaluate(final Map<String, String> attributes) {
+    public QueryResult<String> evaluate(final EvaluationContext evaluationContext) {
         matchingAttributeNames = new ArrayList<>(attributeNames);
 
         if (matchingAttributeNames.size() <= evaluationCount) {
             return new StringQueryResult(null);
         }
 
-        return new StringQueryResult(attributes.get(matchingAttributeNames.get(evaluationCount++)));
+        return new StringQueryResult(evaluationContext.getExpressionValue(matchingAttributeNames.get(evaluationCount++)));
     }
 
     @Override

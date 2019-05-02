@@ -16,10 +16,13 @@
  */
 package org.apache.nifi.attribute.expression.language.evaluation.functions;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
+import com.jayway.jsonpath.Configuration;
+import com.jayway.jsonpath.DocumentContext;
+import com.jayway.jsonpath.InvalidJsonException;
+import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.spi.json.JacksonJsonProvider;
+import com.jayway.jsonpath.spi.json.JsonProvider;
+import org.apache.nifi.attribute.expression.language.EvaluationContext;
 import org.apache.nifi.attribute.expression.language.evaluation.Evaluator;
 import org.apache.nifi.attribute.expression.language.evaluation.QueryResult;
 import org.apache.nifi.attribute.expression.language.evaluation.StringEvaluator;
@@ -27,12 +30,9 @@ import org.apache.nifi.attribute.expression.language.evaluation.StringQueryResul
 import org.apache.nifi.attribute.expression.language.evaluation.literals.StringLiteralEvaluator;
 import org.apache.nifi.attribute.expression.language.exception.AttributeExpressionLanguageException;
 
-import com.jayway.jsonpath.Configuration;
-import com.jayway.jsonpath.DocumentContext;
-import com.jayway.jsonpath.InvalidJsonException;
-import com.jayway.jsonpath.JsonPath;
-import com.jayway.jsonpath.spi.json.JacksonJsonProvider;
-import com.jayway.jsonpath.spi.json.JsonProvider;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 
 public class JsonPathEvaluator extends StringEvaluator {
@@ -60,8 +60,8 @@ public class JsonPathEvaluator extends StringEvaluator {
     }
 
     @Override
-    public QueryResult<String> evaluate(final Map<String, String> attributes) {
-        final String subjectValue = subject.evaluate(attributes).getValue();
+    public QueryResult<String> evaluate(final EvaluationContext evaluationContext) {
+        final String subjectValue = subject.evaluate(evaluationContext).getValue();
         if (subjectValue == null || subjectValue.length() == 0) {
             throw new  AttributeExpressionLanguageException("Subject is empty");
         }
@@ -76,7 +76,7 @@ public class JsonPathEvaluator extends StringEvaluator {
         if (precompiledJsonPathExp != null) {
             compiledJsonPath = precompiledJsonPathExp;
         } else {
-            compiledJsonPath = compileJsonPathExpression(jsonPathExp.evaluate(attributes).getValue());
+            compiledJsonPath = compileJsonPathExpression(jsonPathExp.evaluate(evaluationContext).getValue());
         }
 
         Object result = null;

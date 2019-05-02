@@ -16,14 +16,14 @@
  */
 package org.apache.nifi.attribute.expression.language.evaluation.selection;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.regex.Pattern;
-
+import org.apache.nifi.attribute.expression.language.EvaluationContext;
 import org.apache.nifi.attribute.expression.language.evaluation.Evaluator;
 import org.apache.nifi.attribute.expression.language.evaluation.QueryResult;
 import org.apache.nifi.attribute.expression.language.evaluation.StringQueryResult;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Pattern;
 
 public class MultiMatchAttributeEvaluator extends MultiAttributeEvaluator {
 
@@ -52,10 +52,10 @@ public class MultiMatchAttributeEvaluator extends MultiAttributeEvaluator {
     }
 
     @Override
-    public QueryResult<String> evaluate(final Map<String, String> attributes) {
+    public QueryResult<String> evaluate(final EvaluationContext evaluationContext) {
         if (evaluationCount == 0) {
             for (final Pattern pattern : attributePatterns) {
-                for (final String attrName : attributes.keySet()) {
+                for (final String attrName : evaluationContext.getExpressionKeys()) {
                     if (pattern.matcher(attrName).matches()) {
                         attributeNames.add(attrName);
                     }
@@ -67,7 +67,7 @@ public class MultiMatchAttributeEvaluator extends MultiAttributeEvaluator {
             return new StringQueryResult(null);
         }
 
-        return new StringQueryResult(attributes.get(attributeNames.get(evaluationCount++)));
+        return new StringQueryResult(evaluationContext.getExpressionValue(attributeNames.get(evaluationCount++)));
     }
 
     @Override

@@ -16,14 +16,14 @@
  */
 package org.apache.nifi.attribute.expression.language.evaluation.functions;
 
-import java.util.Map;
-import java.util.regex.Pattern;
-
+import org.apache.nifi.attribute.expression.language.EvaluationContext;
 import org.apache.nifi.attribute.expression.language.evaluation.BooleanEvaluator;
 import org.apache.nifi.attribute.expression.language.evaluation.BooleanQueryResult;
 import org.apache.nifi.attribute.expression.language.evaluation.Evaluator;
 import org.apache.nifi.attribute.expression.language.evaluation.QueryResult;
 import org.apache.nifi.attribute.expression.language.evaluation.literals.StringLiteralEvaluator;
+
+import java.util.regex.Pattern;
 
 public class FindEvaluator extends BooleanEvaluator {
 
@@ -46,14 +46,14 @@ public class FindEvaluator extends BooleanEvaluator {
     }
 
     @Override
-    public QueryResult<Boolean> evaluate(final Map<String, String> attributes) {
-        final String subjectValue = subject.evaluate(attributes).getValue();
+    public QueryResult<Boolean> evaluate(final EvaluationContext evaluationContext) {
+        final String subjectValue = subject.evaluate(evaluationContext).getValue();
         if (subjectValue == null) {
             return new BooleanQueryResult(false);
         }
         final Pattern pattern;
         if (compiledPattern == null) {
-            String expression = search.evaluate(attributes).getValue();
+            String expression = search.evaluate(evaluationContext).getValue();
             if (expression == null) {
                 return new BooleanQueryResult(false);
             }

@@ -117,6 +117,7 @@ import org.apache.nifi.attribute.expression.language.evaluation.selection.Mappin
 import org.apache.nifi.attribute.expression.language.evaluation.selection.MultiAttributeEvaluator;
 import org.apache.nifi.attribute.expression.language.evaluation.selection.MultiMatchAttributeEvaluator;
 import org.apache.nifi.attribute.expression.language.evaluation.selection.MultiNamedAttributeEvaluator;
+import org.apache.nifi.attribute.expression.language.evaluation.selection.ParameterEvaluator;
 import org.apache.nifi.attribute.expression.language.exception.AttributeExpressionLanguageException;
 import org.apache.nifi.attribute.expression.language.exception.AttributeExpressionLanguageParsingException;
 import org.apache.nifi.expression.AttributeExpression.ResultType;
@@ -185,6 +186,7 @@ import static org.apache.nifi.attribute.expression.language.antlr.AttributeExpre
 import static org.apache.nifi.attribute.expression.language.antlr.AttributeExpressionParser.NOT_NULL;
 import static org.apache.nifi.attribute.expression.language.antlr.AttributeExpressionParser.NOW;
 import static org.apache.nifi.attribute.expression.language.antlr.AttributeExpressionParser.OR;
+import static org.apache.nifi.attribute.expression.language.antlr.AttributeExpressionParser.PARAMETER_REFERENCE;
 import static org.apache.nifi.attribute.expression.language.antlr.AttributeExpressionParser.PLUS;
 import static org.apache.nifi.attribute.expression.language.antlr.AttributeExpressionParser.PREPEND;
 import static org.apache.nifi.attribute.expression.language.antlr.AttributeExpressionParser.RANDOM;
@@ -298,7 +300,7 @@ public class ExpressionCompiler {
         }
 
         final Evaluator<?> rootEvaluator = getRootSubjectEvaluator(evaluator);
-        if (rootEvaluator != null && rootEvaluator instanceof MultiAttributeEvaluator) {
+        if (rootEvaluator instanceof MultiAttributeEvaluator) {
             final MultiAttributeEvaluator multiAttrEval = (MultiAttributeEvaluator) rootEvaluator;
             switch (multiAttrEval.getEvaluationType()) {
                 case ALL_ATTRIBUTES:
@@ -923,6 +925,12 @@ public class ExpressionCompiler {
         switch (tree.getType()) {
             case EXPRESSION: {
                 return buildExpressionEvaluator(tree);
+            }
+            case PARAMETER_REFERENCE: {
+                final String parameterName = tree.getChild(0).getText();
+                final ParameterEvaluator parameterEvaluator = new ParameterEvaluator(parameterName);
+                evaluators.add(parameterEvaluator);
+                return parameterEvaluator;
             }
             case ATTRIBUTE_REFERENCE: {
                 final Evaluator<?> childEvaluator = buildEvaluator(tree.getChild(0));
