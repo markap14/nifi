@@ -1,0 +1,38 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+How to use / demo:
+
+Start the Py4J server using a processor as the entry point. For example:
+
+python see_food.py
+
+`see_food.py` is found in this module, under `src/test/resources`. This python program
+starts a Py4J server with the SeeFood processor as the the entry point. The Py4J server
+is started on port 9999.
+
+The app/processor will take a minute or so to initialize.
+
+Build and install the nifi-python-nar into NiFi.
+
+Add the InvokePythonProcessor to the graph.
+Setup processor to use port 9999 for the Py4J port.
+Send an image to the processor. It will be routed to either "hotdog" or "not hotdog".
+
+Note that once started, the see_food.py application cannot be killed with Ctrl+C. Need to do a `ps -ef | grep see_food.py`,
+get the PID, and kill the application.
+
+Also note that when creating a processor in Python, it seems to be a bit weird about initializing objects too quickly.
+For example, if the `model` object in `see-food.py` is initialized when declared, calls to `predict` have all kinds of problems.
+This is why in the `accept` method we check if null and if so initialize. This is not really thread safe and can cause problems.
+But this can be handled better by having proper setup/teardown types of methods.
