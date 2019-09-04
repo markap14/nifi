@@ -14,12 +14,41 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.nifi.python;
+package org.apache.nifi.nar;
 
-public interface PythonController {
-    String[] getModules();
+import org.apache.nifi.annotation.behavior.Restriction;
+import org.apache.nifi.bundle.Bundle;
 
-    FlowFileFunction createProcessor(String identifier, String type);
+import java.util.Collection;
+import java.util.Set;
 
-    FlowFileFunction getProcessor(String identifier);
+public interface ExtensionDefinition {
+    ExtensionType getExtensionType();
+
+    Class<?> getExtensionClass();
+
+    Bundle getBundle();
+
+    String getExtensionName();
+
+    String getCapabilityDescription();
+
+    boolean isRestricted();
+
+    String getUsageRestriction();
+
+    Set<Restriction> getExplicitRestrictions();
+
+    String getDeprecationReason();
+
+    Collection<String> getTags();
+
+
+    enum ExtensionType {
+        PROCESSOR,
+
+        CONTROLLER_SERVICE,
+
+        REPORTING_TASK
+    }
 }

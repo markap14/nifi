@@ -16,10 +16,10 @@
  */
 package org.apache.nifi.python;
 
-public interface PythonController {
-    String[] getModules();
+import org.apache.nifi.processor.Relationship;
 
-    FlowFileFunction createProcessor(String identifier, String type);
+public interface FlowFileFunction {
+    String accept(PythonFlowFile flowFile);
 
-    FlowFileFunction getProcessor(String identifier);
+    Relationship[] getRelationships();
 }

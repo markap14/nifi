@@ -16,10 +16,21 @@
  */
 package org.apache.nifi.python;
 
-public interface PythonController {
-    String[] getModules();
+import java.io.IOException;
+import java.util.Map;
 
-    FlowFileFunction createProcessor(String identifier, String type);
+public interface PythonFlowFile {
+    Map<String, String> getAttributes();
 
-    FlowFileFunction getProcessor(String identifier);
+    String getAttribute(String name);
+
+    void putAttribute(String name, String value);
+
+    void removeAttribute(String name);
+
+    long getSize();
+
+    byte[] readContent() throws IOException;
+
+    void writeContent(byte[] data) throws IOException;
 }

@@ -112,6 +112,8 @@ public interface ExtensionManager {
      */
     Set<Class> getExtensions(Class<?> definition);
 
+    Set<ExtensionDefinition> getProcessorDefinitions();
+
     /**
      * Gets the temp component with the given type from the given bundle.
      *

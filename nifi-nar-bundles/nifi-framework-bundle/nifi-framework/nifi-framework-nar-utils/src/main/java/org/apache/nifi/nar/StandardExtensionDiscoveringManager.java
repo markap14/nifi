@@ -499,6 +499,14 @@ public class StandardExtensionDiscoveringManager implements ExtensionDiscovering
     }
 
     @Override
+    public Set<ExtensionDefinition> getProcessorDefinitions() {
+        final Set<Class> processorClasses = getExtensions(Processor.class);
+        return processorClasses.stream()
+            .map(cls -> StandardExtensionDefinition.forProcessor(cls, getBundle(cls.getClassLoader())))
+            .collect(Collectors.toSet());
+    }
+
+    @Override
     public ConfigurableComponent getTempComponent(final String classType, final BundleCoordinate bundleCoordinate) {
         if (classType == null) {
             throw new IllegalArgumentException("Class type cannot be null");

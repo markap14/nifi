@@ -16,18 +16,20 @@
  */
 package org.apache.nifi.python;
 
+import org.apache.nifi.annotation.behavior.Restriction;
 import org.apache.nifi.bundle.Bundle;
 import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.bundle.BundleDetails;
 import org.apache.nifi.components.ConfigurableComponent;
+import org.apache.nifi.nar.ExtensionDefinition;
 import org.apache.nifi.nar.ExtensionDiscoveringManager;
 import org.apache.nifi.nar.InstanceClassLoader;
-import org.apache.nifi.processor.Processor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.net.URL;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -47,9 +49,10 @@ public class Python4JExtensionManager implements ExtensionDiscoveringManager {
 
 
     private final ExtensionDiscoveringManager delegate;
-    private final Set<Class<?>> discoveredClasses = new HashSet<>();
+    private final Set<String> discoveredModules = new HashSet<>();
     private final ConcurrentMap<String, InstanceClassLoader> instanceClassLoaders = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, ConfigurableComponent> tempComponents = new ConcurrentHashMap<>();
+    private final Set<ExtensionDefinition> pythonProcessorDefinitions = new HashSet<>();
     private final PythonBridge pythonBridge;
 
 
@@ -117,7 +120,13 @@ public class Python4JExtensionManager implements ExtensionDiscoveringManager {
 
     @Override
     public List<Bundle> getBundles(final String classType) {
-        return null;
+        final List<Bundle> bundles = delegate.getBundles(classType);
+
+        if (discoveredModules.contains(classType)) {
+            bundles.add(PYTHON_BUNDLE);
+        }
+
+        return bundles;
     }
 
     @Override
@@ -127,10 +136,7 @@ public class Python4JExtensionManager implements ExtensionDiscoveringManager {
 
     @Override
     public Set<Class> getTypes(final BundleCoordinate bundleCoordinate) {
-        if (PYTHON_BUNDLE_COORDINATES.equals(bundleCoordinate)) {
-            return Collections.unmodifiableSet(discoveredClasses);
-        }
-
+        // TODO: This means that we won't get any docs
         return delegate.getTypes(bundleCoordinate);
     }
 
@@ -141,14 +147,15 @@ public class Python4JExtensionManager implements ExtensionDiscoveringManager {
 
     @Override
     public Set<Class> getExtensions(final Class<?> definition) {
-        if (Processor.class.equals(definition)) {
-            final Set<Class> delegateExtensions = delegate.getExtensions(definition);
-            final Set<Class> processors = new HashSet<>(delegateExtensions);
-            processors.addAll(discoveredClasses);
-            return processors;
-        }
-
         return delegate.getExtensions(definition);
+    }
+
+    @Override
+    public Set<ExtensionDefinition> getProcessorDefinitions() {
+        final Set<ExtensionDefinition> delegateDefintiions = delegate.getProcessorDefinitions();
+        final Set<ExtensionDefinition> allDefinitions = new HashSet<>(delegateDefintiions);
+        allDefinitions.addAll(pythonProcessorDefinitions);
+        return allDefinitions;
     }
 
     @Override
@@ -162,12 +169,89 @@ public class Python4JExtensionManager implements ExtensionDiscoveringManager {
 
     @Override
     public void logClassLoaderMapping() {
-        logger.info("The following Python Processors were discovered");
-        discoveredClasses.forEach(c -> logger.info(c.toString()));
+        if (discoveredModules.isEmpty()) {
+            logger.info("No Python Processors were discovered.");
+            return;
+        }
+
+        logger.info("The following Python Processors were discovered:");
+        discoveredModules.forEach(logger::info);
     }
 
     private void discoverPythonModules() {
         final String[] moduleNames = pythonBridge.getPythonController().getModules();
 
+        for (final String moduleName : moduleNames) {
+            discoveredModules.add(moduleName);
+
+            try {
+                tempComponents.put(moduleName, createTempComponent(moduleName));
+            } catch (final Exception e) {
+                logger.error("Failed to instantiate instance of Python Module <{}>", moduleName, e);
+            }
+
+            pythonProcessorDefinitions.add(createExtensionDefinition(moduleName));
+        }
+    }
+
+    private PythonProcessor createTempComponent(final String moduleName) {
+        final String identifier = UUID.randomUUID().toString();
+        final PythonController controller = pythonBridge.getPythonController();
+        final FlowFileFunction flowFileFunction = controller.createProcessor(identifier, moduleName);
+        return new PythonProcessor(flowFileFunction);
+    }
+
+    private ExtensionDefinition createExtensionDefinition(final String moduleName) {
+        return new ExtensionDefinition() {
+            @Override
+            public ExtensionType getExtensionType() {
+                return ExtensionType.PROCESSOR;
+            }
+
+            @Override
+            public Class<?> getExtensionClass() {
+                return FlowFileFunction.class;
+            }
+
+            @Override
+            public Bundle getBundle() {
+                return PYTHON_BUNDLE;
+            }
+
+            @Override
+            public String getExtensionName() {
+                return moduleName;
+            }
+
+            @Override
+            public String getCapabilityDescription() {
+                return null;
+            }
+
+            @Override
+            public boolean isRestricted() {
+                return false;
+            }
+
+            @Override
+            public String getUsageRestriction() {
+                return null;
+            }
+
+            @Override
+            public Set<Restriction> getExplicitRestrictions() {
+                return Collections.emptySet();
+            }
+
+            @Override
+            public String getDeprecationReason() {
+                return null;
+            }
+
+            @Override
+            public Collection<String> getTags() {
+                return Collections.singleton("python");
+            }
+        };
     }
 }
