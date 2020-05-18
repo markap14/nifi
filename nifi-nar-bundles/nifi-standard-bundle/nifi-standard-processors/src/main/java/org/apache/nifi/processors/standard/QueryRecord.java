@@ -396,7 +396,7 @@ public class QueryRecord extends AbstractProcessor {
             session.remove(createdFlowFiles);
             session.transfer(original, REL_FAILURE);
         } catch (final Exception e) {
-            getLogger().error("Unable to query {} due to {}", new Object[] {original, e});
+            getLogger().error("Unable to query {} due to {}", new Object[] {original, e, e});
             session.remove(createdFlowFiles);
             session.transfer(original, REL_FAILURE);
         }
