@@ -27,6 +27,7 @@ import org.apache.nifi.web.api.dto.AffectedComponentDTO;
 import org.apache.nifi.web.api.dto.ControllerServiceDTO;
 import org.apache.nifi.web.api.dto.DtoFactory;
 import org.apache.nifi.web.api.dto.ProcessorDTO;
+import org.apache.nifi.web.api.dto.status.NodeProcessorStatusSnapshotDTO;
 import org.apache.nifi.web.api.dto.status.ProcessorStatusDTO;
 import org.apache.nifi.web.api.entity.AffectedComponentEntity;
 import org.apache.nifi.web.api.entity.ControllerServiceEntity;
@@ -37,6 +38,7 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -150,6 +152,7 @@ public class LocalComponentLifecycle implements ComponentLifecycle {
                 logger.debug("All {} processors of interest have completed validation", affectedComponents.size());
                 return true;
             }
+
             continuePolling = pause.pause();
         }
         return false;
@@ -163,6 +166,7 @@ public class LocalComponentLifecycle implements ComponentLifecycle {
             }
 
             if (ProcessorDTO.VALIDATING.equals(entity.getComponent().getValidationStatus())) {
+                logger.debug("Processor {} still has a validation state of VALIDATING", entity.getId());
                 return false;
             }
         }
@@ -180,11 +184,13 @@ public class LocalComponentLifecycle implements ComponentLifecycle {
 
         logger.debug("Waiting for {} processors to transition their states to {}", affectedComponents.size(), desiredState);
 
+        int loopCount = 0;
         boolean continuePolling = true;
         while (continuePolling) {
             final Set<ProcessorEntity> processorEntities = serviceFacade.getProcessors(groupId, true);
 
-            if (isProcessorActionComplete(processorEntities, affectedComponents, desiredState, invalidComponentAction)) {
+            final boolean debugLog = loopCount++ % 10 == 0; // Log debug info every 10th iteration. This is typically called with a Pause of 250 ms, so don't want to log 4x per second.
+            if (isProcessorActionComplete(processorEntities, affectedComponents, desiredState, invalidComponentAction, debugLog)) {
                 logger.debug("All {} processors of interest now have the desired state of {}", affectedComponents.size(), desiredState);
                 return true;
             }
@@ -218,7 +224,7 @@ public class LocalComponentLifecycle implements ComponentLifecycle {
     }
 
     private boolean isProcessorActionComplete(final Set<ProcessorEntity> processorEntities, final Map<String, AffectedComponentEntity> affectedComponents, final ScheduledState desiredState,
-                                              final InvalidComponentAction invalidComponentAction) throws LifecycleManagementException {
+                                              final InvalidComponentAction invalidComponentAction, final boolean debugLog) throws LifecycleManagementException {
 
         final String desiredStateName = desiredState.name();
 
@@ -226,12 +232,21 @@ public class LocalComponentLifecycle implements ComponentLifecycle {
 
         for (final ProcessorEntity entity : processorEntities) {
             if (!affectedComponents.containsKey(entity.getId())) {
+                if (debugLog) {
+                    logger.debug("When checking if Processor Action is complete for {}, the processor is not in the set of affected components so ignoring its state", entity.getId());
+                }
+
                 continue;
             }
 
             final ProcessorStatusDTO status = entity.getStatus();
 
             if (ProcessorDTO.INVALID.equals(entity.getComponent().getValidationStatus())) {
+                if (debugLog) {
+                    logger.debug("When checking if Processor Action is complete for {}, desired state = {}, validation status = {}, invalid component action = {}", entity.getId(), desiredState,
+                        entity.getComponent().getValidationStatus(), invalidComponentAction);
+                }
+
                 switch (invalidComponentAction) {
                     case WAIT:
                         return false;
@@ -246,10 +261,19 @@ public class LocalComponentLifecycle implements ComponentLifecycle {
             final String runStatus = status.getAggregateSnapshot().getRunStatus();
             final boolean stateMatches = desiredStateName.equalsIgnoreCase(runStatus);
             if (!stateMatches) {
+                if (debugLog && logger.isDebugEnabled()) {
+                    logRunStatus(entity, status, desiredState);
+                }
+
                 return false;
             }
 
             if (desiredState == ScheduledState.STOPPED && status.getAggregateSnapshot().getActiveThreadCount() != 0) {
+                if (debugLog) {
+                    logger.debug("When checking if Processor Action is complete for {}, desired state = {} but there are {} active threads", entity.getId(), desiredState,
+                        status.getAggregateSnapshot().getActiveThreadCount());
+                }
+
                 return false;
             }
         }
@@ -257,6 +281,33 @@ public class LocalComponentLifecycle implements ComponentLifecycle {
         return true;
     }
 
+    private void logRunStatus(final ProcessorEntity entity, final ProcessorStatusDTO status, final ScheduledState desiredState) {
+        final String runStatus = status.getAggregateSnapshot().getRunStatus();
+
+        final List<NodeProcessorStatusSnapshotDTO> nodeSnapshots = status.getNodeSnapshots();
+        if (nodeSnapshots == null) {
+            logger.debug("When checking if Processor Action is complete for {}, processor run status = {}, desired state = {} so considering Processor Action NOT complete.",
+                entity.getId(), runStatus, desiredState);
+            return;
+        }
+
+        final Set<String> distinctRunStatuses = new HashSet<>();
+        final Map<String, String> nodewiseRunStatuses = new HashMap<>();
+        for (final NodeProcessorStatusSnapshotDTO nodeSnapshotDto : nodeSnapshots) {
+            final String nodeRunStatus = nodeSnapshotDto.getStatusSnapshot().getRunStatus();
+            final String nodeId = nodeSnapshotDto.getNodeId();
+            nodewiseRunStatuses.put(nodeId, nodeRunStatus);
+            distinctRunStatuses.add(nodeRunStatus);
+        }
+
+        if (distinctRunStatuses.size() == 1) {
+            logger.debug("When checking if Processor Action is complete for {}, processor run status = {}, desired state = {} so considering Processor Action NOT complete. All nodes " +
+                "agree on the Run Status.", entity.getId(), runStatus, desiredState);
+        } else {
+            logger.debug("When checking if Processor Action is complete for {}, processor run status = {}, desired state = {} so considering Processor Action NOT complete. Node-wise " +
+                "breakdown of node statuses: {}", entity.getId(), runStatus, desiredState, nodewiseRunStatuses);
+        }
+    }
 
     private void enableControllerServices(final String processGroupId, final Map<String, Revision> serviceRevisions, final Map<String, AffectedComponentEntity> affectedServices, final Pause pause,
                                           final InvalidComponentAction invalidComponentAction) throws LifecycleManagementException {
@@ -341,7 +392,11 @@ public class LocalComponentLifecycle implements ComponentLifecycle {
             if (isControllerServiceValidationComplete(serviceEntities, affectedComponents)) {
                 logger.debug("All {} controller services of interest have completed validation", affectedComponents.size());
                 return true;
+            } else if (logger.isDebugEnabled()) {
+                final Set<ControllerServiceEntity> validating = getValidatingControllerServices(serviceEntities, affectedComponents);
+                logger.debug("The following {} Controller Services still have a state of VALIDATING: {}", validating.size(), validating);
             }
+
             continuePolling = pause.pause();
         }
         return false;
@@ -359,6 +414,13 @@ public class LocalComponentLifecycle implements ComponentLifecycle {
             }
         }
         return true;
+    }
+
+    private Set<ControllerServiceEntity> getValidatingControllerServices(final Set<ControllerServiceEntity> controllerServiceEntities, final Map<String, AffectedComponentEntity> affectedComponents) {
+        return controllerServiceEntities.stream()
+            .filter(service -> affectedComponents.containsKey(service.getId()))
+            .filter(service -> ControllerServiceDTO.VALIDATING.equals(service.getComponent().getValidationStatus()))
+            .collect(Collectors.toSet());
     }
 
     /**
@@ -388,11 +450,17 @@ public class LocalComponentLifecycle implements ComponentLifecycle {
             for (final ControllerServiceEntity serviceEntity : serviceEntities) {
                 final ControllerServiceDTO serviceDto = serviceEntity.getComponent();
                 if (!affectedServices.containsKey(serviceDto.getId())) {
+                    logger.debug("When checking if Controller Service has reached desired state for {}, the Controller Service is not in the set of affected components so ignoring its state",
+                        serviceDto.getId());
+
                     continue;
                 }
 
                 final String validationStatus = serviceDto.getValidationStatus();
                 if (ControllerServiceDTO.INVALID.equals(validationStatus)) {
+                    logger.debug("When checking if Controller Service has reached desired state for {}, desired state = {}, validation status = {}, invalid component action = {}",
+                        serviceEntity.getId(), desiredState, validationStatus, invalidComponentAction);
+
                     switch (invalidComponentAction) {
                         case WAIT:
                             allReachedDesiredState = false;
@@ -406,6 +474,9 @@ public class LocalComponentLifecycle implements ComponentLifecycle {
                 }
 
                 if (!desiredStateName.equals(serviceDto.getState())) {
+                    logger.debug("When checking if Controller Service has reached desired state for {}, desired state = {}, service state = {}. This service has not reached the desired state.",
+                        serviceEntity.getId(), desiredState, serviceDto.getState());
+
                     allReachedDesiredState = false;
                     break;
                 }
@@ -414,6 +485,8 @@ public class LocalComponentLifecycle implements ComponentLifecycle {
             if (allReachedDesiredState) {
                 logger.debug("All {} controller services of interest now have the desired state of {}", affectedServices.size(), desiredState);
                 return true;
+            } else {
+                logger.debug("Not all {} controller services have reached the desired state of {}. Will continue polling and waiting for the desired state.", affectedServices.size(), desiredState);
             }
 
             // Not all of the controller services are in the desired state. Pause for a bit and poll again.

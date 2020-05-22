@@ -320,12 +320,18 @@ public abstract class FlowUpdateResource<T extends ProcessGroupDescriptorEntity,
                 .filter(dto -> "Running".equalsIgnoreCase(dto.getComponent().getState()))
                 .collect(Collectors.toSet());
 
-        logger.info("Stopping {} Processors", runningComponents.size());
+        if (logger.isDebugEnabled()) {
+            logger.debug("Stopping {} Processors: {}", runningComponents.size(), runningComponents.stream().map(AffectedComponentEntity::getId).collect(Collectors.toList()));
+        } else {
+            logger.info("Stopping {} Processors", runningComponents.size());
+        }
+
         final CancellableTimedPause stopComponentsPause = new CancellableTimedPause(250, Long.MAX_VALUE, TimeUnit.MILLISECONDS);
         asyncRequest.setCancelCallback(stopComponentsPause::cancel);
         componentLifecycle.scheduleComponents(requestUri, groupId, runningComponents, ScheduledState.STOPPED, stopComponentsPause, InvalidComponentAction.SKIP);
 
         if (asyncRequest.isCancelled()) {
+            logger.info("Request to change version has been cancelled. Will not complete the rest of the change version request.");
             return;
         }
         asyncRequest.markStepComplete();
@@ -399,10 +405,10 @@ public abstract class FlowUpdateResource<T extends ProcessGroupDescriptorEntity,
                 performUpdateFlow(groupId, revision, requestEntity, flowSnapshot, idGenerationSeed, !allowDirtyFlowUpdate, true);
             }
         } finally {
-            if (!asyncRequest.isCancelled()) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Re-Enabling {} Controller Services: {}", enabledServices.size(), enabledServices);
-                }
+            if (asyncRequest.isCancelled()) {
+                logger.debug("Flow Update request has been cancelled so will not re-enable Controller Services or restart Ports/Processors");
+            } else {
+                logger.debug("Re-Enabling {} Controller Services: {}", enabledServices.size(), enabledServices);
 
                 asyncRequest.markStepComplete();
 
@@ -422,9 +428,7 @@ public abstract class FlowUpdateResource<T extends ProcessGroupDescriptorEntity,
             }
 
             if (!asyncRequest.isCancelled()) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Restart {} Processors: {}", runningComponents.size(), runningComponents);
-                }
+                logger.debug("Restarting {} Processors: {}", runningComponents.size(), runningComponents);
 
                 asyncRequest.markStepComplete();
 
@@ -471,6 +475,8 @@ public abstract class FlowUpdateResource<T extends ProcessGroupDescriptorEntity,
                     // a more intelligent error message as to exactly what happened, rather than indicate that the flow could not be updated.
                     throw new ResumeFlowException("Successfully updated flow but could not restart all Processors because " + ise.getMessage(), ise);
                 }
+
+                logger.info("Successfully restarted all {} Processors", componentsToStart.size());
             }
         }
 
