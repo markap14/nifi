@@ -185,8 +185,8 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
         this.processorRef = new AtomicReference<>(processorDetails);
 
         identifier = new AtomicReference<>(uuid);
-        destinations = new HashMap<>();
-        connections = new HashMap<>();
+        destinations = new ConcurrentHashMap<>();
+        connections = new ConcurrentHashMap<>();
         incomingConnections = new AtomicReference<>(new ArrayList<>());
         lossTolerant = new AtomicBoolean(false);
         final Set<Relationship> emptySetOfRelationships = new HashSet<>();
