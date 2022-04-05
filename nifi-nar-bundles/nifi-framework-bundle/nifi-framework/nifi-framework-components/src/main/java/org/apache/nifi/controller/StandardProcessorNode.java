@@ -664,7 +664,7 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
             throw new IllegalStateException("Cannot modify configuration of " + this + " while the Processor is running");
         }
 
-        if (taskCount < 1 && getSchedulingStrategy() != SchedulingStrategy.EVENT_DRIVEN) {
+        if (taskCount < 0 && getSchedulingStrategy() != SchedulingStrategy.EVENT_DRIVEN) {
             throw new IllegalArgumentException("Cannot set Concurrent Tasks to " + taskCount + " for component "
                     + this + " because Scheduling Strategy is not Event Driven");
         }

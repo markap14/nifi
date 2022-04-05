@@ -1,0 +1,175 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.nifi.controller.scheduling;
+
+import org.apache.nifi.connectable.Connection;
+import org.apache.nifi.controller.ProcessorNode;
+import org.apache.nifi.controller.queue.FlowFileQueue;
+import org.apache.nifi.controller.queue.QueueSize;
+import org.apache.nifi.controller.tasks.ConnectableTask;
+import org.apache.nifi.util.Connectables;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiFunction;
+import java.util.stream.Collectors;
+
+public class ProcessorTaskQueue {
+    private final List<ProcessorTriggerContext> triggerContexts = new CopyOnWriteArrayList<>();
+    private final BiFunction<ProcessorNode, LifecycleState, ConnectableTask> connectableTaskFactory;
+
+    public ProcessorTaskQueue(final BiFunction<ProcessorNode, LifecycleState, ConnectableTask> connectableTaskFactory) {
+        this.connectableTaskFactory = connectableTaskFactory;
+    }
+
+    public void addProcessor(final ProcessorNode processor, final LifecycleState lifecycleState) {
+        final ProcessorTriggerContext triggerContext = new ProcessorTriggerContext(processor, lifecycleState);
+        triggerContexts.add(triggerContext);
+    }
+
+    public void removeProcessor(final ProcessorNode processor) {
+        triggerContexts.removeIf(context -> context.getProcessor() == processor);
+    }
+
+    public List<ProcessorTriggerContext> getTriggerContexts() {
+        return triggerContexts;
+    }
+
+
+    public class ProcessorTriggerContext {
+        private final ProcessorNode processor;
+        private final LifecycleState lifecycleState;
+        private final boolean isSourceComponent;
+        private final ConnectableTask connectableTask;
+        private final boolean isTriggerWhenAnyDestinationAvailable;
+        private final List<FlowFileQueue> downstreamQueues;
+        private final List<FlowFileQueue> upstreamQueues;
+        private final boolean batchSupported;
+
+        public ProcessorTriggerContext(final ProcessorNode processor, final LifecycleState lifecycleState) {
+            this.processor = processor;
+            this.lifecycleState = lifecycleState;
+
+            boolean hasNonLoopConnection = Connectables.hasNonLoopConnection(processor);
+            this.isSourceComponent = processor.isTriggerWhenEmpty()
+                // No input connections
+                || !processor.hasIncomingConnection()
+                // Every incoming connection loops back to itself, no inputs from other components
+                || !hasNonLoopConnection;
+
+            connectableTask = connectableTaskFactory.apply(processor, lifecycleState);
+
+            isTriggerWhenAnyDestinationAvailable = processor.isTriggerWhenAnyDestinationAvailable();
+            downstreamQueues = new ArrayList<>();
+            for (final Connection connection : processor.getConnections()) {
+                final FlowFileQueue queue = connection.getFlowFileQueue();
+                downstreamQueues.add(queue);
+            }
+
+            upstreamQueues = processor.getIncomingConnections().stream()
+                .map(Connection::getFlowFileQueue)
+                .collect(Collectors.toList());
+            batchSupported = processor.isSessionBatchingSupported();
+        }
+
+        public boolean isBatchSupported() {
+            return batchSupported;
+        }
+
+        public ProcessorNode getProcessor() {
+            return processor;
+        }
+
+        public LifecycleState getLifecycleState() {
+            return lifecycleState;
+        }
+
+        public ConnectableTask getConnectableTask() {
+            return connectableTask;
+        }
+
+        public boolean isSourceComponent() {
+            return isSourceComponent;
+        }
+
+        public boolean isWorkToDo() {
+            // If it is not a 'source' component, it requires a FlowFile to process.
+            final boolean dataAvailable = isSourceComponent || Connectables.flowFilesQueued(processor);
+            if (!dataAvailable) {
+                return false;
+            }
+
+            final boolean backpressure = isBackPressureApplied();
+            return !backpressure;
+        }
+
+        public boolean isBackPressureApplied() {
+            if (isTriggerWhenAnyDestinationAvailable) {
+                for (final FlowFileQueue queue : downstreamQueues) {
+                    if (queue.isFull()) {
+                        return true;
+                    }
+                }
+
+                return false;
+            } else {
+                for (final FlowFileQueue queue : downstreamQueues) {
+                    if (queue.isFull()) {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        }
+
+        public double getQueueFullRatio() {
+            double maxRatio = 0D;
+
+            for (final FlowFileQueue queue : upstreamQueues) {
+                final QueueSize queueSize = queue.size();
+                final double objectRatio = (double) queueSize.getObjectCount() / queue.getBackPressureObjectThreshold();
+                maxRatio = Math.max(maxRatio, objectRatio);
+            }
+
+            return maxRatio;
+        }
+
+
+        @Override
+        public boolean equals(final Object o) {
+            if (this == o) {
+                return true;
+            }
+
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+
+            final ProcessorTriggerContext that = (ProcessorTriggerContext) o;
+            return Objects.equals(processor, that.processor);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(processor);
+        }
+    }
+}

@@ -24,7 +24,6 @@ import org.apache.nifi.controller.FlowController;
 import org.apache.nifi.controller.ProcessorNode;
 import org.apache.nifi.controller.ScheduledState;
 import org.apache.nifi.controller.lifecycle.TaskTerminationAwareStateManager;
-import org.apache.nifi.controller.queue.FlowFileQueue;
 import org.apache.nifi.controller.repository.ActiveProcessSessionFactory;
 import org.apache.nifi.controller.repository.BatchingSessionFactory;
 import org.apache.nifi.controller.repository.RepositoryContext;
@@ -55,6 +54,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -77,6 +78,9 @@ public class ConnectableTask {
     private final AtomicLong invocations = new AtomicLong(0L);
     private volatile SampledMetrics sampledMetrics = new SampledMetrics();
     private final int perfTrackingNthIteration;
+    private final boolean hasNonLoopConnection;
+    private final boolean hasOutboundConnection;
+    private final boolean isSourceComponent;
 
     public ConnectableTask(final SchedulingAgent schedulingAgent, final Connectable connectable,
                            final FlowController flowController, final RepositoryContextFactory contextFactory, final LifecycleState scheduleState) {
@@ -96,6 +100,7 @@ public class ConnectableTask {
             processContext = new ConnectableProcessContext(connectable, stateManager);
         }
 
+        final List<Connection> outgoingConnections = new ArrayList<>(connectable.getConnections());
         repositoryContext = contextFactory.newProcessContext(connectable, new AtomicLong(0L));
 
         final int perfTrackingPercentage = flowController.getPerformanceTrackingPercentage();
@@ -104,6 +109,10 @@ public class ConnectableTask {
         } else {
             perfTrackingNthIteration = 100 / perfTrackingPercentage;
         }
+
+        hasNonLoopConnection = Connectables.hasNonLoopConnection(connectable);
+        hasOutboundConnection = !outgoingConnections.isEmpty();
+        isSourceComponent = connectable.isTriggerWhenEmpty() || !connectable.hasIncomingConnection() || !hasNonLoopConnection;
     }
 
     public Connectable getConnectable() {
@@ -118,7 +127,8 @@ public class ConnectableTask {
         // after one yield period, the scheduling agent could call this again when
         // yieldExpiration == currentTime, and we don't want that to still be considered 'yielded'
         // so this uses ">" instead of ">="
-        return connectable.getYieldExpiration() > System.currentTimeMillis();
+        final long yieldExpiration = connectable.getYieldExpiration();
+        return yieldExpiration > 0 && yieldExpiration > System.currentTimeMillis(); // Check > 0 first to avoid the system call when not necessary
     }
 
     /**
@@ -135,36 +145,24 @@ public class ConnectableTask {
      * @return true if there is work to do, otherwise false
      */
     private boolean isWorkToDo() {
-        boolean hasNonLoopConnection = Connectables.hasNonLoopConnection(connectable);
-
         if (connectable.getConnectableType() == ConnectableType.FUNNEL) {
             // Handle Funnel as a special case because it will never be a 'source' component,
             // and also its outgoing connections can not be terminated.
             // Incoming FlowFiles from other components, and at least one outgoing connection are required.
-            return connectable.hasIncomingConnection()
-                    && hasNonLoopConnection
-                    && !connectable.getConnections().isEmpty()
+            return hasNonLoopConnection
+                    && hasOutboundConnection
                     && Connectables.flowFilesQueued(connectable);
         }
-
-        final boolean isSourceComponent = connectable.isTriggerWhenEmpty()
-                // No input connections
-                || !connectable.hasIncomingConnection()
-                // Every incoming connection loops back to itself, no inputs from other components
-                || !hasNonLoopConnection;
 
         // If it is not a 'source' component, it requires a FlowFile to process.
         return isSourceComponent || Connectables.flowFilesQueued(connectable);
     }
 
-    private boolean isBackPressureEngaged() {
-        return connectable.getIncomingConnections().stream()
-            .filter(con -> con.getSource() == connectable)
-            .map(Connection::getFlowFileQueue)
-            .anyMatch(FlowFileQueue::isFull);
+    public InvocationResult invoke() {
+        return invoke(connectable.getRunDuration(TimeUnit.NANOSECONDS), Long.MAX_VALUE);
     }
 
-    public InvocationResult invoke() {
+    public InvocationResult invoke(final long runDurationNanos, final long maxIterations) {
         if (scheduleState.isTerminated()) {
             logger.debug("Will not trigger {} because task is terminated", connectable);
             return InvocationResult.DO_NOT_YIELD;
@@ -213,11 +211,10 @@ public class ConnectableTask {
 
         final PerformanceTracker performanceTracker = measureExpensiveMetrics ? new NanoTimePerformanceTracker() : new NopPerformanceTracker();
 
-        final long batchNanos = connectable.getRunDuration(TimeUnit.NANOSECONDS);
         final ProcessSessionFactory sessionFactory;
         final StandardProcessSession rawSession;
         final boolean batch;
-        if (connectable.isSessionBatchingSupported() && batchNanos > 0L) {
+        if (connectable.isSessionBatchingSupported() && runDurationNanos > 0L) {
             rawSession = new StandardProcessSession(repositoryContext, scheduleState::isTerminated, performanceTracker);
             sessionFactory = new BatchingSessionFactory(rawSession);
             batch = true;
@@ -231,15 +228,16 @@ public class ConnectableTask {
         scheduleState.incrementActiveThreadCount(activeSessionFactory);
 
         final long startNanos = System.nanoTime();
-        final long finishIfBackpressureEngaged = startNanos + (batchNanos / 25L);
-        final long finishNanos = startNanos + batchNanos;
+        final long finishNanos = startNanos + runDurationNanos;
         int invocationCount = 0;
 
         final String originalThreadName = Thread.currentThread().getName();
         try {
+            long iterations = 0L;
+
             try (final AutoCloseable ncl = NarCloseable.withComponentNarLoader(flowController.getExtensionManager(), connectable.getRunnableComponent().getClass(), connectable.getIdentifier())) {
                 boolean shouldRun = connectable.getScheduledState() == ScheduledState.RUNNING || connectable.getScheduledState() == ScheduledState.RUN_ONCE;
-                while (shouldRun) {
+                while (shouldRun && iterations++ < maxIterations) {
                     invocationCount++;
                     connectable.onTrigger(processContext, activeSessionFactory);
 
@@ -249,10 +247,6 @@ public class ConnectableTask {
 
                     final long nanoTime = System.nanoTime();
                     if (nanoTime > finishNanos) {
-                        return InvocationResult.DO_NOT_YIELD;
-                    }
-
-                    if (nanoTime > finishIfBackpressureEngaged && isBackPressureEngaged()) {
                         return InvocationResult.DO_NOT_YIELD;
                     }
 
@@ -290,9 +284,8 @@ public class ConnectableTask {
                     final ComponentLog procLog = new SimpleProcessLogger(connectable.getIdentifier(), connectable.getRunnableComponent(), new StandardLoggingContext(connectable));
 
                     try {
-                        rawSession.commitAsync(null, t -> {
-                            procLog.error("Failed to commit session {} due to {}; rolling back", new Object[]{rawSession, t.toString()}, t);
-                        });
+                        rawSession.commitAsync(null,
+                            t -> procLog.error("Failed to commit session {} due to {}; rolling back", rawSession, t.toString(), t));
                     } catch (final TerminatedTaskException tte) {
                         procLog.debug("Cannot commit Batch Process Session because the Task was forcefully terminated", tte);
                     }

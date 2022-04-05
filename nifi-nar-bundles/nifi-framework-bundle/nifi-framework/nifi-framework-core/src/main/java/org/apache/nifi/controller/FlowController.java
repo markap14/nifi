@@ -102,6 +102,7 @@ import org.apache.nifi.controller.repository.claim.ResourceClaimManager;
 import org.apache.nifi.controller.repository.claim.StandardContentClaim;
 import org.apache.nifi.controller.repository.claim.StandardResourceClaimManager;
 import org.apache.nifi.controller.repository.io.LimitedInputStream;
+import org.apache.nifi.controller.scheduling.AutomaticSchedulingAgent;
 import org.apache.nifi.controller.scheduling.EventDrivenSchedulingAgent;
 import org.apache.nifi.controller.scheduling.QuartzSchedulingAgent;
 import org.apache.nifi.controller.scheduling.RepositoryContextFactory;
@@ -275,6 +276,7 @@ public class FlowController implements ReportingTaskProvider, Authorizable, Node
     private final AtomicReference<FlowEngine> timerDrivenEngineRef;
     private final AtomicReference<FlowEngine> eventDrivenEngineRef;
     private final EventDrivenSchedulingAgent eventDrivenSchedulingAgent;
+    private final FlowEngine autoSchedulingFlowEngine;
 
     private final ContentRepository contentRepository;
     private final FlowFileRepository flowFileRepository;
@@ -515,6 +517,10 @@ public class FlowController implements ReportingTaskProvider, Authorizable, Node
         timerDrivenEngineRef = new AtomicReference<>(new FlowEngine(maxTimerDrivenThreads.get(), "Timer-Driven Process"));
         eventDrivenEngineRef = new AtomicReference<>(new FlowEngine(maxEventDrivenThreads.get(), "Event-Driven Process"));
 
+        final int numCores = Runtime.getRuntime().availableProcessors();
+        final int corePoolSize = 4 * numCores;
+        autoSchedulingFlowEngine = new FlowEngine(corePoolSize, "Automatic Scheduling Process");
+
         final FlowFileRepository flowFileRepo = createFlowFileRepository(nifiProperties, extensionManager, resourceClaimManager);
         flowFileRepository = flowFileRepo;
         flowFileEventRepository = flowFileEventRepo;
@@ -591,6 +597,9 @@ public class FlowController implements ReportingTaskProvider, Authorizable, Node
         // PRIMARY_NODE_ONLY is deprecated, but still exists to handle processors that are still defined with it (they haven't been re-configured with executeNode = PRIMARY).
         processScheduler.setSchedulingAgent(SchedulingStrategy.PRIMARY_NODE_ONLY, timerDrivenAgent);
         processScheduler.setSchedulingAgent(SchedulingStrategy.CRON_DRIVEN, quartzSchedulingAgent);
+
+        final AutomaticSchedulingAgent automaticSchedulingAgent = new AutomaticSchedulingAgent(this,autoSchedulingFlowEngine, repositoryContextFactory, encryptor);
+        processScheduler.setSchedulingAgent(SchedulingStrategy.AUTOMATIC, automaticSchedulingAgent);
 
         startConnectablesAfterInitialization = new HashSet<>();
         startRemoteGroupPortsAfterInitialization = new HashSet<>();

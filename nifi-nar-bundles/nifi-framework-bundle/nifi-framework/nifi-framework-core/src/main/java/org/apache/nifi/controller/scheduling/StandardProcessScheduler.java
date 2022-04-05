@@ -160,6 +160,10 @@ public final class StandardProcessScheduler implements ProcessScheduler {
     }
 
     private SchedulingAgent getSchedulingAgent(final Connectable connectable) {
+        if (connectable instanceof ProcessorNode && connectable.getSchedulingStrategy() == SchedulingStrategy.TIMER_DRIVEN && connectable.getMaxConcurrentTasks() == 0) {
+            return strategyAgentMap.get(SchedulingStrategy.AUTOMATIC);
+        }
+
         return getSchedulingAgent(connectable.getSchedulingStrategy());
     }
 
