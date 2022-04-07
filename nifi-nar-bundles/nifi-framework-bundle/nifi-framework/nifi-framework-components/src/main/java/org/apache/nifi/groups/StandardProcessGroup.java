@@ -66,7 +66,7 @@ import org.apache.nifi.controller.service.StandardConfigurationContext;
 import org.apache.nifi.encrypt.PropertyEncryptor;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.flow.VersionedProcessGroup;
-import org.apache.nifi.flow.synchronization.StandardVersionedFlowSynchronizer;
+import org.apache.nifi.flow.synchronization.StandardVersionedComponentSynchronizer;
 import org.apache.nifi.flow.synchronization.VersionedFlowSynchronizationContext;
 import org.apache.nifi.logging.LogRepository;
 import org.apache.nifi.logging.LogRepositoryFactory;
@@ -3827,7 +3827,7 @@ public final class StandardProcessGroup implements ProcessGroup {
 
             final VersionedFlowSynchronizationContext groupSynchronizationContext = createGroupSynchronizationContext(
                 synchronizationOptions.getComponentIdGenerator(), synchronizationOptions.getComponentScheduler(), flowMappingOptions);
-            final StandardVersionedFlowSynchronizer synchronizer = new StandardVersionedFlowSynchronizer(groupSynchronizationContext);
+            final StandardVersionedComponentSynchronizer synchronizer = new StandardVersionedComponentSynchronizer(groupSynchronizationContext);
 
             final StandardVersionControlInformation originalVci = this.versionControlInfo.get();
             try {
@@ -3967,7 +3967,7 @@ public final class StandardProcessGroup implements ProcessGroup {
             final ComponentIdGenerator componentIdGenerator = (proposedId, instanceId, destinationGroupId) -> proposedId;
             final VersionedFlowSynchronizationContext groupSynchronizationContext = createGroupSynchronizationContext(
                 componentIdGenerator, ComponentScheduler.NOP_SCHEDULER, FlowMappingOptions.DEFAULT_OPTIONS);
-            final StandardVersionedFlowSynchronizer synchronizer = new StandardVersionedFlowSynchronizer(groupSynchronizationContext);
+            final StandardVersionedComponentSynchronizer synchronizer = new StandardVersionedComponentSynchronizer(groupSynchronizationContext);
 
             synchronizer.verifyCanSynchronize(this, updatedFlow.getFlowContents(), verifyConnectionRemoval);
         } finally {

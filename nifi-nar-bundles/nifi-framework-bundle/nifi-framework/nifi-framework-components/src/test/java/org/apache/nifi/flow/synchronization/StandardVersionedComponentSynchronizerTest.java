@@ -114,7 +114,7 @@ public class StandardVersionedComponentSynchronizerTest {
     private Connection connectionAB;
     private Port inputPort;
     private Port outputPort;
-    private StandardVersionedFlowSynchronizer synchronizer;
+    private StandardVersionedComponentSynchronizer synchronizer;
     private FlowSynchronizationOptions synchronizationOptions;
     private ProcessGroup group;
     private ComponentScheduler componentScheduler;
@@ -194,7 +194,7 @@ public class StandardVersionedComponentSynchronizerTest {
             .componentScheduler(componentScheduler)
             .build();
 
-        synchronizer = new StandardVersionedFlowSynchronizer(context);
+        synchronizer = new StandardVersionedComponentSynchronizer(context);
 
         queuesWithData.clear();
     }

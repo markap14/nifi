@@ -134,8 +134,8 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-public class StandardVersionedFlowSynchronizer implements VersionedComponentSynchronizer {
-    private static final Logger LOG = LoggerFactory.getLogger(StandardVersionedFlowSynchronizer.class);
+public class StandardVersionedComponentSynchronizer implements VersionedComponentSynchronizer {
+    private static final Logger LOG = LoggerFactory.getLogger(StandardVersionedComponentSynchronizer.class);
     private static final String TEMP_FUNNEL_ID_SUFFIX = "-temp-funnel";
     public static final String ENC_PREFIX = "enc{";
     public static final String ENC_SUFFIX = "}";
@@ -146,7 +146,7 @@ public class StandardVersionedFlowSynchronizer implements VersionedComponentSync
     private Set<String> preExistingVariables = new HashSet<>();
     private FlowSynchronizationOptions syncOptions;
 
-    public StandardVersionedFlowSynchronizer(final VersionedFlowSynchronizationContext context) {
+    public StandardVersionedComponentSynchronizer(final VersionedFlowSynchronizationContext context) {
         this.context = context;
     }
 
@@ -340,9 +340,6 @@ public class StandardVersionedFlowSynchronizer implements VersionedComponentSync
         // 10. Update connections to match those in the proposed group
         // 11. Delete the temporary destination that was created above
 
-        // Keep track of any processors that have been updated to have auto-terminated relationships so that we can set those
-        // auto-terminated relationships after we've handled creating/deleting necessary connections.
-        final Map<ProcessorNode, Set<Relationship>> autoTerminatedRelationships = new HashMap<>();
 
         // During the flow update, we will use temporary names for process group ports. This is because port names must be
         // unique within a process group, but during an update we might temporarily be in a state where two ports have the same name.
@@ -396,7 +393,7 @@ public class StandardVersionedFlowSynchronizer implements VersionedComponentSync
             synchronizeInputPorts(group, proposed, proposedPortFinalNames, inputPortsByVersionedId);
             synchronizeOutputPorts(group, proposed, proposedPortFinalNames, outputPortsByVersionedId);
             synchronizeLabels(group, proposed, labelsByVersionedId);
-            synchronizeProcessors(group, proposed, autoTerminatedRelationships, processorsByVersionedId);
+            synchronizeProcessors(group, proposed, processorsByVersionedId);
             synchronizeRemoteGroups(group, proposed, rpgsByVersionedId);
         } finally {
             // Make sure that we reset the connections
@@ -406,12 +403,6 @@ public class StandardVersionedFlowSynchronizer implements VersionedComponentSync
 
         // We can now add in any necessary connections, since all connectable components have now been created.
         synchronizeConnections(group, proposed, connectionsByVersionedId);
-
-        // Once the appropriate connections have been removed, we may now update Processors' auto-terminated relationships.
-        // We cannot do this above, in the 'updateProcessor' call because if a connection is removed and changed to auto-terminated,
-        // then updating this in the updateProcessor call above would attempt to set the Relationship to being auto-terminated while a
-        // Connection for that relationship exists. This will throw an Exception.
-        autoTerminatedRelationships.forEach(ProcessorNode::setAutoTerminatedRelationships);
 
         // All ports have now been added/removed as necessary. We can now resolve the port names.
         updatePortsToFinalNames(proposedPortFinalNames);
@@ -446,7 +437,7 @@ public class StandardVersionedFlowSynchronizer implements VersionedComponentSync
                 LOG.info("Added {} to {}", added, group);
             } else if (childCoordinates == null || syncOptions.isUpdateDescendantVersionedFlows()) {
 
-                final StandardVersionedFlowSynchronizer sync = new StandardVersionedFlowSynchronizer(context);
+                final StandardVersionedComponentSynchronizer sync = new StandardVersionedComponentSynchronizer(context);
                 sync.setPreExistingVariables(preExistingVariables);
                 sync.setUpdatedVersionedComponentIds(updatedVersionedComponentIds);
                 final FlowSynchronizationOptions options = FlowSynchronizationOptions.Builder.from(syncOptions)
@@ -832,25 +823,16 @@ public class StandardVersionedFlowSynchronizer implements VersionedComponentSync
         }
     }
 
-    private void synchronizeProcessors(final ProcessGroup group, final VersionedProcessGroup proposed, final Map<ProcessorNode, Set<Relationship>> autoTerminatedRelationships,
-                                       final Map<String, ProcessorNode> processorsByVersionedId) throws ProcessorInstantiationException {
+    private void synchronizeProcessors(final ProcessGroup group, final VersionedProcessGroup proposed, final Map<String, ProcessorNode> processorsByVersionedId)
+                throws ProcessorInstantiationException {
+
         for (final VersionedProcessor proposedProcessor : proposed.getProcessors()) {
             final ProcessorNode processor = processorsByVersionedId.get(proposedProcessor.getIdentifier());
             if (processor == null) {
                 final ProcessorNode added = addProcessor(group, proposedProcessor, context.getComponentIdGenerator());
-
-                final Set<Relationship> proposedAutoTerminated = getAutoTerminatedRelationships(processor, proposedProcessor);
-                autoTerminatedRelationships.put(added, proposedAutoTerminated);
                 LOG.info("Added {} to {}", added, group);
             } else if (updatedVersionedComponentIds.contains(proposedProcessor.getIdentifier())) {
                 updateProcessor(processor, proposedProcessor);
-
-                final Set<Relationship> proposedAutoTerminated = getAutoTerminatedRelationships(processor, proposedProcessor);
-
-                if (!processor.getAutoTerminatedRelationships().equals(proposedAutoTerminated)) {
-                    autoTerminatedRelationships.put(processor, proposedAutoTerminated);
-                }
-
                 LOG.info("Updated {}", processor);
             } else {
                 processor.setPosition(new Position(proposedProcessor.getPosition().getX(), proposedProcessor.getPosition().getY()));
@@ -1028,7 +1010,7 @@ public class StandardVersionedFlowSynchronizer implements VersionedComponentSync
 
         destination.addProcessGroup(group);
 
-        final StandardVersionedFlowSynchronizer sync = new StandardVersionedFlowSynchronizer(context);
+        final StandardVersionedComponentSynchronizer sync = new StandardVersionedComponentSynchronizer(context);
         sync.setPreExistingVariables(variablesToSkip);
         sync.setUpdatedVersionedComponentIds(updatedVersionedComponentIds);
 
@@ -1088,34 +1070,51 @@ public class StandardVersionedFlowSynchronizer implements VersionedComponentSync
         final long timeout = System.currentTimeMillis() + synchronizationOptions.getComponentStopTimeout().toMillis();
         final ControllerServiceProvider serviceProvider = context.getControllerServiceProvider();
 
-        // Disable the controller service, if necessary, in order to update it.
-        final Set<ComponentNode> referencesToRestart = new HashSet<>();
-        final Set<ControllerServiceNode> servicesToRestart = new HashSet<>();
-
+        synchronizationOptions.getComponentScheduler().pause();
         try {
-            stopControllerService(controllerService, proposed, timeout, synchronizationOptions.getComponentStopTimeoutAction(), referencesToRestart, servicesToRestart);
-            verifyCanSynchronize(controllerService, proposed);
+            // Disable the controller service, if necessary, in order to update it.
+            final Set<ComponentNode> referencesToRestart = new HashSet<>();
+            final Set<ControllerServiceNode> servicesToRestart = new HashSet<>();
 
             try {
-                if (proposed == null) {
-                    serviceProvider.removeControllerService(controllerService);
-                    LOG.info("Successfully synchronized {} by removing it from the flow", controllerService);
-                } else if (controllerService == null) {
-                    final ControllerServiceNode added = addControllerService(group, proposed, synchronizationOptions.getComponentIdGenerator());
-                    LOG.info("Successfully synchronized {} by adding it to the flow", added);
-                } else {
-                    updateControllerService(controllerService, proposed);
-                    LOG.info("Successfully synchronized {} by updating it to match proposed version", controllerService);
+                stopControllerService(controllerService, proposed, timeout, synchronizationOptions.getComponentStopTimeoutAction(), referencesToRestart, servicesToRestart);
+                verifyCanSynchronize(controllerService, proposed);
+
+                try {
+                    if (proposed == null) {
+                        serviceProvider.removeControllerService(controllerService);
+                        LOG.info("Successfully synchronized {} by removing it from the flow", controllerService);
+                    } else if (controllerService == null) {
+                        final ControllerServiceNode added = addControllerService(group, proposed, synchronizationOptions.getComponentIdGenerator());
+
+                        if (proposed.getScheduledState() == org.apache.nifi.flow.ScheduledState.ENABLED) {
+                            servicesToRestart.add(added);
+                        }
+
+                        LOG.info("Successfully synchronized {} by adding it to the flow", added);
+                    } else {
+                        updateControllerService(controllerService, proposed);
+
+                        if (proposed.getScheduledState() == org.apache.nifi.flow.ScheduledState.ENABLED) {
+                            servicesToRestart.add(controllerService);
+                        }
+
+                        LOG.info("Successfully synchronized {} by updating it to match proposed version", controllerService);
+                    }
+                } catch (final Exception e) {
+                    throw new FlowSynchronizationException("Failed to synchronize Controller Service " + controllerService + " with proposed version", e);
                 }
-            } catch (final Exception e) {
-                throw new FlowSynchronizationException("Failed to synchronize Controller Service " + controllerService + " with proposed version", e);
+            } finally {
+                // Re-enable the controller service if necessary
+                serviceProvider.enableControllerServicesAsync(servicesToRestart);
+
+                // Restart any components that need to be restarted.
+                if (controllerService != null) {
+                    serviceProvider.scheduleReferencingComponents(controllerService, referencesToRestart, context.getComponentScheduler());
+                }
             }
         } finally {
-            // Re-enable the controller service if necessary
-            serviceProvider.enableControllerServicesAsync(servicesToRestart);
-
-            // Restart any components that need to be restarted.
-            serviceProvider.scheduleReferencingComponents(controllerService, referencesToRestart, context.getComponentScheduler());
+            synchronizationOptions.getComponentScheduler().resume();
         }
     }
 
@@ -1326,72 +1325,77 @@ public class StandardVersionedFlowSynchronizer implements VersionedComponentSync
         final long timeout = System.currentTimeMillis() + synchronizationOptions.getComponentStopTimeout().toMillis();
         verifyCanSynchronize(parameterContext, proposed);
 
-        // Make sure that we have a unique name and add the Parameter Context if none exists
-        if (parameterContext == null) {
-            final String contextId = synchronizationOptions.getComponentIdGenerator().generateUuid(proposed.getIdentifier(), proposed.getInstanceIdentifier(), "Controller");
-            final ParameterContext added = createParameterContext(proposed, contextId, Collections.emptyMap());
-            LOG.info("Successfully synchronized {} by adding it to the flow", added);
-            return;
-        }
-
-        final ParameterReferenceManager referenceManager = parameterContext.getParameterReferenceManager();
-        final Set<String> updatedParameterNames = getUpdatedParameterNames(parameterContext, proposed);
-
-        final Set<ComponentNode> componentsToRestart = new HashSet<>();
-        final Set<ControllerServiceNode> servicesToRestart = new HashSet<>();
+        synchronizationOptions.getComponentScheduler().pause();
         try {
-            // Stop components necessary
-            for (final String paramName : updatedParameterNames) {
-                final Set<ProcessorNode> processors = referenceManager.getProcessorsReferencing(parameterContext, paramName);
-                componentsToRestart.addAll(stopOrTerminate(processors, timeout, synchronizationOptions));
-
-                final Set<ControllerServiceNode> referencingServices = referenceManager.getControllerServicesReferencing(parameterContext, paramName);
-
-                for (final ControllerServiceNode referencingService : referencingServices) {
-                    stopControllerService(referencingService, null, timeout, synchronizationOptions.getComponentStopTimeoutAction(), componentsToRestart, servicesToRestart);
-                    servicesToRestart.add(referencingService);
-                }
+            // Make sure that we have a unique name and add the Parameter Context if none exists
+            if (parameterContext == null) {
+                final String contextId = synchronizationOptions.getComponentIdGenerator().generateUuid(proposed.getIdentifier(), proposed.getInstanceIdentifier(), "Controller");
+                final ParameterContext added = createParameterContext(proposed, contextId, Collections.emptyMap());
+                LOG.info("Successfully synchronized {} by adding it to the flow", added);
+                return;
             }
 
-            final ParameterContextManager contextManager = context.getFlowManager().getParameterContextManager();
+            final ParameterReferenceManager referenceManager = parameterContext.getParameterReferenceManager();
+            final Set<String> updatedParameterNames = getUpdatedParameterNames(parameterContext, proposed);
 
-            if (proposed == null) {
-                contextManager.removeParameterContext(parameterContext.getIdentifier());
-                LOG.info("Successfully synchronized {} by removing it from the flow", parameterContext);
-            } else {
-                final Map<String, Parameter> updatedParameters = createParameterMap(proposed.getParameters());
+            final Set<ComponentNode> componentsToRestart = new HashSet<>();
+            final Set<ControllerServiceNode> servicesToRestart = new HashSet<>();
+            try {
+                // Stop components necessary
+                for (final String paramName : updatedParameterNames) {
+                    final Set<ProcessorNode> processors = referenceManager.getProcessorsReferencing(parameterContext, paramName);
+                    componentsToRestart.addAll(stopOrTerminate(processors, timeout, synchronizationOptions));
 
-                final Map<String, ParameterContext> contextsByName = contextManager.getParameterContextNameMapping();
-                final List<ParameterContext> inheritedContexts = new ArrayList<>();
-                final List<String> inheritedContextNames = proposed.getInheritedParameterContexts();
-                if (inheritedContextNames != null) {
-                    for (final String inheritedContextName : inheritedContextNames) {
-                        final ParameterContext inheritedContext = contextsByName.get(inheritedContextName);
-                        inheritedContexts.add(inheritedContext);
+                    final Set<ControllerServiceNode> referencingServices = referenceManager.getControllerServicesReferencing(parameterContext, paramName);
+
+                    for (final ControllerServiceNode referencingService : referencingServices) {
+                        stopControllerService(referencingService, null, timeout, synchronizationOptions.getComponentStopTimeoutAction(), componentsToRestart, servicesToRestart);
+                        servicesToRestart.add(referencingService);
                     }
                 }
 
-                parameterContext.setParameters(updatedParameters);
-                parameterContext.setName(proposed.getName());
-                parameterContext.setDescription(proposed.getDescription());
-                parameterContext.setInheritedParameterContexts(inheritedContexts);
-                LOG.info("Successfully synchronized {} by updating it to match the proposed version", parameterContext);
-            }
-        } finally {
-            // TODO: How will this behave if Controller Service was changed to DISABLING but then timed out waiting for it to disable?
-            //       In that case, I think this will fail to enable the controller services, and as a result it will remain DISABLED.
-            //       We probably want to update the logic here so that it marks a desired state of ENABLED and when the service finally transitions
-            //       to DISABLED we enable it.
-            context.getControllerServiceProvider().enableControllerServicesAsync(servicesToRestart);
+                final ParameterContextManager contextManager = context.getFlowManager().getParameterContextManager();
 
-            // We don't use ControllerServiceProvider.scheduleReferencingComponents here, as we do when dealing with a Controller Service
-            // because if we timeout while waiting for a Controller Service to stop, then that Controller Service won't be in our list of Controller Services
-            // to re-enable. As a result, we don't have the appropriate Controller Service to pass to the scheduleReferencingComponents.
-            for (final ComponentNode stoppedComponent : componentsToRestart) {
-                if (stoppedComponent instanceof Connectable) {
-                    context.getComponentScheduler().startComponent((Connectable) stoppedComponent);
+                if (proposed == null) {
+                    contextManager.removeParameterContext(parameterContext.getIdentifier());
+                    LOG.info("Successfully synchronized {} by removing it from the flow", parameterContext);
+                } else {
+                    final Map<String, Parameter> updatedParameters = createParameterMap(proposed.getParameters());
+
+                    final Map<String, ParameterContext> contextsByName = contextManager.getParameterContextNameMapping();
+                    final List<ParameterContext> inheritedContexts = new ArrayList<>();
+                    final List<String> inheritedContextNames = proposed.getInheritedParameterContexts();
+                    if (inheritedContextNames != null) {
+                        for (final String inheritedContextName : inheritedContextNames) {
+                            final ParameterContext inheritedContext = contextsByName.get(inheritedContextName);
+                            inheritedContexts.add(inheritedContext);
+                        }
+                    }
+
+                    parameterContext.setParameters(updatedParameters);
+                    parameterContext.setName(proposed.getName());
+                    parameterContext.setDescription(proposed.getDescription());
+                    parameterContext.setInheritedParameterContexts(inheritedContexts);
+                    LOG.info("Successfully synchronized {} by updating it to match the proposed version", parameterContext);
+                }
+            } finally {
+                // TODO: How will this behave if Controller Service was changed to DISABLING but then timed out waiting for it to disable?
+                //       In that case, I think this will fail to enable the controller services, and as a result it will remain DISABLED.
+                //       We probably want to update the logic here so that it marks a desired state of ENABLED and when the service finally transitions
+                //       to DISABLED we enable it.
+                context.getControllerServiceProvider().enableControllerServicesAsync(servicesToRestart);
+
+                // We don't use ControllerServiceProvider.scheduleReferencingComponents here, as we do when dealing with a Controller Service
+                // because if we timeout while waiting for a Controller Service to stop, then that Controller Service won't be in our list of Controller Services
+                // to re-enable. As a result, we don't have the appropriate Controller Service to pass to the scheduleReferencingComponents.
+                for (final ComponentNode stoppedComponent : componentsToRestart) {
+                    if (stoppedComponent instanceof Connectable) {
+                        context.getComponentScheduler().startComponent((Connectable) stoppedComponent);
+                    }
                 }
             }
+        } finally {
+            synchronizationOptions.getComponentScheduler().resume();
         }
     }
 
@@ -1425,147 +1429,151 @@ public class StandardVersionedFlowSynchronizer implements VersionedComponentSync
 
         final long timeout = System.currentTimeMillis() + synchronizationOptions.getComponentStopTimeout().toMillis();
 
-        // Check if we need to delete the Process Group
-        if (proposed == null) {
-            // Ensure that there are no incoming connections
-            processGroup.getInputPorts().forEach(Port::verifyCanDelete);
+        synchronizationOptions.getComponentScheduler().pause();
+        try {
+            // Check if we need to delete the Process Group
+            if (proposed == null) {
+                // Ensure that there are no incoming connections
+                processGroup.getInputPorts().forEach(Port::verifyCanDelete);
 
-            // Bleed out the data by stopping all input ports and source processors, then waiting
-            // for all connections to become empty
-            bleedOut(processGroup, timeout, synchronizationOptions);
+                // Bleed out the data by stopping all input ports and source processors, then waiting
+                // for all connections to become empty
+                bleedOut(processGroup, timeout, synchronizationOptions);
 
-            // Disable all Controller Services
-            final Future<Void> disableServicesFuture = context.getControllerServiceProvider().disableControllerServicesAsync(processGroup.findAllControllerServices());
-            try {
-                disableServicesFuture.get(timeout, TimeUnit.MILLISECONDS);
-            } catch (final ExecutionException ee) {
-                throw new FlowSynchronizationException("Could not synchronize flow with proposal due to: failed to disable Controller Services", ee.getCause());
-            }
-
-            // Remove all templates from the group and remove the group
-            processGroup.getTemplates().forEach(processGroup::removeTemplate);
-            processGroup.getParent().removeProcessGroup(processGroup);
-
-            LOG.info("Successfully synchronized {} by removing it from the flow", processGroup);
-            return;
-        }
-
-
-        // Create the Process Group if it doesn't exist
-        final ProcessGroup groupToUpdate;
-        if (processGroup == null) {
-            final String groupId = synchronizationOptions.getComponentIdGenerator().generateUuid(proposed.getIdentifier(), proposed.getInstanceIdentifier(), parentGroup.getIdentifier());
-            final ProcessGroup group = context.getFlowManager().createProcessGroup(groupId);
-            group.setVersionedComponentId(proposed.getIdentifier());
-            group.setParent(parentGroup);
-            group.setName(proposed.getName());
-
-            parentGroup.addProcessGroup(group);
-            groupToUpdate = group;
-        } else {
-            groupToUpdate = processGroup;
-        }
-
-        // Ensure that the referenced Parameter Context is valid
-        final ParameterContext parameterContext = proposed.getParameterContextName() == null ? null :
-            context.getFlowManager().getParameterContextManager().getParameterContextNameMapping().get(proposed.getParameterContextName());
-
-        if (parameterContext == null && proposed.getParameterContextName() != null) {
-            throw new FlowSynchronizationException("Cannot synchronize flow with proposed version because proposal indicates that Process Group " + groupToUpdate + " should use Parameter Context " +
-                "with name [" + proposed.getParameterContextName() + "] but no Parameter Context exists with that name");
-        }
-
-        // Determine which components must be stopped/disabled based on Parameter Context name changing
-        final Set<ProcessorNode> processorsToStop = new HashSet<>();
-        final Set<ControllerServiceNode> controllerServicesToStop = new HashSet<>();
-        final String currentParameterContextName = groupToUpdate.getParameterContext() == null ? null : groupToUpdate.getParameterContext().getName();
-        if (!Objects.equals(currentParameterContextName, proposed.getParameterContextName())) {
-            groupToUpdate.getProcessors().stream()
-                .filter(ProcessorNode::isRunning)
-                .filter(ProcessorNode::isReferencingParameter)
-                .forEach(processorsToStop::add);
-
-            final Set<ControllerServiceNode> servicesReferencingParams = groupToUpdate.getControllerServices(false).stream()
-                .filter(ControllerServiceNode::isReferencingParameter)
-                .collect(Collectors.toSet());
-
-            for (final ControllerServiceNode service : servicesReferencingParams) {
-                if (!service.isActive()) {
-                    continue;
+                // Disable all Controller Services
+                final Future<Void> disableServicesFuture = context.getControllerServiceProvider().disableControllerServicesAsync(processGroup.findAllControllerServices());
+                try {
+                    disableServicesFuture.get(timeout, TimeUnit.MILLISECONDS);
+                } catch (final ExecutionException ee) {
+                    throw new FlowSynchronizationException("Could not synchronize flow with proposal due to: failed to disable Controller Services", ee.getCause());
                 }
 
-                controllerServicesToStop.add(service);
+                // Remove all templates from the group and remove the group
+                processGroup.getTemplates().forEach(processGroup::removeTemplate);
+                processGroup.getParent().removeProcessGroup(processGroup);
 
-                for (final ControllerServiceNode referencingService : service.getReferences().findRecursiveReferences(ControllerServiceNode.class)) {
-                    if (!referencingService.isActive()) {
+                LOG.info("Successfully synchronized {} by removing it from the flow", processGroup);
+                return;
+            }
+
+            // Create the Process Group if it doesn't exist
+            final ProcessGroup groupToUpdate;
+            if (processGroup == null) {
+                final String groupId = synchronizationOptions.getComponentIdGenerator().generateUuid(proposed.getIdentifier(), proposed.getInstanceIdentifier(), parentGroup.getIdentifier());
+                final ProcessGroup group = context.getFlowManager().createProcessGroup(groupId);
+                group.setVersionedComponentId(proposed.getIdentifier());
+                group.setParent(parentGroup);
+                group.setName(proposed.getName());
+
+                parentGroup.addProcessGroup(group);
+                groupToUpdate = group;
+            } else {
+                groupToUpdate = processGroup;
+            }
+
+            // Ensure that the referenced Parameter Context is valid
+            final ParameterContext parameterContext = proposed.getParameterContextName() == null ? null :
+                context.getFlowManager().getParameterContextManager().getParameterContextNameMapping().get(proposed.getParameterContextName());
+
+            if (parameterContext == null && proposed.getParameterContextName() != null) {
+                throw new FlowSynchronizationException("Cannot synchronize flow with proposed version because proposal indicates that Process Group " + groupToUpdate + " should use Parameter Context " +
+                    "with name [" + proposed.getParameterContextName() + "] but no Parameter Context exists with that name");
+            }
+
+            // Determine which components must be stopped/disabled based on Parameter Context name changing
+            final Set<ProcessorNode> processorsToStop = new HashSet<>();
+            final Set<ControllerServiceNode> controllerServicesToStop = new HashSet<>();
+            final String currentParameterContextName = groupToUpdate.getParameterContext() == null ? null : groupToUpdate.getParameterContext().getName();
+            if (!Objects.equals(currentParameterContextName, proposed.getParameterContextName())) {
+                groupToUpdate.getProcessors().stream()
+                    .filter(ProcessorNode::isRunning)
+                    .filter(ProcessorNode::isReferencingParameter)
+                    .forEach(processorsToStop::add);
+
+                final Set<ControllerServiceNode> servicesReferencingParams = groupToUpdate.getControllerServices(false).stream()
+                    .filter(ControllerServiceNode::isReferencingParameter)
+                    .collect(Collectors.toSet());
+
+                for (final ControllerServiceNode service : servicesReferencingParams) {
+                    if (!service.isActive()) {
                         continue;
                     }
 
-                    controllerServicesToStop.add(referencingService);
+                    controllerServicesToStop.add(service);
+
+                    for (final ControllerServiceNode referencingService : service.getReferences().findRecursiveReferences(ControllerServiceNode.class)) {
+                        if (!referencingService.isActive()) {
+                            continue;
+                        }
+
+                        controllerServicesToStop.add(referencingService);
+                    }
+                }
+
+                for (final ControllerServiceNode service : controllerServicesToStop) {
+                    service.getReferences().findRecursiveReferences(ProcessorNode.class).stream()
+                        .filter(ProcessorNode::isRunning)
+                        .forEach(processorsToStop::add);
                 }
             }
 
-            for (final ControllerServiceNode service : controllerServicesToStop) {
-                service.getReferences().findRecursiveReferences(ProcessorNode.class).stream()
-                    .filter(ProcessorNode::isRunning)
-                    .forEach(processorsToStop::add);
-            }
-        }
-
-        // Determine which components must be stopped based on changes to Variable Registry.
-        final Set<String> updatedVariableNames = getUpdatedVariableNames(groupToUpdate.getVariableRegistry(), proposed.getVariables() == null ? Collections.emptyMap() : proposed.getVariables());
-        if (!updatedVariableNames.isEmpty()) {
-            for (final String variableName : updatedVariableNames) {
-                final Set<ComponentNode> affectedComponents = groupToUpdate.getComponentsAffectedByVariable(variableName);
-                for (final ComponentNode component : affectedComponents) {
-                    if (component instanceof ProcessorNode) {
-                        final ProcessorNode processor = (ProcessorNode) component;
-                        if (processor.isRunning()) {
-                            processorsToStop.add(processor);
-                        }
-                    } else if (component instanceof ControllerServiceNode) {
-                        final ControllerServiceNode service = (ControllerServiceNode) component;
-                        if (service.isActive()) {
-                            controllerServicesToStop.add(service);
+            // Determine which components must be stopped based on changes to Variable Registry.
+            final Set<String> updatedVariableNames = getUpdatedVariableNames(groupToUpdate.getVariableRegistry(), proposed.getVariables() == null ? Collections.emptyMap() : proposed.getVariables());
+            if (!updatedVariableNames.isEmpty()) {
+                for (final String variableName : updatedVariableNames) {
+                    final Set<ComponentNode> affectedComponents = groupToUpdate.getComponentsAffectedByVariable(variableName);
+                    for (final ComponentNode component : affectedComponents) {
+                        if (component instanceof ProcessorNode) {
+                            final ProcessorNode processor = (ProcessorNode) component;
+                            if (processor.isRunning()) {
+                                processorsToStop.add(processor);
+                            }
+                        } else if (component instanceof ControllerServiceNode) {
+                            final ControllerServiceNode service = (ControllerServiceNode) component;
+                            if (service.isActive()) {
+                                controllerServicesToStop.add(service);
+                            }
                         }
                     }
                 }
             }
-        }
 
-        try {
-            // Stop all necessary running processors
-            stopOrTerminate(processorsToStop, timeout, synchronizationOptions);
-
-            // Stop all necessary enabled/active Controller Services
-            final Future<Void> serviceDisableFuture = context.getControllerServiceProvider().disableControllerServicesAsync(controllerServicesToStop);
             try {
-                serviceDisableFuture.get(timeout - System.currentTimeMillis(), TimeUnit.MILLISECONDS);
-            } catch (ExecutionException e) {
-                throw new FlowSynchronizationException("Failed to disable Controller Services necessary in order to perform update of Process Group", e);
-            }
+                // Stop all necessary running processors
+                stopOrTerminate(processorsToStop, timeout, synchronizationOptions);
 
-            // Update the Process Group
-            groupToUpdate.setDefaultBackPressureDataSizeThreshold(proposed.getDefaultBackPressureDataSizeThreshold());
-            groupToUpdate.setDefaultBackPressureObjectThreshold(proposed.getDefaultBackPressureObjectThreshold());
-            groupToUpdate.setFlowFileConcurrency(proposed.getFlowFileConcurrency() == null ? FlowFileConcurrency.UNBOUNDED : FlowFileConcurrency.valueOf(proposed.getFlowFileConcurrency()));
-            groupToUpdate.setFlowFileOutboundPolicy(proposed.getFlowFileOutboundPolicy() == null ? FlowFileOutboundPolicy.STREAM_WHEN_AVAILABLE :
-                FlowFileOutboundPolicy.valueOf(proposed.getFlowFileOutboundPolicy()));
-            groupToUpdate.setParameterContext(parameterContext);
-            groupToUpdate.setVariables(proposed.getVariables());
+                // Stop all necessary enabled/active Controller Services
+                final Future<Void> serviceDisableFuture = context.getControllerServiceProvider().disableControllerServicesAsync(controllerServicesToStop);
+                try {
+                    serviceDisableFuture.get(timeout - System.currentTimeMillis(), TimeUnit.MILLISECONDS);
+                } catch (ExecutionException e) {
+                    throw new FlowSynchronizationException("Failed to disable Controller Services necessary in order to perform update of Process Group", e);
+                }
 
-            if (processGroup == null) {
-                LOG.info("Successfully synchronized {} by adding it to the flow", groupToUpdate);
-            } else {
-                LOG.info("Successfully synchronized {} by updating it to match proposed version", groupToUpdate);
+                // Update the Process Group
+                groupToUpdate.setDefaultBackPressureDataSizeThreshold(proposed.getDefaultBackPressureDataSizeThreshold());
+                groupToUpdate.setDefaultBackPressureObjectThreshold(proposed.getDefaultBackPressureObjectThreshold());
+                groupToUpdate.setFlowFileConcurrency(proposed.getFlowFileConcurrency() == null ? FlowFileConcurrency.UNBOUNDED : FlowFileConcurrency.valueOf(proposed.getFlowFileConcurrency()));
+                groupToUpdate.setFlowFileOutboundPolicy(proposed.getFlowFileOutboundPolicy() == null ? FlowFileOutboundPolicy.STREAM_WHEN_AVAILABLE :
+                    FlowFileOutboundPolicy.valueOf(proposed.getFlowFileOutboundPolicy()));
+                groupToUpdate.setParameterContext(parameterContext);
+                groupToUpdate.setVariables(proposed.getVariables());
+
+                if (processGroup == null) {
+                    LOG.info("Successfully synchronized {} by adding it to the flow", groupToUpdate);
+                } else {
+                    LOG.info("Successfully synchronized {} by updating it to match proposed version", groupToUpdate);
+                }
+            } finally {
+                // Re-enable all Controller Services that we disabled and restart all processors
+                context.getControllerServiceProvider().enableControllerServicesAsync(controllerServicesToStop);
+
+                for (final ProcessorNode processor : processorsToStop) {
+                    processor.getProcessGroup().startProcessor(processor, false);
+                }
             }
         } finally {
-            // Re-enable all Controller Services that we disabled and restart all processors
-            context.getControllerServiceProvider().enableControllerServicesAsync(controllerServicesToStop);
-
-            for (final ProcessorNode processor : processorsToStop) {
-                processor.getProcessGroup().startProcessor(processor, false);
-            }
+            synchronizationOptions.getComponentScheduler().resume();
         }
     }
 
@@ -1999,50 +2007,55 @@ public class StandardVersionedFlowSynchronizer implements VersionedComponentSync
         final long timeout = System.currentTimeMillis() + synchronizationOptions.getComponentStopTimeout().toMillis();
         verifyCanSynchronize(port, proposed, timeout);
 
-        final Set<Connectable> toRestart = new HashSet<>();
-        if (port != null) {
-            final boolean stopped = stopOrTerminate(port, timeout, synchronizationOptions);
-            if (stopped && proposed != null) {
-                toRestart.add(port);
-            }
-        }
-
+        synchronizationOptions.getComponentScheduler().pause();
         try {
-            if (port == null) {
-                final ComponentType proposedType = proposed.getComponentType();
+            final Set<Connectable> toRestart = new HashSet<>();
+            if (port != null) {
+                final boolean stopped = stopOrTerminate(port, timeout, synchronizationOptions);
+                if (stopped && proposed != null) {
+                    toRestart.add(port);
+                }
+            }
 
-                if (proposedType == ComponentType.INPUT_PORT) {
-                    addInputPort(group, proposed, synchronizationOptions.getComponentIdGenerator(), proposed.getName());
+            try {
+                if (port == null) {
+                    final ComponentType proposedType = proposed.getComponentType();
+
+                    if (proposedType == ComponentType.INPUT_PORT) {
+                        addInputPort(group, proposed, synchronizationOptions.getComponentIdGenerator(), proposed.getName());
+                    } else {
+                        addOutputPort(group, proposed, synchronizationOptions.getComponentIdGenerator(), proposed.getName());
+                    }
+
+                    LOG.info("Successfully synchronized {} by adding it to the flow", port);
+                } else if (proposed == null) {
+                    final Set<Connectable> stoppedDownstream = stopDownstreamComponents(port, timeout, synchronizationOptions);
+                    toRestart.addAll(stoppedDownstream);
+
+                    verifyCanDelete(port, timeout);
+
+                    switch (port.getConnectableType()) {
+                        case INPUT_PORT:
+                            port.getProcessGroup().removeInputPort(port);
+                            break;
+                        case OUTPUT_PORT:
+                            port.getProcessGroup().removeOutputPort(port);
+                            break;
+                    }
+
+                    LOG.info("Successfully synchronized {} by removing it from the flow", port);
                 } else {
-                    addOutputPort(group, proposed, synchronizationOptions.getComponentIdGenerator(), proposed.getName());
+                    updatePort(port, proposed, proposed.getName());
+                    LOG.info("Successfully synchronized {} by updating it to match proposed version", port);
                 }
-
-                LOG.info("Successfully synchronized {} by adding it to the flow", port);
-            } else if (proposed == null) {
-                final Set<Connectable> stoppedDownstream = stopDownstreamComponents(port, timeout, synchronizationOptions);
-                toRestart.addAll(stoppedDownstream);
-
-                verifyCanDelete(port, timeout);
-
-                switch (port.getConnectableType()) {
-                    case INPUT_PORT:
-                        port.getProcessGroup().removeInputPort(port);
-                        break;
-                    case OUTPUT_PORT:
-                        port.getProcessGroup().removeOutputPort(port);
-                        break;
+            } finally {
+                // Restart any components that need to be restarted.
+                for (final Connectable stoppedComponent : toRestart) {
+                    context.getComponentScheduler().startComponent(stoppedComponent);
                 }
-
-                LOG.info("Successfully synchronized {} by removing it from the flow", port);
-            } else {
-                updatePort(port, proposed, proposed.getName());
-                LOG.info("Successfully synchronized {} by updating it to match proposed version", port);
             }
         } finally {
-            // Restart any components that need to be restarted.
-            for (final Connectable stoppedComponent : toRestart) {
-                context.getComponentScheduler().startComponent(stoppedComponent);
-            }
+            synchronizationOptions.getComponentScheduler().resume();
         }
     }
 
@@ -2193,25 +2206,6 @@ public class StandardVersionedFlowSynchronizer implements VersionedComponentSync
 
         // Verify processor can be updated
         processor.verifyCanUpdate();
-
-        // Check if the new configuration has any auto-terminated relationships that are not presently auto-terminated.
-        // If so, those relationships cannot be a part of any Connection, as we cannot auto-terminate a Relationship AND have it used in a Connection.
-        // The Connection must first be updated or deleted.
-        final Set<String> proposedTerminatedRelationships = proposedProcessor.getAutoTerminatedRelationships();
-        final Set<String> currentTerminatedRelationships = processor.getAutoTerminatedRelationships().stream().map(Relationship::getName).collect(Collectors.toSet());
-        if (!Objects.equals(proposedTerminatedRelationships, currentTerminatedRelationships)) {
-            final Set<String> newlyTerminated = new HashSet<>(proposedTerminatedRelationships);
-            newlyTerminated.removeAll(currentTerminatedRelationships);
-
-            for (final String toTerminate : newlyTerminated) {
-                final Relationship relationship = processor.getRelationship(toTerminate);
-                final Set<Connection> existingConnections = processor.getConnections(relationship);
-                if (!existingConnections.isEmpty()) {
-                    throw new IllegalStateException("Cannot update " + processor + " to match proposed configuration because doing so would require auto-terminating the " + toTerminate +
-                        "Relationship, but that Relationship is currently assigned to at least one connection.");
-                }
-            }
-        }
     }
 
     private void verifyCanDelete(final Connectable connectable, final long timeout) throws InterruptedException, TimeoutException, FlowSynchronizationException {
@@ -2253,41 +2247,46 @@ public class StandardVersionedFlowSynchronizer implements VersionedComponentSync
         setSynchronizationOptions(synchronizationOptions);
         final long timeout = System.currentTimeMillis() + synchronizationOptions.getComponentStopTimeout().toMillis();
 
-        // Stop the processor, if necessary, in order to update it.
-        final Set<Connectable> toRestart = new HashSet<>();
-        if (processor != null) {
-            final boolean stopped = stopOrTerminate(processor, timeout, synchronizationOptions);
-
-            if (stopped && proposedProcessor != null && proposedProcessor.getScheduledState() == org.apache.nifi.flow.ScheduledState.RUNNING) {
-                toRestart.add(processor);
-            }
-        }
-
+        synchronizationOptions.getComponentScheduler().pause();
         try {
-            verifyCanSynchronize(processor, proposedProcessor, timeout);
+            // Stop the processor, if necessary, in order to update it.
+            final Set<Connectable> toRestart = new HashSet<>();
+            if (processor != null) {
+                final boolean stopped = stopOrTerminate(processor, timeout, synchronizationOptions);
+
+                if (stopped && proposedProcessor != null && proposedProcessor.getScheduledState() == org.apache.nifi.flow.ScheduledState.RUNNING) {
+                    toRestart.add(processor);
+                }
+            }
 
             try {
-                if (proposedProcessor == null) {
-                    final Set<Connectable> stoppedDownstream = stopDownstreamComponents(processor, timeout, synchronizationOptions);
-                    toRestart.addAll(stoppedDownstream);
+                verifyCanSynchronize(processor, proposedProcessor, timeout);
 
-                    processor.getProcessGroup().removeProcessor(processor);
-                    LOG.info("Successfully synchronized {} by removing it from the flow", processor);
-                } else if (processor == null) {
-                    final ProcessorNode added = addProcessor(group, proposedProcessor, synchronizationOptions.getComponentIdGenerator());
-                    LOG.info("Successfully synchronized {} by adding it to the flow", added);
-                } else {
-                    updateProcessor(processor, proposedProcessor);
-                    LOG.info("Successfully synchronized {} by updating it to match proposed version", processor);
+                try {
+                    if (proposedProcessor == null) {
+                        final Set<Connectable> stoppedDownstream = stopDownstreamComponents(processor, timeout, synchronizationOptions);
+                        toRestart.addAll(stoppedDownstream);
+
+                        processor.getProcessGroup().removeProcessor(processor);
+                        LOG.info("Successfully synchronized {} by removing it from the flow", processor);
+                    } else if (processor == null) {
+                        final ProcessorNode added = addProcessor(group, proposedProcessor, synchronizationOptions.getComponentIdGenerator());
+                        LOG.info("Successfully synchronized {} by adding it to the flow", added);
+                    } else {
+                        updateProcessor(processor, proposedProcessor);
+                        LOG.info("Successfully synchronized {} by updating it to match proposed version", processor);
+                    }
+                } catch (final Exception e) {
+                    throw new FlowSynchronizationException("Failed to synchronize processor " + processor + " with proposed version", e);
                 }
-            } catch (final Exception e) {
-                throw new FlowSynchronizationException("Failed to synchronize processor " + processor + " with proposed version", e);
+            } finally {
+                // Restart any components that need to be restarted.
+                for (final Connectable stoppedComponent : toRestart) {
+                    context.getComponentScheduler().startComponent(stoppedComponent);
+                }
             }
         } finally {
-            // Restart any components that need to be restarted.
-            for (final Connectable stoppedComponent : toRestart) {
-                context.getComponentScheduler().startComponent(stoppedComponent);
-            }
+            synchronizationOptions.getComponentScheduler().resume();
         }
     }
 
@@ -2454,6 +2453,16 @@ public class StandardVersionedFlowSynchronizer implements VersionedComponentSync
             processor.setMaxBackoffPeriod(proposed.getMaxBackoffPeriod());
             processor.setRetriedRelationships(proposed.getRetriedRelationships());
 
+            final Set<String> proposedAutoTerminated = proposed.getAutoTerminatedRelationships();
+            if (proposedAutoTerminated != null) {
+                final Set<Relationship> relationshipsToAutoTerminate = proposedAutoTerminated.stream()
+                    .map(processor::getRelationship)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+
+                processor.setAutoTerminatedRelationships(relationshipsToAutoTerminate);
+            }
+
             if (proposed.getRetryCount() != null) {
                 processor.setRetryCount(proposed.getRetryCount());
             } else {
@@ -2506,54 +2515,59 @@ public class StandardVersionedFlowSynchronizer implements VersionedComponentSync
         setSynchronizationOptions(synchronizationOptions);
         final long timeout = System.currentTimeMillis() + synchronizationOptions.getComponentStopTimeout().toMillis();
 
-        // Stop the processor, if necessary, in order to update it.
-        final Set<Connectable> toRestart = new HashSet<>();
-        if (rpg != null) {
-            if (rpg.isTransmitting()) {
-                final Set<RemoteGroupPort> transmitting = getTransmittingPorts(rpg);
-
-                final Future<?> future = rpg.stopTransmitting();
-                waitForStopCompletion(future, rpg, timeout, synchronizationOptions.getComponentStopTimeoutAction());
-
-                final boolean proposedTransmitting = isTransmitting(proposed);
-                if (proposed != null && proposedTransmitting) {
-                    toRestart.addAll(transmitting);
-                }
-            }
-        }
-
+        synchronizationOptions.getComponentScheduler().pause();
         try {
-            if (proposed == null) {
-                // Stop any downstream components so that we can delete the RPG
-                for (final RemoteGroupPort outPort : rpg.getOutputPorts()) {
-                    final Set<Connectable> stoppedDownstream = stopDownstreamComponents(outPort, timeout, synchronizationOptions);
-                    toRestart.addAll(stoppedDownstream);
-                }
+            // Stop the processor, if necessary, in order to update it.
+            final Set<Connectable> toRestart = new HashSet<>();
+            if (rpg != null) {
+                if (rpg.isTransmitting()) {
+                    final Set<RemoteGroupPort> transmitting = getTransmittingPorts(rpg);
 
-                // Verify that we can delete the components
-                for (final RemoteGroupPort port : rpg.getInputPorts()) {
-                    verifyCanDelete(port, timeout);
-                }
-                for (final RemoteGroupPort port : rpg.getOutputPorts()) {
-                    verifyCanDelete(port, timeout);
-                }
+                    final Future<?> future = rpg.stopTransmitting();
+                    waitForStopCompletion(future, rpg, timeout, synchronizationOptions.getComponentStopTimeoutAction());
 
-                rpg.getProcessGroup().removeRemoteProcessGroup(rpg);
-                LOG.info("Successfully synchronized {} by removing it from the flow", rpg);
-            } else if (rpg == null) {
-                final RemoteProcessGroup added = addRemoteProcessGroup(group, proposed, synchronizationOptions.getComponentIdGenerator());
-                LOG.info("Successfully synchronized {} by adding it to the flow", added);
-            } else {
-                updateRemoteProcessGroup(rpg, proposed, synchronizationOptions.getComponentIdGenerator());
-                LOG.info("Successfully synchronized {} by updating it to match proposed version", rpg);
+                    final boolean proposedTransmitting = isTransmitting(proposed);
+                    if (proposed != null && proposedTransmitting) {
+                        toRestart.addAll(transmitting);
+                    }
+                }
             }
-        } catch (final Exception e) {
-            throw new FlowSynchronizationException("Failed to synchronize " + rpg + " with proposed version", e);
+
+            try {
+                if (proposed == null) {
+                    // Stop any downstream components so that we can delete the RPG
+                    for (final RemoteGroupPort outPort : rpg.getOutputPorts()) {
+                        final Set<Connectable> stoppedDownstream = stopDownstreamComponents(outPort, timeout, synchronizationOptions);
+                        toRestart.addAll(stoppedDownstream);
+                    }
+
+                    // Verify that we can delete the components
+                    for (final RemoteGroupPort port : rpg.getInputPorts()) {
+                        verifyCanDelete(port, timeout);
+                    }
+                    for (final RemoteGroupPort port : rpg.getOutputPorts()) {
+                        verifyCanDelete(port, timeout);
+                    }
+
+                    rpg.getProcessGroup().removeRemoteProcessGroup(rpg);
+                    LOG.info("Successfully synchronized {} by removing it from the flow", rpg);
+                } else if (rpg == null) {
+                    final RemoteProcessGroup added = addRemoteProcessGroup(group, proposed, synchronizationOptions.getComponentIdGenerator());
+                    LOG.info("Successfully synchronized {} by adding it to the flow", added);
+                } else {
+                    updateRemoteProcessGroup(rpg, proposed, synchronizationOptions.getComponentIdGenerator());
+                    LOG.info("Successfully synchronized {} by updating it to match proposed version", rpg);
+                }
+            } catch (final Exception e) {
+                throw new FlowSynchronizationException("Failed to synchronize " + rpg + " with proposed version", e);
+            } finally {
+                // Restart any components that need to be restarted.
+                for (final Connectable stoppedComponent : toRestart) {
+                    context.getComponentScheduler().startComponent(stoppedComponent);
+                }
+            }
         } finally {
-            // Restart any components that need to be restarted.
-            for (final Connectable stoppedComponent : toRestart) {
-                context.getComponentScheduler().startComponent(stoppedComponent);
-            }
+            synchronizationOptions.getComponentScheduler().resume();
         }
     }
 
@@ -2726,6 +2740,10 @@ public class StandardVersionedFlowSynchronizer implements VersionedComponentSync
     }
 
     private Set<Connectable> getUpstreamComponents(final Connection connection) {
+        if (connection == null) {
+            return Collections.emptySet();
+        }
+
         final Set<Connectable> components = new HashSet<>();
         findUpstreamComponents(connection, components);
         return components;
@@ -3059,21 +3077,26 @@ public class StandardVersionedFlowSynchronizer implements VersionedComponentSync
             return;
         }
 
-        // If reporting task is not null, make sure that it's stopped.
-        if (reportingTask != null && reportingTask.isRunning()) {
-            reportingTask.stop();
-        }
+        synchronizationOptions.getComponentScheduler().pause();
+        try {
+            // If reporting task is not null, make sure that it's stopped.
+            if (reportingTask != null && reportingTask.isRunning()) {
+                reportingTask.stop();
+            }
 
-        if (proposed == null) {
-            reportingTask.verifyCanDelete();
-            context.getFlowManager().removeReportingTask(reportingTask);
-            LOG.info("Successfully synchronized {} by removing it from the flow", reportingTask);
-        } else if (reportingTask == null) {
-            final ReportingTaskNode added = addReportingTask(proposed);
-            LOG.info("Successfully synchronized {} by adding it to the flow", added);
-        } else {
-            updateReportingTask(reportingTask, proposed);
-            LOG.info("Successfully synchronized {} by updating it to match proposed version", reportingTask);
+            if (proposed == null) {
+                reportingTask.verifyCanDelete();
+                context.getFlowManager().removeReportingTask(reportingTask);
+                LOG.info("Successfully synchronized {} by removing it from the flow", reportingTask);
+            } else if (reportingTask == null) {
+                final ReportingTaskNode added = addReportingTask(proposed);
+                LOG.info("Successfully synchronized {} by adding it to the flow", added);
+            } else {
+                updateReportingTask(reportingTask, proposed);
+                LOG.info("Successfully synchronized {} by updating it to match proposed version", reportingTask);
+            }
+        } finally {
+            synchronizationOptions.getComponentScheduler().resume();
         }
     }
 
