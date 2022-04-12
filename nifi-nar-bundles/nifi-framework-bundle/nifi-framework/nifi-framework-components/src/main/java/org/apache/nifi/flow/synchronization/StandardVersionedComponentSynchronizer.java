@@ -59,7 +59,6 @@ import org.apache.nifi.flow.VersionedParameterContext;
 import org.apache.nifi.flow.VersionedPort;
 import org.apache.nifi.flow.VersionedProcessGroup;
 import org.apache.nifi.flow.VersionedProcessor;
-import org.apache.nifi.flow.VersionedPropertyDescriptor;
 import org.apache.nifi.flow.VersionedRemoteGroupPort;
 import org.apache.nifi.flow.VersionedRemoteProcessGroup;
 import org.apache.nifi.flow.VersionedReportingTask;
@@ -1152,7 +1151,7 @@ public class StandardVersionedComponentSynchronizer implements VersionedComponen
             service.setComments(proposed.getComments());
             service.setName(proposed.getName());
 
-            final Map<String, String> properties = populatePropertiesMap(service, proposed.getProperties(), proposed.getPropertyDescriptors(), service.getProcessGroup());
+            final Map<String, String> properties = populatePropertiesMap(service, proposed.getProperties(), service.getProcessGroup());
             service.setProperties(properties, true);
 
             if (!isEqual(service.getBundleCoordinate(), proposed.getBundle())) {
@@ -1166,8 +1165,7 @@ public class StandardVersionedComponentSynchronizer implements VersionedComponen
         }
     }
 
-    private Map<String, String> populatePropertiesMap(final ComponentNode componentNode, final Map<String, String> proposedProperties,
-                                                      final Map<String, VersionedPropertyDescriptor> proposedDescriptors, final ProcessGroup group) {
+    private Map<String, String> populatePropertiesMap(final ComponentNode componentNode, final Map<String, String> proposedProperties, final ProcessGroup group) {
 
         // Explicitly set all existing properties to null, except for sensitive properties, so that if there isn't an entry in the proposedProperties
         // it will get removed from the processor. We don't do this for sensitive properties because when we retrieve the VersionedProcessGroup from registry,
@@ -1187,11 +1185,10 @@ public class StandardVersionedComponentSynchronizer implements VersionedComponen
                 .forEach(updatedPropertyNames::add);
 
             for (final String propertyName : updatedPropertyNames) {
-                final VersionedPropertyDescriptor descriptor = proposedDescriptors.get(propertyName);
+                final PropertyDescriptor descriptor = componentNode.getPropertyDescriptor(propertyName);
 
                 String value;
-                if (descriptor != null && descriptor.getIdentifiesControllerService()) {
-
+                if (descriptor != null && descriptor.getControllerServiceDefinition() != null ) {
                     // Need to determine if the component's property descriptor for this service is already set to an id
                     // of an existing service that is outside the current processor group, and if it is we want to leave
                     // the property set to that value
@@ -1354,9 +1351,13 @@ public class StandardVersionedComponentSynchronizer implements VersionedComponen
                     }
                 }
 
+                // Remove or update parameter context.
                 final ParameterContextManager contextManager = context.getFlowManager().getParameterContextManager();
-
                 if (proposed == null) {
+                    for (final ProcessGroup groupBound : referenceManager.getProcessGroupsBound(parameterContext)) {
+                        groupBound.setParameterContext(null);
+                    }
+
                     contextManager.removeParameterContext(parameterContext.getIdentifier());
                     LOG.info("Successfully synchronized {} by removing it from the flow", parameterContext);
                 } else {
@@ -1439,6 +1440,9 @@ public class StandardVersionedComponentSynchronizer implements VersionedComponen
                 // Bleed out the data by stopping all input ports and source processors, then waiting
                 // for all connections to become empty
                 bleedOut(processGroup, timeout, synchronizationOptions);
+
+                processGroup.stopProcessing();
+                waitFor(timeout, () -> isDoneProcessing(processGroup));
 
                 // Disable all Controller Services
                 final Future<Void> disableServicesFuture = context.getControllerServiceProvider().disableControllerServicesAsync(processGroup.findAllControllerServices());
@@ -1553,11 +1557,15 @@ public class StandardVersionedComponentSynchronizer implements VersionedComponen
                 // Update the Process Group
                 groupToUpdate.setDefaultBackPressureDataSizeThreshold(proposed.getDefaultBackPressureDataSizeThreshold());
                 groupToUpdate.setDefaultBackPressureObjectThreshold(proposed.getDefaultBackPressureObjectThreshold());
+                groupToUpdate.setDefaultFlowFileExpiration(proposed.getDefaultFlowFileExpiration());
                 groupToUpdate.setFlowFileConcurrency(proposed.getFlowFileConcurrency() == null ? FlowFileConcurrency.UNBOUNDED : FlowFileConcurrency.valueOf(proposed.getFlowFileConcurrency()));
                 groupToUpdate.setFlowFileOutboundPolicy(proposed.getFlowFileOutboundPolicy() == null ? FlowFileOutboundPolicy.STREAM_WHEN_AVAILABLE :
                     FlowFileOutboundPolicy.valueOf(proposed.getFlowFileOutboundPolicy()));
                 groupToUpdate.setParameterContext(parameterContext);
                 groupToUpdate.setVariables(proposed.getVariables());
+                groupToUpdate.setComments(proposed.getComments());
+                groupToUpdate.setName(proposed.getName());
+                groupToUpdate.setPosition(new Position(proposed.getPosition().getX(), proposed.getPosition().getY()));
 
                 if (processGroup == null) {
                     LOG.info("Successfully synchronized {} by adding it to the flow", groupToUpdate);
@@ -1575,6 +1583,48 @@ public class StandardVersionedComponentSynchronizer implements VersionedComponen
         } finally {
             synchronizationOptions.getComponentScheduler().resume();
         }
+    }
+
+    private boolean isDoneProcessing(final ProcessGroup group) {
+        for (final ProcessorNode processor : group.getProcessors()) {
+            if (processor.isRunning()) {
+                return false;
+            }
+        }
+
+        for (final Port port : group.getInputPorts()) {
+            if (port.isRunning()) {
+                return false;
+            }
+        }
+
+        for (final Port port : group.getOutputPorts()) {
+            if (port.isRunning()) {
+                return false;
+            }
+        }
+
+        for (final RemoteProcessGroup rpg : group.getRemoteProcessGroups()) {
+            for (final RemoteGroupPort port : rpg.getInputPorts()) {
+                if (port.isRunning()) {
+                    return false;
+                }
+            }
+
+            for (final RemoteGroupPort port : rpg.getOutputPorts()) {
+                if (port.isRunning()) {
+                    return false;
+                }
+            }
+        }
+
+        for (final ProcessGroup childGroup : group.getProcessGroups()) {
+            if (!isDoneProcessing(childGroup)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private void bleedOut(final ProcessGroup processGroup, final long timeout, final FlowSynchronizationOptions synchronizationOptions)
@@ -1987,13 +2037,11 @@ public class StandardVersionedComponentSynchronizer implements VersionedComponen
             return;
         }
 
-        context.getComponentScheduler().transitionComponentState(port, proposed.getScheduledState());
         final ComponentType proposedType = proposed.getComponentType();
         if (proposedType != ComponentType.INPUT_PORT && proposedType != ComponentType.OUTPUT_PORT) {
             throw new FlowSynchronizationException("Cannot synchronize port " + port + " with the proposed Port definition because its type is "
                 + proposedType + " and expected either an INPUT_PORT or an OUTPUT_PORT");
         }
-
     }
 
     @Override
@@ -2066,52 +2114,7 @@ public class StandardVersionedComponentSynchronizer implements VersionedComponen
         port.setPosition(new Position(proposed.getPosition().getX(), proposed.getPosition().getY()));
         port.setMaxConcurrentTasks(proposed.getConcurrentlySchedulableTaskCount());
 
-        final org.apache.nifi.flow.ScheduledState scheduledState = proposed.getScheduledState() == null ? org.apache.nifi.flow.ScheduledState.ENABLED : proposed.getScheduledState();
-
-        final ProcessGroup group = port.getProcessGroup();
-        if (port.getConnectableType() == ConnectableType.INPUT_PORT) {
-            switch (scheduledState) {
-                case DISABLED:
-                    group.disableInputPort(port);
-                    break;
-                case ENABLED:
-                    if (port.getScheduledState() == ScheduledState.DISABLED) {
-                        group.enableInputPort(port);
-                    } else if (port.getScheduledState() == ScheduledState.RUNNING) {
-                        group.stopInputPort(port);
-                    }
-                    break;
-                case RUNNING:
-                    if (port.getScheduledState() == ScheduledState.DISABLED) {
-                        group.enableInputPort(port);
-                    }
-                    if (port.getScheduledState() == ScheduledState.STOPPED) {
-                        context.getComponentScheduler().startComponent(port);
-                    }
-                    break;
-            }
-        } else if (port.getConnectableType() == ConnectableType.OUTPUT_PORT) {
-            switch (scheduledState) {
-                case DISABLED:
-                    group.disableOutputPort(port);
-                    break;
-                case ENABLED:
-                    if (port.getScheduledState() == ScheduledState.DISABLED) {
-                        group.enableOutputPort(port);
-                    } else if (port.getScheduledState() == ScheduledState.RUNNING) {
-                        group.stopOutputPort(port);
-                    }
-                    break;
-                case RUNNING:
-                    if (port.getScheduledState() == ScheduledState.DISABLED) {
-                        group.enableOutputPort(port);
-                    }
-                    if (port.getScheduledState() == ScheduledState.STOPPED) {
-                        context.getComponentScheduler().startComponent(port);
-                    }
-                    break;
-            }
-        }
+        context.getComponentScheduler().transitionComponentState(port, proposed.getScheduledState());
     }
 
     private Port addInputPort(final ProcessGroup destination, final VersionedPort proposed, final ComponentIdGenerator componentIdGenerator, final String temporaryName) {
@@ -2336,6 +2339,10 @@ public class StandardVersionedComponentSynchronizer implements VersionedComponen
     }
 
     private boolean stopOrTerminate(final Connectable component, final long timeout, final FlowSynchronizationOptions synchronizationOptions) throws TimeoutException, FlowSynchronizationException {
+        if (!component.isRunning()) {
+            return false;
+        }
+
         final ConnectableType connectableType = component.getConnectableType();
         switch (connectableType) {
             case INPUT_PORT:
@@ -2439,7 +2446,7 @@ public class StandardVersionedComponentSynchronizer implements VersionedComponen
             processor.setName(proposed.getName());
             processor.setPenalizationPeriod(proposed.getPenaltyDuration());
 
-            final Map<String, String> properties = populatePropertiesMap(processor, proposed.getProperties(), proposed.getPropertyDescriptors(), processor.getProcessGroup());
+            final Map<String, String> properties = populatePropertiesMap(processor, proposed.getProperties(), processor.getProcessGroup());
             processor.setProperties(properties, true);
             processor.setRunDuration(proposed.getRunDurationMillis(), TimeUnit.MILLISECONDS);
             processor.setSchedulingStrategy(SchedulingStrategy.valueOf(proposed.getSchedulingStrategy()));

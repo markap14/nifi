@@ -529,7 +529,7 @@ public class StandardVersionedComponentSynchronizerTest {
         versionedInputPort.setScheduledState(ScheduledState.RUNNING);
         synchronizer.synchronize(inputPort, versionedInputPort, group, synchronizationOptions);
 
-        verifyRestarted(inputPort);
+        verify(componentScheduler, atLeast(1)).transitionComponentState(inputPort, ScheduledState.RUNNING);
         verify(inputPort).setName("Input");
     }
 
@@ -539,8 +539,7 @@ public class StandardVersionedComponentSynchronizerTest {
         versionedInputPort.setScheduledState(ScheduledState.RUNNING);
         synchronizer.synchronize(inputPort, versionedInputPort, group, synchronizationOptions);
 
-        verifyStopped(inputPort);
-        verifyRestarted(inputPort);
+        verify(componentScheduler, atLeast(1)).transitionComponentState(inputPort, ScheduledState.RUNNING);
         verify(inputPort).setName("Input");
     }
 
