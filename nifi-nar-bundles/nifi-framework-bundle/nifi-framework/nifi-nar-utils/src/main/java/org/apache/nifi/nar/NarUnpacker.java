@@ -24,6 +24,8 @@ import org.apache.nifi.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileFilter;
@@ -31,6 +33,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -47,6 +50,8 @@ import java.util.function.Predicate;
 import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
+import java.util.jar.JarInputStream;
+import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 
 import static java.lang.String.format;
@@ -329,20 +334,66 @@ public final class NarUnpacker {
      * @throws IOException if the NAR could not be unpacked.
      */
     private static void unpack(final File nar, final File workingDirectory, final byte[] hash) throws IOException {
+        final File unpackedUberJarFile = new File(workingDirectory, "NAR-INF/bundled-dependencies/" + nar.getName() + ".unpacked.uber.jar");
+        Files.createDirectories(workingDirectory.toPath());
+        Files.createDirectories(unpackedUberJarFile.getParentFile().toPath());
 
-        try (JarFile jarFile = new JarFile(nar)) {
-            Enumeration<JarEntry> jarEntries = jarFile.entries();
+        final Set<String> entriesCreated = new HashSet<>();
+
+        try (final JarFile jarFile = new JarFile(nar);
+             final OutputStream out = new FileOutputStream(unpackedUberJarFile);
+             final OutputStream bufferedOut = new BufferedOutputStream(out);
+             final JarOutputStream uberJarOut = new JarOutputStream(bufferedOut) {
+                 {
+                     def.setLevel(0);
+                 }
+             }) {
+
+            final Enumeration<JarEntry> jarEntries = jarFile.entries();
             while (jarEntries.hasMoreElements()) {
-                JarEntry jarEntry = jarEntries.nextElement();
+                final JarEntry jarEntry = jarEntries.nextElement();
                 String name = jarEntry.getName();
-                if(name.contains("META-INF/bundled-dependencies")){
+                if (name.contains("META-INF/bundled-dependencies")){
                     name = name.replace("META-INF/bundled-dependencies", BUNDLED_DEPENDENCIES_DIRECTORY);
                 }
-                File f = new File(workingDirectory, name);
+
+                // If we've not yet created this entry, create it now. If we've already created the entry, ignore it.
+                if (!entriesCreated.add(name)) {
+                    continue;
+                }
+
+                if (name.contains("META-INF/") || (name.contains("NAR-INF") && name.endsWith(".war"))) {
+                    if (jarEntry.isDirectory()) {
+                        continue;
+                    }
+
+                    final File outFile = new File(workingDirectory, name);
+                    Files.createDirectories(outFile.getParentFile().toPath());
+
+                    try (final InputStream entryIn = jarFile.getInputStream(jarEntry);
+                         final OutputStream manifestOut = new FileOutputStream(outFile)) {
+                        copy(entryIn, manifestOut);
+                        continue;
+                    }
+                }
+
                 if (jarEntry.isDirectory()) {
-                    FileUtils.ensureDirectoryExistAndCanReadAndWrite(f);
+                    uberJarOut.putNextEntry(new JarEntry(jarEntry.getName()));
+                } else if (name.endsWith(".jar")) {
+                    try (final InputStream entryIn = jarFile.getInputStream(jarEntry);
+                         final InputStream in = new BufferedInputStream(entryIn)) {
+                        copyJarContents(in, uberJarOut, entriesCreated);
+                    }
                 } else {
-                    makeFile(jarFile.getInputStream(jarEntry), f);
+                    final JarEntry fileEntry = new JarEntry(jarEntry.getName());
+                    uberJarOut.putNextEntry(fileEntry);
+
+                    try (final InputStream entryIn = jarFile.getInputStream(jarEntry);
+                         final InputStream in = new BufferedInputStream(entryIn)) {
+                        copy(in, uberJarOut);
+                    }
+
+                    uberJarOut.closeEntry();
                 }
             }
         }
@@ -350,6 +401,34 @@ public final class NarUnpacker {
         final File hashFile = new File(workingDirectory, HASH_FILENAME);
         try (final FileOutputStream fos = new FileOutputStream(hashFile)) {
             fos.write(hash);
+        }
+    }
+
+    private static void copyJarContents(final InputStream in, final JarOutputStream out, final Set<String> entriesCreated) throws IOException {
+        try (final JarInputStream jarInputStream = new JarInputStream(in)) {
+            JarEntry jarEntry;
+            while ((jarEntry = jarInputStream.getNextJarEntry()) != null) {
+                if (!entriesCreated.add(jarEntry.getName())) {
+                    continue;
+                }
+
+                final JarEntry outEntry = new JarEntry(jarEntry.getName());
+                out.putNextEntry(outEntry);
+
+                if (!jarEntry.isDirectory()) {
+                    copy(jarInputStream, out);
+                }
+
+                out.closeEntry();
+            }
+        }
+    }
+
+    private static void copy(final InputStream in, final OutputStream out) throws IOException {
+        byte[] buffer = new byte[4096];
+        int len;
+        while ((len = in.read(buffer)) > 0) {
+            out.write(buffer, 0, len);
         }
     }
 
