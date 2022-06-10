@@ -23,7 +23,7 @@ import org.apache.nifi.nar.NarClassLoader;
 import org.apache.nifi.nar.NarClassLoaders;
 import org.apache.nifi.nar.NarUnpacker;
 import org.apache.nifi.nar.SystemBundle;
-import org.apache.nifi.nar.UnpackMode;
+import org.apache.nifi.nar.NarUnpackMode;
 import org.apache.nifi.stateless.config.ParameterOverride;
 import org.apache.nifi.stateless.config.StatelessConfigurationException;
 import org.apache.nifi.stateless.engine.NarUnpackLock;
@@ -113,7 +113,7 @@ public class StatelessBootstrap {
             // For many environments where Stateless is to be run, the number of open file handles may be constrained. Because of this,
             // we will unpack NARs using hte Uber Jar method.
             NarUnpacker.unpackNars(systemBundle, frameworkWorkingDir, extensionsWorkingDir, null, narDirectories, false, NarClassLoaders.FRAMEWORK_NAR_ID, false, false,
-                UnpackMode.UNPACK_TO_UBER_JAR, narFilter);
+                NarUnpackMode.UNPACK_TO_UBER_JAR, narFilter);
         } finally {
             NarUnpackLock.unlock();
         }

@@ -20,7 +20,7 @@ package org.apache.nifi.nar;
 /**
  * Specifies how the contents of a NAR file should be unpacked on disk.
  */
-public enum UnpackMode {
+public enum NarUnpackMode {
     /**
      * Each JAR file in the NAR should be written out as a separate JAR file on disk.
      * This is generally faster, but in order to use a URLClassLoader to load all JARs,

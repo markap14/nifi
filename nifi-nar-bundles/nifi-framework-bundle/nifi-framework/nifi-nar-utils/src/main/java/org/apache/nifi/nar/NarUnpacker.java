@@ -69,12 +69,12 @@ public final class NarUnpacker {
         return nameToTest.endsWith(".nar") && pathname.isFile();
     };
 
-    public static ExtensionMapping unpackNars(final NiFiProperties props, final Bundle systemBundle, final UnpackMode unpackMode) {
+    public static ExtensionMapping unpackNars(final NiFiProperties props, final Bundle systemBundle, final NarUnpackMode unpackMode) {
         // Default to NiFi's framework NAR ID if not given
         return unpackNars(props, NarClassLoaders.FRAMEWORK_NAR_ID, systemBundle, unpackMode);
     }
 
-    public static ExtensionMapping unpackNars(final NiFiProperties props, final String frameworkNarId, final Bundle systemBundle, final UnpackMode unpackMode) {
+    public static ExtensionMapping unpackNars(final NiFiProperties props, final String frameworkNarId, final Bundle systemBundle, final NarUnpackMode unpackMode) {
         final List<Path> narLibraryDirs = props.getNarLibraryDirectories();
         final File frameworkWorkingDir = props.getFrameworkWorkingDirectory();
         final File extensionsWorkingDir = props.getExtensionsWorkingDirectory();
@@ -85,13 +85,13 @@ public final class NarUnpacker {
 
     public static ExtensionMapping unpackNars(final Bundle systemBundle, final File frameworkWorkingDir, final String frameworkNarId,
                                               final File extensionsWorkingDir, final File docsWorkingDir, final List<Path> narLibraryDirs,
-                                              final UnpackMode unpackMode) {
+                                              final NarUnpackMode unpackMode) {
         return unpackNars(systemBundle, frameworkWorkingDir, extensionsWorkingDir, docsWorkingDir, narLibraryDirs, true, frameworkNarId, true, true, unpackMode, (coordinate) -> true);
     }
 
     public static ExtensionMapping unpackNars(final Bundle systemBundle, final File frameworkWorkingDir, final File extensionsWorkingDir, final File docsWorkingDir, final List<Path> narLibraryDirs,
                                               final boolean requireFrameworkNar, final String frameworkNarId,
-                                              final boolean requireJettyNar, final boolean verifyHash, final UnpackMode unpackMode,
+                                              final boolean requireJettyNar, final boolean verifyHash, final NarUnpackMode unpackMode,
                                               final Predicate<BundleCoordinate> narFilter) {
         final Map<File, BundleCoordinate> unpackedNars = new HashMap<>();
 
@@ -298,7 +298,7 @@ public final class NarUnpacker {
      * @return the directory to the unpacked NAR
      * @throws IOException if unable to explode nar
      */
-    public static File unpackNar(final File nar, final File baseWorkingDirectory, final boolean verifyHash, final UnpackMode unpackMode) throws IOException {
+    public static File unpackNar(final File nar, final File baseWorkingDirectory, final boolean verifyHash, final NarUnpackMode unpackMode) throws IOException {
         final File narWorkingDirectory = new File(baseWorkingDirectory, nar.getName() + "-unpacked");
 
         // if the working directory doesn't exist, unpack the nar
@@ -327,7 +327,7 @@ public final class NarUnpacker {
         return narWorkingDirectory;
     }
 
-    private static void unpackIndividualJars(final File nar, final File workingDirectory, final byte[] hash, final UnpackMode unpackMode) throws IOException {
+    private static void unpackIndividualJars(final File nar, final File workingDirectory, final byte[] hash, final NarUnpackMode unpackMode) throws IOException {
         switch (unpackMode) {
             case UNPACK_INDIVIDUAL_JARS:
                 unpackIndividualJars(nar, workingDirectory, hash);

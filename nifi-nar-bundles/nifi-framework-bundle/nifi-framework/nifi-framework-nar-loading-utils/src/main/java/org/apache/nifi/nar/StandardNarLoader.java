@@ -51,7 +51,7 @@ public class StandardNarLoader implements NarLoader {
     private final ExtensionDiscoveringManager extensionManager;
     private final ExtensionMapping extensionMapping;
     private final ExtensionUiLoader extensionUiLoader;
-    private final UnpackMode narUnpackMode;
+    private final NarUnpackMode narUnpackMode;
 
     private Set<BundleDetails> previouslySkippedBundles;
 
@@ -61,7 +61,7 @@ public class StandardNarLoader implements NarLoader {
                              final ExtensionDiscoveringManager extensionManager,
                              final ExtensionMapping extensionMapping,
                              final ExtensionUiLoader extensionUiLoader,
-                             final UnpackMode narUnpackMode) {
+                             final NarUnpackMode narUnpackMode) {
         this.extensionsWorkingDir = extensionsWorkingDir;
         this.docsWorkingDir = docsWorkingDir;
         this.narClassLoaders = narClassLoaders;

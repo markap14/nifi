@@ -26,7 +26,7 @@ import org.apache.nifi.nar.NarClassLoadersHolder;
 import org.apache.nifi.nar.NarUnpacker;
 import org.apache.nifi.nar.StandardExtensionDiscoveringManager;
 import org.apache.nifi.nar.SystemBundle;
-import org.apache.nifi.nar.UnpackMode;
+import org.apache.nifi.nar.NarUnpackMode;
 import org.apache.nifi.security.util.SslContextFactory;
 import org.apache.nifi.security.util.StandardTlsConfiguration;
 import org.apache.nifi.security.util.TlsConfiguration;
@@ -77,7 +77,7 @@ public class OneWaySslAccessControlHelper {
 
         final Bundle systemBundle = SystemBundle.create(props);
 
-        NarUnpacker.unpackNars(props, systemBundle, UnpackMode.UNPACK_INDIVIDUAL_JARS);
+        NarUnpacker.unpackNars(props, systemBundle, NarUnpackMode.UNPACK_INDIVIDUAL_JARS);
         NarClassLoadersHolder.getInstance().init(props.getFrameworkWorkingDirectory(), props.getExtensionsWorkingDirectory());
 
         // load extensions

@@ -27,7 +27,7 @@ import org.apache.nifi.nar.NarClassLoadersHolder;
 import org.apache.nifi.nar.NarUnpacker;
 import org.apache.nifi.nar.StandardExtensionDiscoveringManager;
 import org.apache.nifi.nar.SystemBundle;
-import org.apache.nifi.nar.UnpackMode;
+import org.apache.nifi.nar.NarUnpackMode;
 import org.apache.nifi.util.NiFiProperties;
 import org.apache.nifi.util.StringUtils;
 
@@ -84,7 +84,7 @@ public class AccessControlHelper {
 
         final Bundle systemBundle = SystemBundle.create(props);
 
-        NarUnpacker.unpackNars(props, systemBundle, UnpackMode.UNPACK_INDIVIDUAL_JARS);
+        NarUnpacker.unpackNars(props, systemBundle, NarUnpackMode.UNPACK_INDIVIDUAL_JARS);
         NarClassLoadersHolder.getInstance().init(props.getFrameworkWorkingDirectory(), props.getExtensionsWorkingDirectory());
 
         // load extensions
