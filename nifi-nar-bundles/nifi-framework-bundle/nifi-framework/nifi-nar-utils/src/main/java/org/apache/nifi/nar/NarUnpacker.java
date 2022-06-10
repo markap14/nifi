@@ -69,28 +69,30 @@ public final class NarUnpacker {
         return nameToTest.endsWith(".nar") && pathname.isFile();
     };
 
-    public static ExtensionMapping unpackNars(final NiFiProperties props, final Bundle systemBundle) {
+    public static ExtensionMapping unpackNars(final NiFiProperties props, final Bundle systemBundle, final UnpackMode unpackMode) {
         // Default to NiFi's framework NAR ID if not given
-        return unpackNars(props, NarClassLoaders.FRAMEWORK_NAR_ID, systemBundle);
+        return unpackNars(props, NarClassLoaders.FRAMEWORK_NAR_ID, systemBundle, unpackMode);
     }
 
-    public static ExtensionMapping unpackNars(final NiFiProperties props, final String frameworkNarId, final Bundle systemBundle) {
+    public static ExtensionMapping unpackNars(final NiFiProperties props, final String frameworkNarId, final Bundle systemBundle, final UnpackMode unpackMode) {
         final List<Path> narLibraryDirs = props.getNarLibraryDirectories();
         final File frameworkWorkingDir = props.getFrameworkWorkingDirectory();
         final File extensionsWorkingDir = props.getExtensionsWorkingDirectory();
         final File docsWorkingDir = props.getComponentDocumentationWorkingDirectory();
 
-        return unpackNars(systemBundle, frameworkWorkingDir, frameworkNarId, extensionsWorkingDir, docsWorkingDir, narLibraryDirs);
+        return unpackNars(systemBundle, frameworkWorkingDir, frameworkNarId, extensionsWorkingDir, docsWorkingDir, narLibraryDirs, unpackMode);
     }
 
     public static ExtensionMapping unpackNars(final Bundle systemBundle, final File frameworkWorkingDir, final String frameworkNarId,
-                                              final File extensionsWorkingDir, final File docsWorkingDir, final List<Path> narLibraryDirs) {
-        return unpackNars(systemBundle, frameworkWorkingDir, extensionsWorkingDir, docsWorkingDir, narLibraryDirs, true, frameworkNarId, true, true, (coordinate) -> true);
+                                              final File extensionsWorkingDir, final File docsWorkingDir, final List<Path> narLibraryDirs,
+                                              final UnpackMode unpackMode) {
+        return unpackNars(systemBundle, frameworkWorkingDir, extensionsWorkingDir, docsWorkingDir, narLibraryDirs, true, frameworkNarId, true, true, unpackMode, (coordinate) -> true);
     }
 
     public static ExtensionMapping unpackNars(final Bundle systemBundle, final File frameworkWorkingDir, final File extensionsWorkingDir, final File docsWorkingDir, final List<Path> narLibraryDirs,
                                               final boolean requireFrameworkNar, final String frameworkNarId,
-                                              final boolean requireJettyNar, final boolean verifyHash, final Predicate<BundleCoordinate> narFilter) {
+                                              final boolean requireJettyNar, final boolean verifyHash, final UnpackMode unpackMode,
+                                              final Predicate<BundleCoordinate> narFilter) {
         final Map<File, BundleCoordinate> unpackedNars = new HashMap<>();
 
         try {
@@ -146,18 +148,18 @@ public final class NarUnpacker {
                             }
 
                             // unpack the framework nar
-                            unpackedFramework = unpackNar(narFile, frameworkWorkingDir, verifyHash);
+                            unpackedFramework = unpackNar(narFile, frameworkWorkingDir, verifyHash, unpackMode);
                         } else if (NarClassLoaders.JETTY_NAR_ID.equals(bundleCoordinate.getId())) {
                             if (unpackedJetty != null) {
                                 throw new IllegalStateException("Multiple Jetty NARs discovered. Only one Jetty NAR is permitted.");
                             }
 
                             // unpack and record the Jetty nar
-                            unpackedJetty = unpackNar(narFile, extensionsWorkingDir, verifyHash);
+                            unpackedJetty = unpackNar(narFile, extensionsWorkingDir, verifyHash, unpackMode);
                             unpackedExtensions.add(unpackedJetty);
                         } else {
                             // unpack and record the extension nar
-                            final File unpackedExtension = unpackNar(narFile, extensionsWorkingDir, verifyHash);
+                            final File unpackedExtension = unpackNar(narFile, extensionsWorkingDir, verifyHash, unpackMode);
                             unpackedExtensions.add(unpackedExtension);
                         }
                     }
@@ -292,15 +294,16 @@ public final class NarUnpacker {
      * @param verifyHash if the NAR has already been unpacked, indicates whether or not the hash should be verified. If this value is true,
      * and the NAR's hash does not match the hash written to the unpacked directory, the working directory will be deleted and the NAR will be
      * unpacked again. If false, the NAR will not be unpacked again and its hash will not be checked.
+     * @param unpackMode specifies how the contents of the NAR should be unpacked
      * @return the directory to the unpacked NAR
      * @throws IOException if unable to explode nar
      */
-    public static File unpackNar(final File nar, final File baseWorkingDirectory, final boolean verifyHash) throws IOException {
+    public static File unpackNar(final File nar, final File baseWorkingDirectory, final boolean verifyHash, final UnpackMode unpackMode) throws IOException {
         final File narWorkingDirectory = new File(baseWorkingDirectory, nar.getName() + "-unpacked");
 
         // if the working directory doesn't exist, unpack the nar
         if (!narWorkingDirectory.exists()) {
-            unpack(nar, narWorkingDirectory, FileDigestUtils.getDigest(nar));
+            unpackIndividualJars(nar, narWorkingDirectory, FileDigestUtils.getDigest(nar), unpackMode);
         } else if (verifyHash) {
             // the working directory does exist. Run digest against the nar
             // file and check if the nar has changed since it was deployed.
@@ -308,13 +311,13 @@ public final class NarUnpacker {
             final File workingHashFile = new File(narWorkingDirectory, HASH_FILENAME);
             if (!workingHashFile.exists()) {
                 FileUtils.deleteFile(narWorkingDirectory, true);
-                unpack(nar, narWorkingDirectory, narDigest);
+                unpackIndividualJars(nar, narWorkingDirectory, narDigest, unpackMode);
             } else {
                 final byte[] hashFileContents = Files.readAllBytes(workingHashFile.toPath());
                 if (!Arrays.equals(hashFileContents, narDigest)) {
                     logger.info("Contents of nar {} have changed. Reloading.", new Object[] { nar.getAbsolutePath() });
                     FileUtils.deleteFile(narWorkingDirectory, true);
-                    unpack(nar, narWorkingDirectory, narDigest);
+                    unpackIndividualJars(nar, narWorkingDirectory, narDigest, unpackMode);
                 }
             }
         } else {
@@ -324,14 +327,56 @@ public final class NarUnpacker {
         return narWorkingDirectory;
     }
 
+    private static void unpackIndividualJars(final File nar, final File workingDirectory, final byte[] hash, final UnpackMode unpackMode) throws IOException {
+        switch (unpackMode) {
+            case UNPACK_INDIVIDUAL_JARS:
+                unpackIndividualJars(nar, workingDirectory, hash);
+                return;
+            case UNPACK_TO_UBER_JAR:
+                unpackToUberJar(nar, workingDirectory, hash);
+        }
+    }
+
     /**
-     * Unpacks the NAR to the specified directory. Creates a checksum file that
+     * Unpacks the NAR to the specified directory. Creates a checksum file that can be
      * used to determine if future expansion is necessary.
      *
      * @param workingDirectory the root directory to which the NAR should be unpacked.
      * @throws IOException if the NAR could not be unpacked.
      */
-    private static void unpack(final File nar, final File workingDirectory, final byte[] hash) throws IOException {
+    private static void unpackIndividualJars(final File nar, final File workingDirectory, final byte[] hash) throws IOException {
+        try (final JarFile jarFile = new JarFile(nar)) {
+            final Enumeration<JarEntry> jarEntries = jarFile.entries();
+            while (jarEntries.hasMoreElements()) {
+                final JarEntry jarEntry = jarEntries.nextElement();
+                String name = jarEntry.getName();
+                if (name.contains("META-INF/bundled-dependencies")){
+                    name = name.replace("META-INF/bundled-dependencies", BUNDLED_DEPENDENCIES_DIRECTORY);
+                }
+
+                final File f = new File(workingDirectory, name);
+                if (jarEntry.isDirectory()) {
+                    FileUtils.ensureDirectoryExistAndCanReadAndWrite(f);
+                } else {
+                    makeFile(jarFile.getInputStream(jarEntry), f);
+                }
+            }
+        }
+
+        final File hashFile = new File(workingDirectory, HASH_FILENAME);
+        try (final FileOutputStream fos = new FileOutputStream(hashFile)) {
+            fos.write(hash);
+        }
+    }
+
+    /**
+     * Unpacks the NAR to a single JAR file in the specified directory. Creates a checksum file that can be
+     * used to determine if future expansion is necessary.
+     *
+     * @param workingDirectory the root directory to which the NAR should be unpacked.
+     * @throws IOException if the NAR could not be unpacked.
+     */
+    private static void unpackToUberJar(final File nar, final File workingDirectory, final byte[] hash) throws IOException {
         logger.debug("====================================");
         logger.debug("Unpacking NAR {}", nar.getAbsolutePath());
 
@@ -344,11 +389,7 @@ public final class NarUnpacker {
         try (final JarFile jarFile = new JarFile(nar);
              final OutputStream out = new FileOutputStream(unpackedUberJarFile);
              final OutputStream bufferedOut = new BufferedOutputStream(out);
-             final JarOutputStream uberJarOut = new JarOutputStream(bufferedOut) {
-                 {
-                     def.setLevel(0);
-                 }
-             }) {
+             final JarOutputStream uberJarOut = new JarOutputStream(bufferedOut)) {
 
             final Enumeration<JarEntry> jarEntries = jarFile.entries();
             while (jarEntries.hasMoreElements()) {
