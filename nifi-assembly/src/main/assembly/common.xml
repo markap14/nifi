@@ -119,6 +119,30 @@
                 </excludes>
             </unpackOptions>
         </dependencySet>
+
+        <!-- Write out the python directory contents -->
+        <dependencySet>
+            <scope>runtime</scope>
+            <useProjectArtifact>false</useProjectArtifact>
+            <outputDirectory>python/</outputDirectory>
+            <useStrictFiltering>true</useStrictFiltering>
+            <useTransitiveDependencies>false</useTransitiveDependencies>
+            <includes>
+                <include>*:nifi-py4j-framework</include>
+            </includes>
+            <unpack>true</unpack>
+            <unpackOptions>
+                <filtered>false</filtered>
+                <excludes>
+                    <!-- LICENSE and NOTICE both covered by top-level -->
+                    <exclude>LICENSE</exclude>
+                    <exclude>NOTICE</exclude>
+                    <exclude>META-INF</exclude>
+                    <exclude>META-INF/**/*</exclude>
+                </excludes>
+            </unpackOptions>
+        </dependencySet>
+
     </dependencySets>
     <fileSets>
         <fileSet>

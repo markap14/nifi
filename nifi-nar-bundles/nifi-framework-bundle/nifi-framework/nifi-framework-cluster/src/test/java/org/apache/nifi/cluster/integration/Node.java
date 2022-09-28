@@ -53,7 +53,6 @@ import org.apache.nifi.events.EventReporter;
 import org.apache.nifi.io.socket.ServerSocketConfiguration;
 import org.apache.nifi.io.socket.SocketConfiguration;
 import org.apache.nifi.nar.ExtensionDiscoveringManager;
-import org.apache.nifi.nar.ExtensionManager;
 import org.apache.nifi.nar.SystemBundle;
 import org.apache.nifi.registry.VariableRegistry;
 import org.apache.nifi.reporting.BulletinRepository;
@@ -81,7 +80,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class Node {
     private final NodeIdentifier nodeId;
     private final NiFiProperties nodeProperties;
-    private final ExtensionManager extensionManager;
+    private final ExtensionDiscoveringManager extensionManager;
 
     private final List<ReportedEvent> reportedEvents = Collections.synchronizedList(new ArrayList<ReportedEvent>());
     private final RevisionManager revisionManager;
