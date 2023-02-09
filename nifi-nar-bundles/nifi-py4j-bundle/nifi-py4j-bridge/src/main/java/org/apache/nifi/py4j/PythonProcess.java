@@ -70,6 +70,7 @@ import java.util.concurrent.TimeUnit;
 //                into a dict. Then there's no need to manually convert it, and it should be much more efficient. Probably want to do the same thing on the way back.
 //      - Test pip install nifi-my-proc, does nifi pick it up?
 //      - When ran DetectObjectInImage with multiple threads, Python died. Need to figure out why.
+//      - Fix references to 'python3' here and in ExtensionManager.py - need to use configured value for python command, such as python3.9
 //      - Additional Interfaces beyond just FlowFileTransform
 //          - FlowFileSource
 //          - RecordTransform

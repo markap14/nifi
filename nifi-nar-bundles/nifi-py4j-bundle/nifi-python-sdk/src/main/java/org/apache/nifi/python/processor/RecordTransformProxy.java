@@ -17,15 +17,21 @@
 
 package org.apache.nifi.python.processor;
 
+import org.apache.nifi.NullSuppression;
 import org.apache.nifi.annotation.behavior.DefaultRunDuration;
 import org.apache.nifi.annotation.behavior.SupportsBatching;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.flowfile.FlowFile;
+import org.apache.nifi.json.JsonTreeRowRecordReader;
+import org.apache.nifi.json.OutputGrouping;
+import org.apache.nifi.json.WriteJsonResult;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
+import org.apache.nifi.schema.access.NopSchemaAccessWriter;
 import org.apache.nifi.schema.access.SchemaNotFoundException;
+import org.apache.nifi.serialization.MalformedRecordException;
 import org.apache.nifi.serialization.RecordReader;
 import org.apache.nifi.serialization.RecordReaderFactory;
 import org.apache.nifi.serialization.RecordSetWriter;
@@ -33,11 +39,13 @@ import org.apache.nifi.serialization.RecordSetWriterFactory;
 import org.apache.nifi.serialization.WriteResult;
 import org.apache.nifi.serialization.record.Record;
 import org.apache.nifi.serialization.record.RecordSchema;
-import org.apache.nifi.serialization.record.util.DataTypeUtils;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -127,10 +135,21 @@ public class RecordTransformProxy extends PythonProcessorProxy {
         try (final InputStream in = session.read(flowFile);
              final RecordReader reader = readerFactory.createRecordReader(flowFile, in, getLogger())) {
 
-            Record record;
-            while ((record = reader.nextRecord()) != null) {
-                final RecordTransformResult result = transform.transform(context, record, attributeMap);
-                writeResult(result, destinationTuples, writerFactory, session, flowFile);
+            final RecordSchema recordSchema = reader.getSchema();
+            try (final ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                final WriteJsonResult writeJsonResult = new WriteJsonResult(getLogger(), recordSchema, new NopSchemaAccessWriter(), baos, false, NullSuppression.NEVER_SUPPRESS,
+                    OutputGrouping.OUTPUT_ONELINE, null, null, null);
+
+                Record record;
+                while ((record = reader.nextRecord()) != null) {
+                    writeJsonResult.writeRawRecord(record);
+                    writeJsonResult.flush();
+                    final String json = baos.toString();
+                    baos.reset();
+
+                    final RecordTransformResult result = transform.transformRecord(context, json, recordSchema, attributeMap);
+                    writeResult(result, destinationTuples, writerFactory, session, flowFile);
+                }
             }
 
             // Update FlowFile attributes, close Record Writers, and map FlowFiles to their appropriate relationships
@@ -214,10 +233,10 @@ public class RecordTransformProxy extends PythonProcessorProxy {
      * @throws SchemaNotFoundException if unable to find the appropriate schema when attempting to create a new RecordSetWriter
      * @throws IOException if unable to create a new RecordSetWriter
      */
-    private void writeResult(final RecordTransformResult result, final Map<RecordGroupingKey, DestinationTuple> destinationTuples, final RecordSetWriterFactory writerFactory,
-                             final ProcessSession session, final FlowFile originalFlowFile) throws SchemaNotFoundException, IOException {
+    private void writeResult(final RecordTransformResult result, final Map<RecordGroupingKey, DestinationTuple> destinationTuples,
+                             final RecordSetWriterFactory writerFactory, final ProcessSession session, final FlowFile originalFlowFile) throws SchemaNotFoundException, IOException, MalformedRecordException {
 
-        final Record transformed = createRecord(result);
+        final Record transformed = createRecordFromJson(result);
         if (transformed == null) {
             getLogger().debug("Received null result from RecordTransform; will not write result to output for {}", originalFlowFile);
             return;
@@ -250,19 +269,25 @@ public class RecordTransformProxy extends PythonProcessorProxy {
     }
 
 
-    private Record createRecord(final RecordTransformResult transformResult) {
-        final Map<String, Object> values = transformResult.getRecord();
-        if (values == null) {
-            return null;
+    private Record createRecordFromJson(final RecordTransformResult transformResult) throws IOException, MalformedRecordException {
+        final String json = transformResult.getRecordJson();
+        final byte[] jsonBytes = json.getBytes(StandardCharsets.UTF_8);
+
+        final RecordSchema returnedSchema = transformResult.getSchema();
+        final RecordSchema writerSchema;
+        if (returnedSchema == null) {
+
+        } else {
+            writerSchema = returnedSchema;
         }
 
-        final RecordSchema schema = transformResult.getSchema();
-        if (schema == null) {
-            return DataTypeUtils.toRecord(values, "<root>");
-        } else {
-            return DataTypeUtils.toRecord(values, schema, "<root>");
+        try (final InputStream in = new ByteArrayInputStream(jsonBytes)) {
+            final JsonTreeRowRecordReader reader = new JsonTreeRowRecordReader(in, getLogger(), inputSchema, null, null, null);
+            final Record record = reader.nextRecord(false, false);
+            return record;
         }
     }
+
 
     /**
      * A tuple representing the name of a Relationship to which a Record should be transferred and an optional Partition that may distinguish

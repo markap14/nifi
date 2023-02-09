@@ -68,6 +68,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -546,18 +547,15 @@ public class PythonControllerInteractionIT {
         final ProcessContext context = createContext(propertyMap);
 
         // Create a Record to transform and transform it
-        final Record record = createSimpleRecord(Collections.singletonMap("name", "John Doe"));
+        final String json = "{ \"name\": \"John Doe\" }";
+        final RecordSchema schema = createSimpleRecordSchema("name");
         final RecordTransform recordTransform = (RecordTransform) processor.getProcessorAdapter().getProcessor();
-        final RecordTransformResult result = recordTransform.transform(context, record, new EmptyAttributeMap());
+        final RecordTransformResult result = recordTransform.transformRecord(context, json, schema, new EmptyAttributeMap());
 
         // Verify the results
         assertEquals("success", result.getRelationship());
         assertNull(result.getSchema());
-
-        final Map<String, Object> expectedResults = new HashMap<>();
-        expectedResults.put("name", "Jane Doe");
-        expectedResults.put("number", "8");
-        assertEquals(expectedResults, result.getRecord());
+        assertEquals("{\"name\": \"Jane Doe\", \"number\": \"8\"}", result.getRecordJson());
     }
 
     private ProcessContext createContext(final Map<PropertyDescriptor, String> propertyValues) {
@@ -566,7 +564,7 @@ public class PythonControllerInteractionIT {
         when(context.getProperties()).thenReturn(propertyValues);
         when(context.getProperty(any(String.class))).thenAnswer(new Answer<Object>() {
             @Override
-            public Object answer(final InvocationOnMock invocationOnMock) throws Throwable {
+            public Object answer(final InvocationOnMock invocationOnMock) {
                 final String name = invocationOnMock.getArgument(0, String.class);
                 final PropertyDescriptor descriptor = new PropertyDescriptor.Builder().name(name).build();
                 final String stringValue = propertyValues.get(descriptor);
@@ -595,18 +593,15 @@ public class PythonControllerInteractionIT {
         final ProcessContext context = createContext(propertyMap);
 
         // Create a Record to transform and transform it
-        final Record record = createTwoLevelRecord();
+        final String json = "{\"name\": \"Jake Doe\", \"father\": { \"name\": \"John Doe\" }}";
+        final RecordSchema recordSchema = createTwoLevelRecord().getSchema();
         final RecordTransform recordTransform = (RecordTransform) processor.getProcessorAdapter().getProcessor();
-        final RecordTransformResult result = recordTransform.transform(context, record, new EmptyAttributeMap());
+        final RecordTransformResult result = recordTransform.transformRecord(context, json, recordSchema, new EmptyAttributeMap());
 
         // Verify the results
         assertEquals("success", result.getRelationship());
 
-        final Object father = result.getRecord().get("father");
-        assertNotNull(father);
-        assertTrue(father instanceof Map);
-        final String fathersName = (String) ((Map<?, ?>) father).get("name");
-        assertEquals("Jake Doe", fathersName);
+        assertEquals("{\"name\": \"Jane Doe\", \"father\": {\"name\": \"John Doe\"}}", result.getRecordJson());
     }
 
 
@@ -642,6 +637,19 @@ public class PythonControllerInteractionIT {
         assertEquals("Hello World", argumentCaptor.getValue());
     }
 
+    private RecordSchema createSimpleRecordSchema(final String... fieldNames) {
+        return createSimpleRecordSchema(Arrays.asList(fieldNames));
+    }
+
+    private RecordSchema createSimpleRecordSchema(final List<String> fieldNames) {
+        final List<RecordField> recordFields = new ArrayList<>();
+        for (final String fieldName : fieldNames) {
+            recordFields.add(new RecordField(fieldName, RecordFieldType.STRING.getDataType(), true));
+        }
+
+        final RecordSchema schema = new SimpleRecordSchema(recordFields);
+        return schema;
+    }
 
     private Record createSimpleRecord(final Map<String, Object> values) {
         final List<RecordField> recordFields = new ArrayList<>();

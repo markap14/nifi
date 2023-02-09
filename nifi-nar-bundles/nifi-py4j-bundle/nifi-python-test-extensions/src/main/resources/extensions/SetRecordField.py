@@ -2,23 +2,18 @@ from nifiapi.properties import PropertyDescriptor
 from nifiapi.properties import StandardValidators
 from nifiapi.properties import ExpressionLanguageScope
 from nifiapi.recordtransform import RecordTransformResult
-from nifiapi.recordtransform import RecordCodec
+from nifiapi.recordtransform import RecordTransform
 
-
-class SetRecordField:
+class SetRecordField(RecordTransform):
     class Java:
         implements = ['org.apache.nifi.python.processor.RecordTransform']
     class ProcessorDetails:
         version = '0.0.1-SNAPSHOT'
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
-    def __init__(self, jvm):
-        pass
-
-    def transform(self, context, record, attributemap):
-        # Convert Record to a Python dictionary
-        rec = RecordCodec().record_to_dict(record)
-
+    def transform(self, context, record, schema, attributemap):
         # Update dictionary based on the dynamic properties provided by user
         attributes = attributemap.getAttributes()
         for key in context.getProperties().keySet():
@@ -26,16 +21,16 @@ class SetRecordField:
                 continue
 
             propname = key.getName()
-            rec[propname] = context.getProperty(propname).evaluateAttributeExpressions(attributes).getValue()
+            record[propname] = context.getProperty(propname).evaluateAttributeExpressions(attributes).getValue()
 
         # Determine the partition
-        if 'group' in rec:
-            partition = {'group': rec['group']}
+        if 'group' in record:
+            partition = {'group': record['group']}
         else:
             partition = None
 
         # Return the result
-        return RecordTransformResult(record=rec, relationship ='success', partition=partition)
+        return RecordTransformResult(record=record, relationship ='success', partition=partition)
 
 
     def getDynamicPropertyDescriptor(self, name):

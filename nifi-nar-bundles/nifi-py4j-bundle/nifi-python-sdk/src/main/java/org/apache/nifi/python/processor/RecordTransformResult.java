@@ -23,7 +23,7 @@ import java.util.Map;
 
 public interface RecordTransformResult {
 
-    Map<String, Object> getRecord();
+    String getRecordJson();
 
     RecordSchema getSchema();
 

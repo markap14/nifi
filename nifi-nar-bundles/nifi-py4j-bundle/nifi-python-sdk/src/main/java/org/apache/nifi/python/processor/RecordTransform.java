@@ -18,10 +18,10 @@
 package org.apache.nifi.python.processor;
 
 import org.apache.nifi.processor.ProcessContext;
-import org.apache.nifi.serialization.record.Record;
+import org.apache.nifi.serialization.record.RecordSchema;
 
 public interface RecordTransform extends PythonProcessor {
 
-    RecordTransformResult transform(ProcessContext context, Record record, AttributeMap attributeMap);
+    RecordTransformResult transformRecord(ProcessContext context, String jsonContent, RecordSchema schema, AttributeMap attributeMap);
 
 }
