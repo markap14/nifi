@@ -68,8 +68,14 @@ import java.util.concurrent.TimeUnit;
 //                We could then set the property values into a different, python-side 'Context' and then not need to go over socket unless evaluateAttributeExpressions is called...
 //              - Also want to consider completely changing the Record-based approach and instead serialize the contents to JSON to send over the wire to Python, then have Python parse the JSON
 //                into a dict. Then there's no need to manually convert it, and it should be much more efficient. Probably want to do the same thing on the way back.
+//      - Look at performance improvements for Py4J - socket comms appear to be INCREDIBLY slow.
+//              - Create test that calls Python 1M times. Just returns 'hello'. See how long it takes
+//              - Create test that calls Python 1M times. Returns <java object>.toString() and see how long it takes.
+//              - Will help to understand if it's the call from Java to Python that's slow, Python to Java, or both.
 //      - Test pip install nifi-my-proc, does nifi pick it up?
 //      - When ran DetectObjectInImage with multiple threads, Python died. Need to figure out why.
+//      - If Python Process dies, need to create a new process and need to then create all of the Processors that were in that Process and initialize them.
+//            - Milestone 2 or 3, not Milestone 1.
 //      - Fix references to 'python3' here and in ExtensionManager.py - need to use configured value for python command, such as python3.9
 //      - Additional Interfaces beyond just FlowFileTransform
 //          - FlowFileSource
@@ -80,6 +86,13 @@ import java.util.concurrent.TimeUnit;
 //      - Restructure Maven projects
 //          - Should this all go under Framework?
 //
+//
+//      Currently working on....
+//          - Create ProcessContext on the Python side so that we don't have to cross wire for each property value
+//          - Maybe even just evaluate EL if it's as simple as ${attributeName} - if it contains a : then use Java.
+//          - Instead of sending each record as an individual invocation, instead send a JSON Array containing up to 1 MB of content.
+//            On python side, invoke method for each one, store up results and send back as a JSON Array.
+//          - Look at using ORJSON or something like that, which is much faster
 //
 //      CONSIDER:
 //      - Clustering: Ensure component on all nodes?

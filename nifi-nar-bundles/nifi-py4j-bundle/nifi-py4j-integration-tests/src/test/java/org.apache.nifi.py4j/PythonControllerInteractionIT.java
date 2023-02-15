@@ -452,16 +452,16 @@ public class PythonControllerInteractionIT {
         runner.assertAllFlowFilesTransferred("success", 1);
         runner.getFlowFilesForRelationship("success").get(0).assertContentEquals(originalMessage);
 
+        // Wait a bit because some file systems only have second-precision timestamps so wait a little more than 1 second
+        // (to account for imprecision of the Thread.sleep method) to ensure
+        // that when we write to the file that the lastModified timestamp will be different.
+        Thread.sleep(1300L);
+
         // Change the source code of the WriteMessage.py class to write a different message.
         final File sourceFile = new File("target/python/extensions/WriteMessage.py");
         final byte[] sourceBytes = Files.readAllBytes(sourceFile.toPath());
         final String source = new String(sourceBytes, StandardCharsets.UTF_8);
         final String modifiedSource = source.replace(originalMessage, replacement);
-
-        // Wait a bit because some file systems only have second-precision timestamps so wait a little more than 1 second
-        // (to account for imprecision of the Thread.sleep method) to ensure
-        // that when we write to the file that the lastModified timestamp will be different.
-        Thread.sleep(1300L);
 
         // We have to use a FileOutputStream rather than Files.write() because we need to get the FileChannel and call force() to fsync.
         // Otherwise, we have a threading issue in which the file may be reloaded before the Operating System flushes the contents to disk.
@@ -478,6 +478,10 @@ public class PythonControllerInteractionIT {
         // Ensure that the output is correct
         runner.assertAllFlowFilesTransferred("success", 1);
         runner.getFlowFilesForRelationship("success").get(0).assertContentEquals(replacement);
+    }
+
+    private void replaceFileText(final File file, final String text, final String replacement) {
+
     }
 
     @Test

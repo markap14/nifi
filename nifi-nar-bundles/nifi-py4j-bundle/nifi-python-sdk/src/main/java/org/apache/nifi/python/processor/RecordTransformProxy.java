@@ -22,6 +22,8 @@ import org.apache.nifi.annotation.behavior.DefaultRunDuration;
 import org.apache.nifi.annotation.behavior.SupportsBatching;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.flowfile.FlowFile;
+import org.apache.nifi.json.JsonRecordSource;
+import org.apache.nifi.json.JsonSchemaInference;
 import org.apache.nifi.json.JsonTreeRowRecordReader;
 import org.apache.nifi.json.OutputGrouping;
 import org.apache.nifi.json.WriteJsonResult;
@@ -31,6 +33,7 @@ import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.schema.access.NopSchemaAccessWriter;
 import org.apache.nifi.schema.access.SchemaNotFoundException;
+import org.apache.nifi.schema.inference.TimeValueInference;
 import org.apache.nifi.serialization.MalformedRecordException;
 import org.apache.nifi.serialization.RecordReader;
 import org.apache.nifi.serialization.RecordReaderFactory;
@@ -80,6 +83,7 @@ public class RecordTransformProxy extends PythonProcessorProxy {
     static final Relationship REL_ORIGINAL = new Relationship.Builder()
         .name("original")
         .description("The original FlowFile will be routed to this relationship when it has been successfully transformed")
+        .autoTerminateDefault(true)
         .build();
     static final Relationship REL_FAILURE = new Relationship.Builder()
         .name("failure")
@@ -274,17 +278,26 @@ public class RecordTransformProxy extends PythonProcessorProxy {
         final byte[] jsonBytes = json.getBytes(StandardCharsets.UTF_8);
 
         final RecordSchema returnedSchema = transformResult.getSchema();
-        final RecordSchema writerSchema;
+        final RecordSchema schema;
         if (returnedSchema == null) {
-
+            schema = inferSchema(jsonBytes);
         } else {
-            writerSchema = returnedSchema;
+            schema = returnedSchema;
         }
 
         try (final InputStream in = new ByteArrayInputStream(jsonBytes)) {
-            final JsonTreeRowRecordReader reader = new JsonTreeRowRecordReader(in, getLogger(), inputSchema, null, null, null);
+            final JsonTreeRowRecordReader reader = new JsonTreeRowRecordReader(in, getLogger(), schema, null, null, null);
             final Record record = reader.nextRecord(false, false);
             return record;
+        }
+    }
+
+    private RecordSchema inferSchema(final byte[] jsonBytes) throws IOException {
+        try (final InputStream in = new ByteArrayInputStream(jsonBytes)) {
+            final JsonRecordSource recordSource = new JsonRecordSource(in);
+            final TimeValueInference timeValueInference = new TimeValueInference(null, null, null);
+            final JsonSchemaInference schemaInference = new JsonSchemaInference(timeValueInference);
+            return schemaInference.inferSchema(recordSource);
         }
     }
 
