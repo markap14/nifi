@@ -554,7 +554,8 @@ public class PythonControllerInteractionIT {
         final String json = "{ \"name\": \"John Doe\" }";
         final RecordSchema schema = createSimpleRecordSchema("name");
         final RecordTransform recordTransform = (RecordTransform) processor.getProcessorAdapter().getProcessor();
-        final RecordTransformResult result = recordTransform.transformRecord(context, json, schema, new EmptyAttributeMap());
+        recordTransform.setContext(context);
+        final RecordTransformResult result = recordTransform.transformRecord(json, schema, new EmptyAttributeMap());
 
         // Verify the results
         assertEquals("success", result.getRelationship());
@@ -600,7 +601,8 @@ public class PythonControllerInteractionIT {
         final String json = "{\"name\": \"Jake Doe\", \"father\": { \"name\": \"John Doe\" }}";
         final RecordSchema recordSchema = createTwoLevelRecord().getSchema();
         final RecordTransform recordTransform = (RecordTransform) processor.getProcessorAdapter().getProcessor();
-        final RecordTransformResult result = recordTransform.transformRecord(context, json, recordSchema, new EmptyAttributeMap());
+        recordTransform.setContext(context);
+        final RecordTransformResult result = recordTransform.transformRecord(json, recordSchema, new EmptyAttributeMap());
 
         // Verify the results
         assertEquals("success", result.getRelationship());

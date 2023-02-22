@@ -1,18 +1,17 @@
 import json
 from abc import ABC, abstractmethod
-
+from nifiapi.processcontext import ProcessContext
 
 class RecordTransform(ABC):
     def __init__(self, **kwargs):
         pass
 
     def setContext(self, context):
-        # TODO: Create a python-side context and set it
-        pass
+        self.process_context = ProcessContext(context)
 
-    def transformRecord(self, context, recordjson, schema, attributemap):
+    def transformRecord(self, recordjson, schema, attributemap):
         parsed = json.loads(recordjson)
-        result = self.transform(context, parsed, schema, attributemap)
+        result = self.transform(self.process_context, parsed, schema, attributemap)
         result_record = result.getRecord()
         resultjson = None if result_record is None else json.dumps(result_record)
         return __RecordTransformResult__(result, resultjson)

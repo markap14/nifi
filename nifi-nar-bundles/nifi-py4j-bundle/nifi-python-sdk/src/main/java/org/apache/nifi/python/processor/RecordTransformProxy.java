@@ -20,6 +20,7 @@ package org.apache.nifi.python.processor;
 import org.apache.nifi.NullSuppression;
 import org.apache.nifi.annotation.behavior.DefaultRunDuration;
 import org.apache.nifi.annotation.behavior.SupportsBatching;
+import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.json.JsonRecordSource;
@@ -121,6 +122,10 @@ public class RecordTransformProxy extends PythonProcessorProxy {
         }
     }
 
+    @OnScheduled
+    public void setProcessContext(final ProcessContext context) {
+        transform.setContext(context);
+    }
 
     @Override
     public void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException {
@@ -151,7 +156,7 @@ public class RecordTransformProxy extends PythonProcessorProxy {
                     final String json = baos.toString();
                     baos.reset();
 
-                    final RecordTransformResult result = transform.transformRecord(context, json, recordSchema, attributeMap);
+                    final RecordTransformResult result = transform.transformRecord(json, recordSchema, attributeMap);
                     writeResult(result, destinationTuples, writerFactory, session, flowFile);
                 }
             }

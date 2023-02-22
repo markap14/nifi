@@ -32,6 +32,7 @@ import java.util.Set;
 public interface PythonProcessorAdapter extends PythonProcessor {
     PythonProcessor getProcessor();
 
+    @PreserveJavaBinding
     void initialize(PythonProcessorInitializationContext context);
 
     Set<Relationship> getRelationships();

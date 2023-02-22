@@ -37,8 +37,22 @@ class PropertyDependency:
         if dependent_values is None:
             dependent_values = []
 
-        self.propertyDescriptor = property_descriptor
+        if isinstance(property_descriptor, str):
+            self.property_name = property_descriptor
+        else:
+            self.property_name = property_descriptor.getName()
         self.dependentValues = dependent_values
+
+    @staticmethod
+    def from_java_dependency(java_dependencies):
+        if java_dependencies is None or len(java_dependencies) == 0:
+            return None
+
+        dependencies = []
+        for dependency in java_dependencies:
+            dependencies.append(PropertyDependency(dependency.getPropertyName(), dependency.getDependentValues()))
+
+        return dependencies
 
 
 class ResourceDefinition:
@@ -48,6 +62,30 @@ class ResourceDefinition:
         self.allow_url = allow_url
         self.allow_directory = allow_directory
         self.allow_text = allow_text
+
+    @staticmethod
+    def from_java_definition(java_definition):
+        if java_definition is None:
+            return None
+
+        allow_multiple = java_definition.getCardinality().name() == "MULTIPLE"
+        resource_types = java_definition.getResourceTypes()
+        allow_file = False
+        allow_url = False
+        allow_directory = False
+        allow_text = False
+        for type in resource_types:
+            name = type.name()
+            if name == "FILE":
+                allow_file = True
+            elif name == "DIRECTORY":
+                allow_directory = True
+            elif name == "TEXT":
+                allow_text = True
+            elif name == "URL":
+                allow_url = True
+
+        return ResourceDefinition(allow_multiple, allow_file, allow_url, allow_directory, allow_text)
 
 
 class PropertyDescriptor:
@@ -72,6 +110,39 @@ class PropertyDescriptor:
         self.validators = validators
         self.resourceDefinition = resource_definition
         self.controllerServiceDefinition = controller_service_definition
+
+    @staticmethod
+    def from_java_descriptor(java_descriptor):
+        # Build the dependencies
+        dependencies = PropertyDependency.from_java_dependency(java_descriptor.getDependencies())
+
+        # Build the allowable values
+        allowable = java_descriptor.getAllowableValues()
+        if allowable is None or len(allowable) == 0:
+            allowable_values = None
+        else:
+            allowable_values = []
+            for value in allowable:
+                allowable_values.append(value.getValue())
+
+        # Build the resource definition
+        resource_definition = ResourceDefinition.from_java_definition(java_descriptor.getResourceDefinition())
+
+        el_scope = java_descriptor.getExpressionLanguageScope()
+        el_scope_name = None if el_scope is None else el_scope.name()
+
+        return PropertyDescriptor(java_descriptor.getName(), java_descriptor.getDescription(),
+                                  required = java_descriptor.isRequired(),
+                                  sensitive = java_descriptor.isSensitive(),
+                                  display_name = java_descriptor.getDisplayName(),
+                                  default_value = java_descriptor.getDefaultValue(),
+                                  allowable_values = allowable_values,
+                                  expression_language_scope = el_scope_name,
+                                  dynamic = java_descriptor.isDynamic(),
+                                  validators = java_descriptor.getValidators(),
+                                  controller_service_definition = java_descriptor.getControllerServiceDefinition(),
+                                  dependencies = dependencies,
+                                  resource_definition = resource_definition)
 
 
     def to_java_descriptor(self, gateway, cs_type_lookup):

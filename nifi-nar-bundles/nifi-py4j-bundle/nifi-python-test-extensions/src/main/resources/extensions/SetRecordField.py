@@ -15,13 +15,12 @@ class SetRecordField(RecordTransform):
 
     def transform(self, context, record, schema, attributemap):
         # Update dictionary based on the dynamic properties provided by user
-        attributes = attributemap.getAttributes()
-        for key in context.getProperties().keySet():
-            if not key.isDynamic():
+        for key in context.getProperties().keys():
+            if not key.dynamic:
                 continue
 
-            propname = key.getName()
-            record[propname] = context.getProperty(propname).evaluateAttributeExpressions(attributes).getValue()
+            propname = key.name
+            record[propname] = context.getProperty(propname).evaluateAttributeExpressions(attributemap).getValue()
 
         # Determine the partition
         if 'group' in record:

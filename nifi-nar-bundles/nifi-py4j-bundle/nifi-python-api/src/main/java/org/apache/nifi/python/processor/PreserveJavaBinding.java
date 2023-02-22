@@ -17,14 +17,22 @@
 
 package org.apache.nifi.python.processor;
 
-import org.apache.nifi.processor.ProcessContext;
-import org.apache.nifi.serialization.record.RecordSchema;
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Inherited;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-public interface RecordTransform extends PythonProcessor {
-
-    RecordTransformResult transformRecord(String jsonContent, RecordSchema schema, AttributeMap attributeMap);
-
-    @PreserveJavaBinding
-    void setContext(ProcessContext context);
-
+/**
+ * A marker annotation that can be added to an interface's method.
+ * When this annotation is present, the Java objects that are passed to that method will not be garbage collected
+ * until the Python side notifies that the object is available for garbage collection.
+ * Otherwise, the Java side may be far more aggressive about garbage collection.
+ */
+@Documented
+@Target({ElementType.METHOD})
+@Retention(RetentionPolicy.RUNTIME)
+@Inherited
+public @interface PreserveJavaBinding {
 }

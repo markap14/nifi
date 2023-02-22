@@ -89,7 +89,7 @@ import java.util.concurrent.TimeUnit;
 //
 //      Currently working on....
 //          - Create ProcessContext on the Python side so that we don't have to cross wire for each property value
-//          - Maybe even just evaluate EL if it's as simple as ${attributeName} - if it contains a : then use Java.
+//          - Maybe even just evaluate EL if it's as simple as ${attributeName} or ${'attribute name'} - if it contains a : then use Java.
 //          - Instead of sending each record as an individual invocation, instead send a JSON Array containing up to 1 MB of content.
 //            On python side, invoke method for each one, store up results and send back as a JSON Array.
 //          - Look at using ORJSON or something like that, which is much faster

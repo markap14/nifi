@@ -17,6 +17,7 @@
 
 package org.apache.nifi.py4j.client;
 
+import org.apache.nifi.python.processor.PreserveJavaBinding;
 import org.apache.nifi.python.processor.PythonProcessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -154,7 +155,7 @@ public class NiFiPythonGateway extends Gateway {
 
     protected boolean isUnbind(final Method method) {
         final Class<?> declaringClass = method.getDeclaringClass();
-        if (PythonProcessor.class.isAssignableFrom(declaringClass) && !"initialize".equals(method.getName())) {
+        if (PythonProcessor.class.isAssignableFrom(declaringClass) && method.getAnnotation(PreserveJavaBinding.class) == null) {
             return true;
         }
 
