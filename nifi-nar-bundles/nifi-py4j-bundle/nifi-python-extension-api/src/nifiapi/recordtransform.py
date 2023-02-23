@@ -1,25 +1,53 @@
 import json
 from abc import ABC, abstractmethod
 from nifiapi.processcontext import ProcessContext
+from nifiapi.__jvm__ import JvmHolder
 
 class RecordTransform(ABC):
     def __init__(self, **kwargs):
-        pass
+        self.arrayList = JvmHolder.jvm.java.util.ArrayList
 
     def setContext(self, context):
         self.process_context = ProcessContext(context)
 
-    def transformRecord(self, recordjson, schema, attributemap):
-        parsed = json.loads(recordjson)
-        result = self.transform(self.process_context, parsed, schema, attributemap)
-        result_record = result.getRecord()
-        resultjson = None if result_record is None else json.dumps(result_record)
-        return __RecordTransformResult__(result, resultjson)
+    def transformRecord(self, jsonarray, schema, attributemap):
+        parsed_array = json.loads(jsonarray)
+        results = self.arrayList()
+        caching_attribute_map = CachingAttributeMap(attributemap)
+
+        for record in parsed_array:
+            result = self.transform(self.process_context, record, schema, caching_attribute_map)
+            result_record = result.getRecord()
+            resultjson = None if result_record is None else json.dumps(result_record)
+            results.add(__RecordTransformResult__(result, resultjson))
+
+        return results
+
 
     @abstractmethod
     def transform(self, context, record, schema, attributemap):
         pass
 
+
+class CachingAttributeMap:
+    cache = None
+
+    def __init__(self, delegate):
+        self.delegate = delegate
+
+    def getAttribute(self, attributeName):
+        # Lazily initialize cache
+        if self.cache is None:
+            self.cache = {}
+        if attributeName in self.cache:
+            return self.cache[attributeName]
+
+        value = self.delegate.getAttribute(attributeName)
+        self.cache[attributeName] = value
+        return value
+
+    def getAttributes(self):
+        return self.delegate.getAttributes()
 
 
 class __RecordTransformResult__:

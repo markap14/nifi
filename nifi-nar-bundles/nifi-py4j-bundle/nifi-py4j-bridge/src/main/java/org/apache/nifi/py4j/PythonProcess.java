@@ -72,6 +72,10 @@ import java.util.concurrent.TimeUnit;
 //              - Create test that calls Python 1M times. Just returns 'hello'. See how long it takes
 //              - Create test that calls Python 1M times. Returns <java object>.toString() and see how long it takes.
 //              - Will help to understand if it's the call from Java to Python that's slow, Python to Java, or both.
+//      - Performance concern for TransformRecord
+//              - Currently, triggering the transform() method is pretty fast. But then the Result object comes back and we have to call into the Python side to call the getters
+//                over and over. Need to look into instead serializing the entire response as JSON and sending that back.
+//              - Also, since this is heavy JSON processing, might want to consider ORJSON or something like that instead of inbuilt JSON parser/generator
 //      - Test pip install nifi-my-proc, does nifi pick it up?
 //      - When ran DetectObjectInImage with multiple threads, Python died. Need to figure out why.
 //      - If Python Process dies, need to create a new process and need to then create all of the Processors that were in that Process and initialize them.
@@ -79,20 +83,12 @@ import java.util.concurrent.TimeUnit;
 //      - Fix references to 'python3' here and in ExtensionManager.py - need to use configured value for python command, such as python3.9
 //      - Additional Interfaces beyond just FlowFileTransform
 //          - FlowFileSource
-//          - RecordTransform
-//              - Works but VERY slow. Should try to understand why. Appears to be 100% on the Python side, unfortunately.
-//              - Get a record that's of type 'dict' as well as schema for it?
-//              - Return tuple of (updated record, relationship)
 //      - Restructure Maven projects
 //          - Should this all go under Framework?
 //
 //
 //      Currently working on....
-//          - Create ProcessContext on the Python side so that we don't have to cross wire for each property value
-//          - Maybe even just evaluate EL if it's as simple as ${attributeName} or ${'attribute name'} - if it contains a : then use Java.
-//          - Instead of sending each record as an individual invocation, instead send a JSON Array containing up to 1 MB of content.
-//            On python side, invoke method for each one, store up results and send back as a JSON Array.
-//          - Look at using ORJSON or something like that, which is much faster
+//          - Refactor TransformFlowFile to handle the context differently and have a parent class also
 //
 //      CONSIDER:
 //      - Clustering: Ensure component on all nodes?

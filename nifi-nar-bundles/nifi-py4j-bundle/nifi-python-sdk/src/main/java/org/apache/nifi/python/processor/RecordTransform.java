@@ -20,9 +20,11 @@ package org.apache.nifi.python.processor;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.serialization.record.RecordSchema;
 
+import java.util.List;
+
 public interface RecordTransform extends PythonProcessor {
 
-    RecordTransformResult transformRecord(String jsonContent, RecordSchema schema, AttributeMap attributeMap);
+    List<RecordTransformResult> transformRecord(String jsonContent, RecordSchema schema, AttributeMap attributeMap);
 
     @PreserveJavaBinding
     void setContext(ProcessContext context);

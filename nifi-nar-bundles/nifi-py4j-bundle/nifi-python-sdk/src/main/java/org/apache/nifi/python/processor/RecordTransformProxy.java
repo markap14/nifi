@@ -140,6 +140,9 @@ public class RecordTransformProxy extends PythonProcessorProxy {
         final Map<RecordGroupingKey, DestinationTuple> destinationTuples = new HashMap<>();
         final AttributeMap attributeMap = new FlowFileAttributeMap(flowFile);
 
+        long recordsRead = 0L;
+        long recordsWritten = 0L;
+
         Map<Relationship, List<FlowFile>> flowFilesPerRelationship;
         try (final InputStream in = session.read(flowFile);
              final RecordReader reader = readerFactory.createRecordReader(flowFile, in, getLogger())) {
@@ -147,22 +150,54 @@ public class RecordTransformProxy extends PythonProcessorProxy {
             final RecordSchema recordSchema = reader.getSchema();
             try (final ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
                 final WriteJsonResult writeJsonResult = new WriteJsonResult(getLogger(), recordSchema, new NopSchemaAccessWriter(), baos, false, NullSuppression.NEVER_SUPPRESS,
-                    OutputGrouping.OUTPUT_ONELINE, null, null, null);
+                    OutputGrouping.OUTPUT_ARRAY, null, null, null);
 
+                int writtenSinceFlush = 0;
                 Record record;
                 while ((record = reader.nextRecord()) != null) {
+                    recordsRead++;
+                    if (writtenSinceFlush == 0) {
+                        writeJsonResult.beginRecordSet();
+                    }
+
                     writeJsonResult.writeRawRecord(record);
+                    writtenSinceFlush++;
+
+                    if (baos.size() >= 1_000_000) {
+                        writeJsonResult.finishRecordSet();
+                        writeJsonResult.flush();
+                        final String json = baos.toString();
+                        baos.reset();
+
+                        final List<RecordTransformResult> results = transform.transformRecord(json, recordSchema, attributeMap);
+                        for (final RecordTransformResult result : results) {
+                            writeResult(result, destinationTuples, writerFactory, session, flowFile);
+                            recordsWritten++;
+                        }
+
+                        writtenSinceFlush = 0;
+                    }
+                }
+
+                if (writtenSinceFlush > 0) {
+                    writeJsonResult.finishRecordSet();
                     writeJsonResult.flush();
                     final String json = baos.toString();
                     baos.reset();
 
-                    final RecordTransformResult result = transform.transformRecord(json, recordSchema, attributeMap);
-                    writeResult(result, destinationTuples, writerFactory, session, flowFile);
+                    final List<RecordTransformResult> results = transform.transformRecord(json, recordSchema, attributeMap);
+                    for (final RecordTransformResult result : results) {
+                        writeResult(result, destinationTuples, writerFactory, session, flowFile);
+                        recordsWritten++;
+                    }
                 }
             }
 
             // Update FlowFile attributes, close Record Writers, and map FlowFiles to their appropriate relationships
             flowFilesPerRelationship = mapResults(destinationTuples, session);
+
+            session.adjustCounter("Records Read", recordsRead, false);
+            session.adjustCounter("Record Written", recordsWritten, false);
         } catch (final Exception e) {
             getLogger().error("Failed to transform {}; routing to failure", flowFile, e);
             session.transfer(flowFile, REL_FAILURE);

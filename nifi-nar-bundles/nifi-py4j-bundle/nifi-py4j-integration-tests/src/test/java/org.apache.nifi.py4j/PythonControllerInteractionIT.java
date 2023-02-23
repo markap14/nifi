@@ -551,11 +551,11 @@ public class PythonControllerInteractionIT {
         final ProcessContext context = createContext(propertyMap);
 
         // Create a Record to transform and transform it
-        final String json = "{ \"name\": \"John Doe\" }";
+        final String json = "[{ \"name\": \"John Doe\" }]";
         final RecordSchema schema = createSimpleRecordSchema("name");
         final RecordTransform recordTransform = (RecordTransform) processor.getProcessorAdapter().getProcessor();
         recordTransform.setContext(context);
-        final RecordTransformResult result = recordTransform.transformRecord(json, schema, new EmptyAttributeMap());
+        final RecordTransformResult result = recordTransform.transformRecord(json, schema, new EmptyAttributeMap()).get(0);
 
         // Verify the results
         assertEquals("success", result.getRelationship());
@@ -598,11 +598,11 @@ public class PythonControllerInteractionIT {
         final ProcessContext context = createContext(propertyMap);
 
         // Create a Record to transform and transform it
-        final String json = "{\"name\": \"Jake Doe\", \"father\": { \"name\": \"John Doe\" }}";
+        final String json = "[{\"name\": \"Jake Doe\", \"father\": { \"name\": \"John Doe\" }}]";
         final RecordSchema recordSchema = createTwoLevelRecord().getSchema();
         final RecordTransform recordTransform = (RecordTransform) processor.getProcessorAdapter().getProcessor();
         recordTransform.setContext(context);
-        final RecordTransformResult result = recordTransform.transformRecord(json, recordSchema, new EmptyAttributeMap());
+        final RecordTransformResult result = recordTransform.transformRecord(json, recordSchema, new EmptyAttributeMap()).get(0);
 
         // Verify the results
         assertEquals("success", result.getRelationship());
