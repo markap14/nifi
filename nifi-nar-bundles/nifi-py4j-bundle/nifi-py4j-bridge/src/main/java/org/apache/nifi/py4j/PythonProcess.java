@@ -59,15 +59,6 @@ import java.util.concurrent.TimeUnit;
 //      - Figure out how to deal with Python Packaging
 //              - Need to figure out how to deal with additionalDetails.html, docs directory in python project typically?
 //              - Understand how to deal with versioning
-//      - Refactor to use a parent class?
-//              - A major benefit here would be to invoke a method with certain arguments from Java side and use different args on Python side.
-//                E.g., transform0(record) could be called from Java side and on python side it could convert Record into dict and then call self.transform(dict).
-//                On the other hand, this can be very expensive and so maybe is best avoided....
-//              - Current thinking is that ProcessContext is very expensive to call. getProperty(), getProperties(), evaluateAttributeExpressions...
-//                we could instead have something on the parent class that would allow us to set the context before  calling @OnScheduled, @OnStopped, transform, etc.
-//                We could then set the property values into a different, python-side 'Context' and then not need to go over socket unless evaluateAttributeExpressions is called...
-//              - Also want to consider completely changing the Record-based approach and instead serialize the contents to JSON to send over the wire to Python, then have Python parse the JSON
-//                into a dict. Then there's no need to manually convert it, and it should be much more efficient. Probably want to do the same thing on the way back.
 //      - Look at performance improvements for Py4J - socket comms appear to be INCREDIBLY slow.
 //              - Create test that calls Python 1M times. Just returns 'hello'. See how long it takes
 //              - Create test that calls Python 1M times. Returns <java object>.toString() and see how long it takes.
@@ -80,7 +71,7 @@ import java.util.concurrent.TimeUnit;
 //      - When ran DetectObjectInImage with multiple threads, Python died. Need to figure out why.
 //      - If Python Process dies, need to create a new process and need to then create all of the Processors that were in that Process and initialize them.
 //            - Milestone 2 or 3, not Milestone 1.
-//      - Fix references to 'python3' here and in ExtensionManager.py - need to use configured value for python command, such as python3.9
+//      - Remove test-pypi usage from ExtensionManager.py
 //      - Additional Interfaces beyond just FlowFileTransform
 //          - FlowFileSource
 //      - Restructure Maven projects
@@ -192,7 +183,9 @@ public class PythonProcess {
     private Process launchPythonProcess(final int listeningPort) throws IOException {
         final File pythonFrameworkDirectory = processConfig.getPythonFrameworkDirectory();
         final File pythonLogsDirectory = processConfig.getPythonLogsDirectory();
-        final File pythonCommandFile = new File(virtualEnvHome, "bin/python3");
+        final File pythonCmdFile = new File(processConfig.getPythonCommand());
+        final String pythonCmd = pythonCmdFile.getName();
+        final File pythonCommandFile = new File(virtualEnvHome, "bin/" + pythonCmd);
         final String pythonCommand = pythonCommandFile.getAbsolutePath();
 
         final File controllerPyFile = new File(pythonFrameworkDirectory, PYTHON_CONTROLLER_FILENAME);
@@ -201,6 +194,7 @@ public class PythonProcess {
         processBuilder.environment().put("JAVA_PORT", String.valueOf(listeningPort));
         processBuilder.environment().put("LOGS_DIR", pythonLogsDirectory.getAbsolutePath());
         processBuilder.environment().put("ENV_HOME", virtualEnvHome.getAbsolutePath());
+        processBuilder.environment().put("PYTHON_CMD", pythonCommandFile.getAbsolutePath());
         processBuilder.inheritIO();
 
         logger.info("Launching Python Process {} {} with working directory {} to communicate with Java on Port {}",

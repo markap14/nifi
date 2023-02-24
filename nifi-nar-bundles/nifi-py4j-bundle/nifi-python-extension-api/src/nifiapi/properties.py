@@ -342,8 +342,8 @@ class PythonPropertyValue:
     def evaluateAttributeExpressions(self, attributeMap=None):
         # If Expression Language is supported and present, evaluate it and return a new PropertyValue.
         # Otherwise just return self, in order to avoid the cost of making the call to Java for evaluateAttributeExpressions
-        new_property_value = None
         if self.el_supported and self.el_present:
+            new_property_value = None
             if self.referenced_attribute is not None:
                 attribute_value = attributeMap.getAttribute(self.referenced_attribute)
                 new_property_value = self.property_value

@@ -32,7 +32,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -91,6 +90,11 @@ public class PythonProcessorIT extends NiFiSystemIT {
         final ProcessorEntity setRecordField = getClientUtil().createPythonProcessor("SetRecordField");
         final ProcessorEntity terminate = getClientUtil().createProcessor("TerminateFlowFile");
 
+        final Map<String, String> attributes = new HashMap<>();
+        attributes.put("sport", "Ball");
+        attributes.put("greeting", "hello");
+        getClientUtil().updateProcessorProperties(generate, attributes);
+
         // Add Reader and Writer
         final ControllerServiceEntity csvReader = getClientUtil().createControllerService("MockCSVReader");
         final ControllerServiceEntity csvWriter = getClientUtil().createControllerService("MockCSVWriter");
@@ -101,14 +105,16 @@ public class PythonProcessorIT extends NiFiSystemIT {
         // Configure the SetRecordField property
         final Map<String, String> fieldMap = new HashMap<>();
         fieldMap.put("Record Reader", csvReader.getId());
-        fieldMap.put("record-writer", csvWriter.getId());   // TODO: Fix this 'record-writer' to Record Writer
+        fieldMap.put("Record Writer", csvWriter.getId());
         fieldMap.put("age", "3");
         fieldMap.put("color", "yellow");
+        fieldMap.put("sport", "${sport}");  // test EL for plain attribute
+        fieldMap.put("greeting", "${greeting:toUpper()}");      // test EL function
         getClientUtil().updateProcessorProperties(setRecordField, fieldMap);
         getClientUtil().setAutoTerminatedRelationships(setRecordField, new HashSet<>(Arrays.asList("original", "failure")));
 
         // Set contents of GenerateFlowFile
-        getClientUtil().updateProcessorProperties(generate, Collections.singletonMap("Text", "name, age, color\nJane Doe, 7, red\nJake Doe, 14, blue"));
+        getClientUtil().updateProcessorProperties(generate, Collections.singletonMap("Text", "name, age, color, sport, greeting\nJane Doe, 7, red,,\nJake Doe, 14, blue,,"));
 
         // Connect flow
         getClientUtil().createConnection(generate, setRecordField, "success");
@@ -129,12 +135,14 @@ public class PythonProcessorIT extends NiFiSystemIT {
         final String contents = getClientUtil().getFlowFileContentAsUtf8(outputConnection.getId(), 0);
         final String[] lines = contents.split("\n");
         final String headerLine = lines[0];
-        final Set<String> headers = Stream.of(headerLine.split(","))
+        final List<String> headers = Stream.of(headerLine.split(","))
             .map(String::trim)
-            .collect(Collectors.toSet());
+            .collect(Collectors.toList());
         assertTrue(headers.contains("name"));
         assertTrue(headers.contains("age"));
         assertTrue(headers.contains("color"));
+        assertTrue(headers.contains("sport"));
+        assertTrue(headers.contains("greeting"));
 
         final Map<String, Integer> headerIndices = new HashMap<>();
         int index = 0;
@@ -149,6 +157,8 @@ public class PythonProcessorIT extends NiFiSystemIT {
         assertEquals("Jane Doe", firstRecordValues.get( headerIndices.get("name") ));
         assertEquals("yellow", firstRecordValues.get( headerIndices.get("color") ));
         assertEquals("3", firstRecordValues.get( headerIndices.get("age") ));
+        assertEquals("Ball", firstRecordValues.get( headerIndices.get("sport") ));
+        assertEquals("HELLO", firstRecordValues.get( headerIndices.get("greeting") ));
 
         final String secondRecordLine = lines[2];
         final List<String> secondRecordValues = Stream.of(secondRecordLine.split(","))
@@ -157,5 +167,7 @@ public class PythonProcessorIT extends NiFiSystemIT {
         assertEquals("Jake Doe", secondRecordValues.get( headerIndices.get("name") ));
         assertEquals("yellow", secondRecordValues.get( headerIndices.get("color") ));
         assertEquals("3", secondRecordValues.get( headerIndices.get("age") ));
+        assertEquals("Ball", secondRecordValues.get( headerIndices.get("sport") ));
+        assertEquals("HELLO", secondRecordValues.get( headerIndices.get("greeting") ));
     }
 }

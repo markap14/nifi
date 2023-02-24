@@ -20,7 +20,7 @@ class WritePropertyToFlowFile(FlowFileTransform):
         self.properties = [self.message]
 
     def transform(self, context, flowFile):
-        msg = context.getProperty(self.message.name).evaluateAttributeExpressions(flowFile.getAttributes()).getValue()
+        msg = context.getProperty(self.message.name).evaluateAttributeExpressions(flowFile).getValue()
         return FlowFileTransformResult(relationship = "success", contents = str.encode(msg))
 
     def getPropertyDescriptors(self):
