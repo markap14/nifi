@@ -1,6 +1,6 @@
-from nifiapi.flowfiletransform import FlowFileTransformResult
+from nifiapi.flowfiletransform import FlowFileTransform, FlowFileTransformResult
 
-class LogContents:
+class LogContents(FlowFileTransform):
     class Java:
         implements = ['org.apache.nifi.python.processor.FlowFileTransform']
     class ProcessorDetails:

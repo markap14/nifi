@@ -1,4 +1,22 @@
+from abc import ABC, abstractmethod
 from nifiapi.__jvm__ import JvmHolder
+from nifiapi.properties import ProcessContext
+
+
+class FlowFileTransform(ABC):
+    def __init__(self, **kwargs):
+        self.arrayList = JvmHolder.jvm.java.util.ArrayList
+
+    def setContext(self, context):
+        self.process_context = ProcessContext(context)
+
+    def transformFlowFile(self, flowfile):
+        return self.transform(self.process_context, flowfile)
+
+    @abstractmethod
+    def transform(self, context, flowFile):
+        pass
+
 
 class FlowFileTransformResult:
     class Java:

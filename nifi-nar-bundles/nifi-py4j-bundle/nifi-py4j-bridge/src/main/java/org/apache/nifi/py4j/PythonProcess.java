@@ -87,9 +87,6 @@ import java.util.concurrent.TimeUnit;
 //          - Should this all go under Framework?
 //
 //
-//      Currently working on....
-//          - Refactor TransformFlowFile to handle the context differently and have a parent class also
-//
 //      CONSIDER:
 //      - Clustering: Ensure component on all nodes?
 //          - Consider "pip freeze" type of thing to ensure that python dependencies are same across nodes when joining cluster.

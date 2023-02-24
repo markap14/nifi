@@ -1,9 +1,9 @@
-from nifiapi.flowfiletransform import FlowFileTransformResult
+from nifiapi.flowfiletransform import FlowFileTransform, FlowFileTransformResult
 from nifiapi.properties import PropertyDescriptor
 from nifiapi.properties import StandardValidators
 from nifiapi.properties import ExpressionLanguageScope
 
-class WritePropertyToFlowFile:
+class WritePropertyToFlowFile(FlowFileTransform):
     class Java:
         implements = ['org.apache.nifi.python.processor.FlowFileTransform']
 

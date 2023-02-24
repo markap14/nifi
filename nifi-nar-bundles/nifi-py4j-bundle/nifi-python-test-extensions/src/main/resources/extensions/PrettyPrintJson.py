@@ -1,9 +1,9 @@
 import json
 from nifiapi.properties import PropertyDescriptor
 from nifiapi.properties import StandardValidators
-from nifiapi.flowfiletransform import FlowFileTransformResult
+from nifiapi.flowfiletransform import FlowFileTransform, FlowFileTransformResult
 
-class PrettyPrintJson:
+class PrettyPrintJson(FlowFileTransform):
     class Java:
         implements = ['org.apache.nifi.python.processor.FlowFileTransform']
     class ProcessorDetails:

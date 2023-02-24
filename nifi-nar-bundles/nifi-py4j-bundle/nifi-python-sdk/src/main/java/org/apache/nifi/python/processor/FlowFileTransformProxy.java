@@ -19,6 +19,7 @@ package org.apache.nifi.python.processor;
 
 import org.apache.nifi.annotation.behavior.DefaultRunDuration;
 import org.apache.nifi.annotation.behavior.SupportsBatching;
+import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
@@ -50,6 +51,10 @@ public class FlowFileTransformProxy extends PythonProcessorProxy {
         }
     }
 
+    @OnScheduled
+    public void setContext(final ProcessContext context) {
+        transform.setContext(context);
+    }
 
     @Override
     public void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException {
@@ -60,7 +65,7 @@ public class FlowFileTransformProxy extends PythonProcessorProxy {
 
         final FlowFileTransformResult result;
         try (final StandardInputFlowFile inputFlowFile = new StandardInputFlowFile(session, flowFile)) {
-            result = transform.transform(context, inputFlowFile);
+            result = transform.transformFlowFile(inputFlowFile);
         } catch (IOException e) {
             throw new ProcessException("Could not read FlowFile contents");
         }

@@ -434,8 +434,13 @@ public class PythonControllerInteractionIT {
 
     @Test
     public void testReload() throws IOException, InterruptedException {
+        final File sourceFile = new File("target/python/extensions/WriteMessage.py");
+
         final String originalMessage = "Hello, World";
         final String replacement = "Hola, Mundo";
+
+        // Ensure that we started with "Hello, World" because if the test is run multiple times, we may already be starting with the modified version
+        replaceFileText(sourceFile, replacement, originalMessage);
 
         // Create a PrettyPrintJson Processor
         final PythonProcessorBridge processor = createProcessor("WriteMessage");
@@ -458,17 +463,7 @@ public class PythonControllerInteractionIT {
         Thread.sleep(1300L);
 
         // Change the source code of the WriteMessage.py class to write a different message.
-        final File sourceFile = new File("target/python/extensions/WriteMessage.py");
-        final byte[] sourceBytes = Files.readAllBytes(sourceFile.toPath());
-        final String source = new String(sourceBytes, StandardCharsets.UTF_8);
-        final String modifiedSource = source.replace(originalMessage, replacement);
-
-        // We have to use a FileOutputStream rather than Files.write() because we need to get the FileChannel and call force() to fsync.
-        // Otherwise, we have a threading issue in which the file may be reloaded before the Operating System flushes the contents to disk.
-        try (final FileOutputStream fos = new FileOutputStream(sourceFile)) {
-            fos.write(modifiedSource.getBytes(StandardCharsets.UTF_8));
-            fos.getChannel().force(false);
-        }
+        replaceFileText(sourceFile, originalMessage, replacement);
 
         // Reload the processor and run again
         runner.enqueue("");
@@ -480,12 +475,26 @@ public class PythonControllerInteractionIT {
         runner.getFlowFilesForRelationship("success").get(0).assertContentEquals(replacement);
     }
 
-    private void replaceFileText(final File file, final String text, final String replacement) {
+    private void replaceFileText(final File file, final String text, final String replacement) throws IOException {
+        final byte[] sourceBytes = Files.readAllBytes(file.toPath());
+        final String source = new String(sourceBytes, StandardCharsets.UTF_8);
+        final String modifiedSource = source.replace(text, replacement);
 
+        // We have to use a FileOutputStream rather than Files.write() because we need to get the FileChannel and call force() to fsync.
+        // Otherwise, we have a threading issue in which the file may be reloaded before the Operating System flushes the contents to disk.
+        try (final FileOutputStream fos = new FileOutputStream(file)) {
+            fos.write(modifiedSource.getBytes(StandardCharsets.UTF_8));
+            fos.getChannel().force(false);
+        }
     }
 
     @Test
-    public void testMultipleVersions() {
+    public void testMultipleVersions() throws IOException {
+        // If the testReload() test runs first, the contents of the WriteMessage.py file may have changed to write "Hola, Mundo" instead of "Hello, World".
+        // So we need to ensure that it's updated appropriately before beginning.
+        final File sourceFile = new File("target/python/extensions/WriteMessage.py");
+        replaceFileText(sourceFile, "Hola, Mundo", "Hello, World");
+
         // Discover extensions so that they can be created
         bridge.discoverExtensions();
 
@@ -567,7 +576,7 @@ public class PythonControllerInteractionIT {
         final ProcessContext context = Mockito.mock(ProcessContext.class);
 
         when(context.getProperties()).thenReturn(propertyValues);
-        when(context.getProperty(any(String.class))).thenAnswer(new Answer<Object>() {
+        when(context.getProperty(any(String.class))).thenAnswer(new Answer<>() {
             @Override
             public Object answer(final InvocationOnMock invocationOnMock) {
                 final String name = invocationOnMock.getArgument(0, String.class);

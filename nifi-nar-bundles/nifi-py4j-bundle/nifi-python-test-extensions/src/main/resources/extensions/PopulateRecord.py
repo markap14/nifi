@@ -1,7 +1,8 @@
 from nifiapi.recordtransform import RecordTransformResult
 from nifiapi.recordtransform import RecordCodec
+from nifiapi.flowfiletransform import FlowFileTransform, FlowFileTransformResult
 
-class PopulateRecord:
+class PopulateRecord(FlowFileTransform):
     class Java:
         implements = ['org.apache.nifi.python.processor.RecordTransform']
     class ProcessorDetails:

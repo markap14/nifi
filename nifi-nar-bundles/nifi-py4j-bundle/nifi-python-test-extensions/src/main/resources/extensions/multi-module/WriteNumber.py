@@ -1,7 +1,7 @@
 import ProcessorUtil
-from nifiapi.flowfiletransform import FlowFileTransformResult
+from nifiapi.flowfiletransform import FlowFileTransform, FlowFileTransformResult
 
-class WriteNumber:
+class WriteNumber(FlowFileTransform):
     class Java:
         implements = ['org.apache.nifi.python.processor.FlowFileTransform']
     class ProcessorDetails:

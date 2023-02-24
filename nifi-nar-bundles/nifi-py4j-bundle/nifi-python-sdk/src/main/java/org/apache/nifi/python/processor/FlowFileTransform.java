@@ -17,10 +17,8 @@
 
 package org.apache.nifi.python.processor;
 
-import org.apache.nifi.processor.ProcessContext;
-
 public interface FlowFileTransform extends PythonProcessor {
 
-    FlowFileTransformResult transform(ProcessContext context, InputFlowFile flowFile);
+    FlowFileTransformResult transformFlowFile(InputFlowFile flowFile);
 
 }

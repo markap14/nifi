@@ -3,13 +3,13 @@ import numpy as np
 import json
 from nifiapi.properties import PropertyDescriptor
 from nifiapi.properties import ResourceDefinition
-from nifiapi.flowfiletransform import FlowFileTransformResult
+from nifiapi.flowfiletransform import FlowFileTransform, FlowFileTransformResult
 
 SCALE_FACTOR = 0.00392
 NMS_THRESHOLD = 0.4     # non-maximum suppression threshold
 CONFIDENCE_THRESHOLD = 0.5
 
-class DetectObjectInImage:
+class DetectObjectInImage(FlowFileTransform):
     class Java:
         implements = ['org.apache.nifi.python.processor.FlowFileTransform']
     class ProcessorDetails:

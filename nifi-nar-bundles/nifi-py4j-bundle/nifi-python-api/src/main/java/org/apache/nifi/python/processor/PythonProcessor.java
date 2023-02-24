@@ -18,14 +18,15 @@
 package org.apache.nifi.python.processor;
 
 import org.apache.nifi.components.PropertyDescriptor;
-import org.apache.nifi.components.ValidationContext;
-import org.apache.nifi.components.ValidationResult;
+import org.apache.nifi.processor.ProcessContext;
 
-import java.util.Collection;
 import java.util.List;
 
 public interface PythonProcessor {
 
     List<PropertyDescriptor> getSupportedPropertyDescriptors();
+
+    @PreserveJavaBinding
+    void setContext(ProcessContext context);
 
 }

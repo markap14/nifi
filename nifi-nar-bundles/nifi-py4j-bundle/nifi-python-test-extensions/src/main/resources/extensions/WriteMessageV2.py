@@ -1,8 +1,8 @@
-from nifiapi.flowfiletransform import FlowFileTransformResult
+from nifiapi.flowfiletransform import FlowFileTransform, FlowFileTransformResult
 
 MESSAGE = "Hello, World 2"
 
-class WriteMessage:
+class WriteMessage(FlowFileTransform):
     class Java:
         implements = ['org.apache.nifi.python.processor.FlowFileTransform']
     class ProcessorDetails:

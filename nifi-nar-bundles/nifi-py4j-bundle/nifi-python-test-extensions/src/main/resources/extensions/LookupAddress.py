@@ -1,8 +1,8 @@
 import json
 from nifiapi.properties import PropertyDescriptor
-from nifiapi.flowfiletransform import FlowFileTransformResult
+from nifiapi.flowfiletransform import FlowFileTransform, FlowFileTransformResult
 
-class LookupAddress:
+class LookupAddress(FlowFileTransform):
     class Java:
         implements = ['org.apache.nifi.python.processor.FlowFileTransform']
     class ProcessorDetails:

@@ -1,8 +1,8 @@
 import json
 from faker import Faker
-from nifiapi.flowfiletransform import FlowFileTransformResult
+from nifiapi.flowfiletransform import FlowFileTransform, FlowFileTransformResult
 
-class GenerateRecord:
+class GenerateRecord(FlowFileTransform):
     class Java:
         implements = ['org.apache.nifi.python.processor.FlowFileTransform']
 

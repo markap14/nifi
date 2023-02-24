@@ -1,6 +1,6 @@
 import json
 from abc import ABC, abstractmethod
-from nifiapi.processcontext import ProcessContext
+from nifiapi.properties import ProcessContext
 from nifiapi.__jvm__ import JvmHolder
 
 class RecordTransform(ABC):

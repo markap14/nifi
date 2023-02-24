@@ -1,7 +1,7 @@
-from nifiapi.flowfiletransform import FlowFileTransformResult
+from nifiapi.flowfiletransform import FlowFileTransform, FlowFileTransformResult
 import numpy as np
 
-class WriteNumpyVersion:
+class WriteNumpyVersion(FlowFileTransform):
     class Java:
         implements = ['org.apache.nifi.python.processor.FlowFileTransform']
 
