@@ -28,6 +28,9 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * A simple wrapper around a PythonBridge that ensure that all method invocations occur with the appropriate NAR ClassLoader
+ */
 public class ClassLoaderAwarePythonBridge implements PythonBridge {
     private final PythonBridge delegate;
     private final ClassLoader classLoader;
@@ -83,13 +86,6 @@ public class ClassLoaderAwarePythonBridge implements PythonBridge {
     public List<BoundObjectCounts> getBoundObjectCounts() {
         try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(classLoader)) {
             return delegate.getBoundObjectCounts();
-        }
-    }
-
-    @Override
-    public List<String> getProcessorDependencies(final String processorType) {
-        try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(classLoader)) {
-            return delegate.getProcessorDependencies(processorType);
         }
     }
 

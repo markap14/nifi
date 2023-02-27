@@ -241,12 +241,6 @@ public class StandardPythonBridge implements PythonBridge {
         return list;
     }
 
-    @Override
-    public List<String> getProcessorDependencies(final String processorType) {
-        ensureStarted();
-        return controllerProcess.getController().getProcessorDependencies(processorType);
-    }
-
     private void ensureStarted() {
         if (!running) {
             throw new IllegalStateException("Cannot perform action because " + this + " is not currently running");

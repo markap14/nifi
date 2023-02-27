@@ -24,6 +24,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * An implementation of the PythonBridge that does not enable any interaction with Python or launch any Python Processes.
+ */
 public class DisabledPythonBridge implements PythonBridge {
     @Override
     public void initialize(final PythonBridgeInitializationContext context) {
@@ -53,11 +56,6 @@ public class DisabledPythonBridge implements PythonBridge {
 
     @Override
     public List<BoundObjectCounts> getBoundObjectCounts() {
-        return Collections.emptyList();
-    }
-
-    @Override
-    public List<String> getProcessorDependencies(final String processorType) {
         return Collections.emptyList();
     }
 

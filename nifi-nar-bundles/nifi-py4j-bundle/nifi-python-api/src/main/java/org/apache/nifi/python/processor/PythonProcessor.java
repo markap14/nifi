@@ -22,6 +22,9 @@ import org.apache.nifi.processor.ProcessContext;
 
 import java.util.List;
 
+/**
+ * Base interface for any Python based processor
+ */
 public interface PythonProcessor {
 
     List<PropertyDescriptor> getSupportedPropertyDescriptors();

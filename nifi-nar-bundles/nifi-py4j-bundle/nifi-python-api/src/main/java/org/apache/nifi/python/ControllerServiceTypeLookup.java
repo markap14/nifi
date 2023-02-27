@@ -21,6 +21,14 @@ import org.apache.nifi.controller.ControllerService;
 
 public interface ControllerServiceTypeLookup {
 
+    /**
+     * Returns the class of the Controller Service definition whose name is specified.
+     *
+     * @param className the name of the Controller Service's interface. This may be the simple name of the class or the fully qualified name.
+     * However, the fully qualified class name is recommended, in order to avoid any naming collisions.
+     * @return the Class that defines the Controller Service's interface, or <code>null</code> if no Controller Service
+     * interface can be found with the given name
+     */
     Class<? extends ControllerService> lookup(String className);
 
     ControllerServiceTypeLookup EMPTY_LOOKUP = className -> null;

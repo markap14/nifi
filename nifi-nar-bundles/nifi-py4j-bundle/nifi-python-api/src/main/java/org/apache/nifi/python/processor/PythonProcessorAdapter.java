@@ -26,9 +26,6 @@ import org.apache.nifi.processor.Relationship;
 import java.util.Collection;
 import java.util.Set;
 
-/**
- * TODO: We can probably eliminate this two-level hierarchy, and just use PythonProcessor or PythonProcessorAdapter...
- */
 public interface PythonProcessorAdapter extends PythonProcessor {
     PythonProcessor getProcessor();
 

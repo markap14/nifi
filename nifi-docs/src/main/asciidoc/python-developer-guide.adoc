@@ -478,6 +478,10 @@ It is important to note, however, that if the Processor could not be successfull
 Therefore, it's important to ensure that the Processor is in a good working state before attempting to load it in NiFi. Otherwise, NiFi will need to be
 restarted in order to discover the Processor and load it again.
 
+Because NiFi allows for multiple extension directories to be deployed, it might be helpful when developing a new extension to add the source directory
+where the extension is being developed as a NiFi extension source directory. This allows developers to develop processors using their IDE and allows NiFi
+to pickup any changes seamlessly as soon as the Processor is started.
+
 
 [[dependencies]]
 == Adding Third-Party Dependencies
