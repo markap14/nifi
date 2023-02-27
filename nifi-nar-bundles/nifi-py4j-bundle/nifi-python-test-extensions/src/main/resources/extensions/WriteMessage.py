@@ -12,7 +12,7 @@ class WriteMessage(FlowFileTransform):
         pass
 
     def transform(self, context, flowFile):
-        return FlowFileTransformResult(relationship = "success", contents = str.encode(MESSAGE))
+        return FlowFileTransformResult(relationship = "success", contents = MESSAGE)
 
 
     def getPropertyDescriptors(self):

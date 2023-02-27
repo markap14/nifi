@@ -25,7 +25,10 @@ class FlowFileTransformResult:
     def __init__(self, relationship, attributes = None, contents = None):
         self.relationship = relationship
         self.attributes = attributes
-        self.contents = contents
+        if contents is not None and isinstance(contents, str):
+            self.contents = str.encode(contents)
+        else:
+            self.contents = contents
 
     def getRelationship(self):
         return self.relationship

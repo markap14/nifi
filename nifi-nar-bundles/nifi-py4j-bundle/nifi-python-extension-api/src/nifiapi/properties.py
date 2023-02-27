@@ -4,7 +4,7 @@ import re
 
 class ExpressionLanguageScope(Enum):
     NONE = 1
-    VARIABLE_REGISTRY = 2
+    LIMITED = 2
     FLOWFILE_ATTRIBUTES = 3
 
 
@@ -95,15 +95,48 @@ class PropertyDescriptor:
                  dependencies=None, expression_language_scope=ExpressionLanguageScope.NONE,
                  dynamic=False, validators=None,
                  resource_definition=None, controller_service_definition=None):
+        """
+        :param name: the name of the property
+        :param description: a description of the property
+        :param required: a boolean indicating whether or not the property is required. Defaults to False.
+        :param sensitive: a boolean indicating whether or not the property is sensitive. Defaults to False.
+        :param display_name: Once a Processor has been released, its properties' configuration are stored as key/value pairs where the key is the name of the property.
+                             Because of that, subsequent versions of the Processor should not change the name of a property. However, there are times when renaming a property
+                             would be advantageous. For example, one might find a typo in the name of a property, or users may find a property name confusing. While the name of
+                             the property should not be changed, a display_name may be added. Doing this results in the Display Name being used in the NiFi UI but still maintains
+                             the original name as the key. Generally, this value should be left unspecified. If unspecified (or a value of `None`), the display name will default
+                             to whatever the name is. However, the display_name may be changed at any time between versions without adverse effects.
+        :param default_value: a default value for the property. If not specified, the initial value will be unset. If specified, any time the value is removed, it is reset to this
+                              default_value. That is to say, if a default value is specified, the property cannot be unset.
+        :param allowable_values: a list of string values that are allowed. If specified, the UI will present the options as a drop-down instead of a freeform text. If any other value
+                                 is specified for the property, the Processor will be invalid.
+        :param dependencies: a list of dependencies for this property. By default, all properties are always configurable. However, sometimes we want to expose a property that only makes
+                             sense in certain circumstances. In this situation, we can say that Property A depends on Property B. Now, Property A will only be shown if a value is selected
+                             for Property B. Additionally, we may say that Property A depends on Property B being set to some explicit value, say "foo." Now, Property A will only be shown
+                             in the UI if Property B is set to a value of "foo." If a Property is not shown in the UI, its value will also not be validated. For example, if we indicate that
+                             Property A is required and depends on Property B, then Property A is only required if Property B is set.
+        :param expression_language_scope: documents the scope in which Expression Language is valid. This value must be specified as one of the enum values
+                                          in `nifiapi.properties.ExpressionLanguageScope`. A value of `NONE` indicates that Expression Language will not be evaluated for this property.
+                                          This is the default. A value of `FLOWFILE_ATTRIBUTES` indicates that FlowFile attributes may be referenced when configuring the property value.
+                                          A value of `LIMITED` indicates that Expression Language may be used but may not reference FlowFile attributes. For example, a value of `${now()}` might
+                                          be used to reference the current date and time, or `${hostname(true)}` might be used to specify the hostname.
+        :param dynamic: whether or not this Property Descriptor represents a dynamic (aka user-defined) property. This is not necessary to specify, as the framework can determine this.
+                        However, it is available if there is a desire to explicitly set it for completeness' sake.
+        :param validators: A list of property validators that can be used to ensure that the user-supplied value is valid. The standard validators can be referenced using the
+                           members of the `nifiapi.properties.StandardValidators` class.
+        :param resource_definition: an instance of `nifiapi.properties.ResourceDefinition`. This may be used to convey that the property references a file, directory, or URL, or a set of them.
+        :param controller_service_definition: if this Processor is to make use of a Controller Service, this indicates the type of Controller Service. This will always be a fully-qualified
+                                              classname of a Java interface that extends from `ControllerService`.
+        """
         if validators is None:
-            validators = []
+            validators = [StandardValidators.ALWAYS_VALID]
 
         self.name = name
         self.description = description
         self.required = required
         self.sensitive = sensitive
         self.displayName = display_name
-        self.defaultValue = default_value
+        self.defaultValue = None if default_value is None else str(default_value)
         self.allowableValues = allowable_values
         self.dependencies = dependencies
         self.expressionLanguageScope = expression_language_scope

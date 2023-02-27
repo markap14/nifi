@@ -56,6 +56,7 @@ import java.util.concurrent.TimeUnit;
 //                  - Need to update docs to show the interfaces that are exposed, explain how to get these...
 //          - Design Doc
 //      - Setup proper logging on the Python side: https://docs.python.org/2/howto/logging-cookbook.html#using-file-rotation
+//      - For FlowFileTransform, allow the result to contain either a byte array or a String. If a String, just convert in the parent class.
 //      - Figure out how to deal with Python Packaging
 //              - Need to figure out how to deal with additionalDetails.html, docs directory in python project typically?
 //              - Understand how to deal with versioning
