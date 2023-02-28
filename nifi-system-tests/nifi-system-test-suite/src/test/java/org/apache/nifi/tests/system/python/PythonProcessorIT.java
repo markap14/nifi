@@ -65,6 +65,7 @@ public class PythonProcessorIT extends NiFiSystemIT {
 
         // Connect flow
         getClientUtil().createConnection(generate, writeProperty, "success");
+        getClientUtil().setAutoTerminatedRelationships(writeProperty, "failure");
         final ConnectionEntity outputConnection = getClientUtil().createConnection(writeProperty, terminate, "success");
 
         // Wait for processor validation to complete

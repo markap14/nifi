@@ -51,14 +51,10 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 @SupportsBatching(defaultDuration = DefaultRunDuration.TWENTY_FIVE_MILLIS)
 public class RecordTransformProxy extends PythonProcessorProxy {
@@ -81,18 +77,6 @@ public class RecordTransformProxy extends PythonProcessorProxy {
         .required(true)
         .build();
 
-    static final Relationship REL_ORIGINAL = new Relationship.Builder()
-        .name("original")
-        .description("The original FlowFile will be routed to this relationship when it has been successfully transformed")
-        .autoTerminateDefault(true)
-        .build();
-    static final Relationship REL_FAILURE = new Relationship.Builder()
-        .name("failure")
-        .description("The original FlowFile will be routed to this relationship if it unable to be transformed for some reason")
-        .build();
-    private static final Set<Relationship> implicitRelationships = Collections.unmodifiableSet(
-        new HashSet<>(Arrays.asList(REL_ORIGINAL, REL_FAILURE)));
-
 
     public RecordTransformProxy(final PythonProcessorBridge bridge) {
         super(bridge);
@@ -109,10 +93,6 @@ public class RecordTransformProxy extends PythonProcessorProxy {
         return properties;
     }
 
-    @Override
-    protected Set<Relationship> getImplicitRelationships() {
-        return implicitRelationships;
-    }
 
     public void reloadProcessor() {
         final boolean reloaded = bridge.reload();

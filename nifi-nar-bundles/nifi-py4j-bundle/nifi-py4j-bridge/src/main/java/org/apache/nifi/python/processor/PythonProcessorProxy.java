@@ -25,7 +25,9 @@ import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.processor.AbstractProcessor;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.Relationship;
+import org.apache.nifi.python.processor.PythonProcessorBridge;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -41,6 +43,18 @@ public abstract class PythonProcessorProxy extends AbstractProcessor {
     private volatile Map<String, PropertyDescriptor> cachedDynamicDescriptors = null;
     private boolean supportsDynamicProperties;
     private volatile boolean running = false;
+
+    protected static final Relationship REL_ORIGINAL = new Relationship.Builder()
+        .name("original")
+        .description("The original FlowFile will be routed to this relationship when it has been successfully transformed")
+        .autoTerminateDefault(true)
+        .build();
+    protected static final Relationship REL_FAILURE = new Relationship.Builder()
+        .name("failure")
+        .description("The original FlowFile will be routed to this relationship if it unable to be transformed for some reason")
+        .build();
+    private static final Set<Relationship> implicitRelationships = Collections.unmodifiableSet(
+        new HashSet<>(Arrays.asList(REL_ORIGINAL, REL_FAILURE)));
 
     public PythonProcessorProxy(final PythonProcessorBridge bridge) {
         this.bridge = bridge;
@@ -183,6 +197,6 @@ public abstract class PythonProcessorProxy extends AbstractProcessor {
     protected abstract void reloadProcessor();
 
     protected Set<Relationship> getImplicitRelationships() {
-        return Collections.emptySet();
+        return implicitRelationships;
     }
 }

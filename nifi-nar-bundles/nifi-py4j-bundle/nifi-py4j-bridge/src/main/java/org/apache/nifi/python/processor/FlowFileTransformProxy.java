@@ -25,8 +25,8 @@ import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
+import py4j.Py4JNetworkException;
 
-import java.io.IOException;
 import java.util.Map;
 
 @SupportsBatching(defaultDuration = DefaultRunDuration.TWENTY_FIVE_MILLIS)
@@ -58,31 +58,39 @@ public class FlowFileTransformProxy extends PythonProcessorProxy {
 
     @Override
     public void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException {
-        FlowFile flowFile = session.get();
-        if (flowFile == null) {
+        FlowFile original = session.get();
+        if (original == null) {
             return;
         }
 
+        FlowFile transformed = session.create(original);
+
         final FlowFileTransformResult result;
-        try (final StandardInputFlowFile inputFlowFile = new StandardInputFlowFile(session, flowFile)) {
+        try (final StandardInputFlowFile inputFlowFile = new StandardInputFlowFile(session, original)) {
             result = transform.transformFlowFile(inputFlowFile);
-        } catch (IOException e) {
-            throw new ProcessException("Could not read FlowFile contents");
+        } catch (final Py4JNetworkException e) {
+            throw new ProcessException("Failed to communicate with Python Process", e);
+        } catch (final Exception e) {
+            getLogger().error("Failed to transform {}", original, e);
+            session.remove(transformed);
+            session.transfer(original, REL_FAILURE);
+            return;
         }
 
         final Map<String, String> attributes = result.getAttributes();
         if (attributes != null) {
-            flowFile = session.putAllAttributes(flowFile, attributes);
+            transformed = session.putAllAttributes(transformed, attributes);
         }
 
         final byte[] contents = result.getContents();
         if (contents != null) {
-            flowFile = session.write(flowFile, out -> out.write(contents));
+            transformed = session.write(transformed, out -> out.write(contents));
         }
 
         final String relationshipName = result.getRelationship();
         final Relationship relationship = new Relationship.Builder().name(relationshipName).build();
-        session.transfer(flowFile, relationship);
+        session.transfer(transformed, relationship);
+        session.transfer(original, REL_ORIGINAL);
     }
 
 }

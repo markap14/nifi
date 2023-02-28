@@ -229,7 +229,8 @@ public class PythonControllerInteractionIT {
 
             runner.enqueue(jsonContent);
             runner.run();
-            runner.assertAllFlowFilesTransferred("success", 1);
+            runner.assertTransferCount("original", 1);
+            runner.assertTransferCount("success", 1);
         }
     }
 
@@ -272,7 +273,8 @@ public class PythonControllerInteractionIT {
 
         // Trigger the processor
         runner.run();
-        runner.assertAllFlowFilesTransferred("success", 1);
+        runner.assertTransferCount("original", 1);
+        runner.assertTransferCount("success", 1);
         final MockFlowFile indent2Output = runner.getFlowFilesForRelationship("success").get(0);
 
         // Validate its output
@@ -316,7 +318,8 @@ public class PythonControllerInteractionIT {
 
         // Trigger the processor
         runner.run();
-        runner.assertAllFlowFilesTransferred("success", 1);
+        runner.assertTransferCount("original", 1);
+        runner.assertTransferCount("success", 1);
     }
 
     @Test
@@ -332,7 +335,8 @@ public class PythonControllerInteractionIT {
 
         // Trigger the processor
         runner.run();
-        runner.assertAllFlowFilesTransferred("success", 1);
+        runner.assertTransferCount("original", 1);
+        runner.assertTransferCount("success", 1);
         runner.getFlowFilesForRelationship("success").get(0).assertContentEquals("Hola Mundo");
     }
 
@@ -349,7 +353,8 @@ public class PythonControllerInteractionIT {
 
         // Trigger the processor
         runner.run();
-        runner.assertAllFlowFilesTransferred("success", 1);
+        runner.assertTransferCount("original", 1);
+        runner.assertTransferCount("success", 1);
         final String content = runner.getFlowFilesForRelationship("success").get(0).getContent();
         final int resultNum = Integer.parseInt(content);
         assertTrue(resultNum >= 0);
@@ -381,7 +386,8 @@ public class PythonControllerInteractionIT {
 
         // Trigger the processor
         runner.run();
-        runner.assertAllFlowFilesTransferred("success", 1);
+        runner.assertTransferCount("original", 1);
+        runner.assertTransferCount("success", 1);
         runner.getFlowFilesForRelationship("success").get(0).assertContentEquals("1.20.0");
     }
 
@@ -402,7 +408,8 @@ public class PythonControllerInteractionIT {
 
         // Trigger the processor
         runner.run();
-        runner.assertAllFlowFilesTransferred("success", 1);
+        runner.assertTransferCount("original", 1);
+        runner.assertTransferCount("success", 1);
         final MockFlowFile out = runner.getFlowFilesForRelationship("success").get(0);
         assertNotNull(out);
         assertTrue(out.getContent().contains("cup"));
@@ -426,7 +433,8 @@ public class PythonControllerInteractionIT {
         runner.enqueue("{\"name\":\"John Doe\"}");
 
         runner.run();
-        runner.assertAllFlowFilesTransferred("success", 1);
+        runner.assertTransferCount("original", 1);
+        runner.assertTransferCount("success", 1);
 
         final MockFlowFile output = runner.getFlowFilesForRelationship("success").get(0);
         assertTrue(output.getContent().contains("123 My Street"));
@@ -454,7 +462,8 @@ public class PythonControllerInteractionIT {
 
         // Trigger the processor
         runner.run();
-        runner.assertAllFlowFilesTransferred("success", 1);
+        runner.assertTransferCount("original", 1);
+        runner.assertTransferCount("success", 1);
         runner.getFlowFilesForRelationship("success").get(0).assertContentEquals(originalMessage);
 
         // Wait a bit because some file systems only have second-precision timestamps so wait a little more than 1 second
@@ -471,7 +480,8 @@ public class PythonControllerInteractionIT {
         runner.run();
 
         // Ensure that the output is correct
-        runner.assertAllFlowFilesTransferred("success", 1);
+        runner.assertTransferCount("original", 1);
+        runner.assertTransferCount("success", 1);
         runner.getFlowFilesForRelationship("success").get(0).assertContentEquals(replacement);
     }
 
@@ -520,7 +530,8 @@ public class PythonControllerInteractionIT {
 
         // Trigger the processor
         runnerV1.run();
-        runnerV1.assertAllFlowFilesTransferred("success", 1);
+        runnerV1.assertTransferCount("success", 1);
+        runnerV1.assertTransferCount("original", 1);
         runnerV1.getFlowFilesForRelationship("success").get(0).assertContentEquals("Hello, World");
 
         // Create an instance of WriteMessage V2
@@ -531,7 +542,8 @@ public class PythonControllerInteractionIT {
 
         // Trigger the processor
         runnerV2.run();
-        runnerV2.assertAllFlowFilesTransferred("success", 1);
+        runnerV2.assertTransferCount("success", 1);
+        runnerV2.assertTransferCount("original", 1);
         runnerV2.getFlowFilesForRelationship("success").get(0).assertContentEquals("Hello, World 2");
     }
 
@@ -646,7 +658,8 @@ public class PythonControllerInteractionIT {
         runner.enqueue("Hello World");
         runner.run();
 
-        runner.assertAllFlowFilesTransferred("success", 1);
+        runner.assertTransferCount("original", 1);
+        runner.assertTransferCount("success", 1);
         final ArgumentCaptor<String> argumentCaptor = ArgumentCaptor.forClass(String.class);
         Mockito.verify(logger).info(argumentCaptor.capture());
         assertEquals("Hello World", argumentCaptor.getValue());
