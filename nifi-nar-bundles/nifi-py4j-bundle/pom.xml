@@ -27,10 +27,9 @@
     <packaging>pom</packaging>
 
     <modules>
-        <module>nifi-python-api</module>
+        <module>nifi-python-framework-api</module>
         <module>nifi-py4j-bridge</module>
-        <module>nifi-py4j-framework</module>
-        <module>nifi-python-sdk</module>
+        <module>nifi-python-framework</module>
         <module>nifi-python-extension-api</module>
         <module>nifi-py4j-nar</module>
         <module>nifi-python-test-extensions</module>

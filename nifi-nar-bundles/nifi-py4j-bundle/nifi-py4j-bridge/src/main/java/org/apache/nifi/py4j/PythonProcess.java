@@ -183,6 +183,7 @@ public class PythonProcess {
 
     private Process launchPythonProcess(final int listeningPort) throws IOException {
         final File pythonFrameworkDirectory = processConfig.getPythonFrameworkDirectory();
+        final File pythonApiDirectory = new File(pythonFrameworkDirectory.getParentFile(), "api");
         final File pythonLogsDirectory = processConfig.getPythonLogsDirectory();
         final File pythonCmdFile = new File(processConfig.getPythonCommand());
         final String pythonCmd = pythonCmdFile.getName();
@@ -195,6 +196,7 @@ public class PythonProcess {
         processBuilder.environment().put("JAVA_PORT", String.valueOf(listeningPort));
         processBuilder.environment().put("LOGS_DIR", pythonLogsDirectory.getAbsolutePath());
         processBuilder.environment().put("ENV_HOME", virtualEnvHome.getAbsolutePath());
+        processBuilder.environment().put("PYTHONPATH", pythonApiDirectory.getAbsolutePath());
         processBuilder.environment().put("PYTHON_CMD", pythonCommandFile.getAbsolutePath());
         processBuilder.inheritIO();
 

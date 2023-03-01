@@ -98,11 +98,6 @@ public class PythonControllerInteractionIT {
         final File frameworkDir = new File(pythonDir, "framework");
         final File extensionsDir = new File(pythonDir, "extensions");
         final File logsDir = new File(pythonDir, "logs");
-        Files.createDirectories(frameworkDir.toPath());
-        Files.createDirectories(extensionsDir.toPath());
-
-        copyContentsRecursively(new File("src/main/python"), pythonDir);
-        copyContentsRecursively(new File("src/test/resources/python/processors"), extensionsDir);
 
         final PythonProcessConfig config = new PythonProcessConfig.Builder()
             .pythonFrameworkDirectory(frameworkDir)
@@ -391,29 +386,6 @@ public class PythonControllerInteractionIT {
         runner.getFlowFilesForRelationship("success").get(0).assertContentEquals("1.20.0");
     }
 
-
-    // A more complex processor, with multiple property descriptors and setup performed in onScheduled
-    @Test
-    public void testObjectDetection() throws IOException {
-        final PythonProcessorBridge processor = createProcessor("DetectObjectInImage");
-        assertNotNull(processor);
-
-        // Setup
-        final FlowFileTransformProxy wrapper = new FlowFileTransformProxy(processor);
-        final TestRunner runner = TestRunners.newTestRunner(wrapper);
-        runner.setProperty("Model File", "/Users/mpayne/yolo3-playground/yolov3.weights");
-        runner.setProperty("Network Config File", "/Users/mpayne/yolo3-playground/yolov3.cfg");
-        runner.setProperty("Class Names File", "/Users/mpayne/yolo3-playground/coco-classes.txt");
-        runner.enqueue(Paths.get("src/test/resources/images/cup.jpg"));
-
-        // Trigger the processor
-        runner.run();
-        runner.assertTransferCount("original", 1);
-        runner.assertTransferCount("success", 1);
-        final MockFlowFile out = runner.getFlowFilesForRelationship("success").get(0);
-        assertNotNull(out);
-        assertTrue(out.getContent().contains("cup"));
-    }
 
     @Test
     public void testControllerService() throws InitializationException {

@@ -28,12 +28,17 @@
     <dependencies>
         <dependency>
             <groupId>org.apache.nifi</groupId>
-            <artifactId>nifi-py4j-framework</artifactId>
+            <artifactId>nifi-python-framework</artifactId>
             <version>2.0.0-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>org.apache.nifi</groupId>
             <artifactId>nifi-python-test-extensions</artifactId>
+            <version>2.0.0-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.nifi</groupId>
+            <artifactId>nifi-python-extension-api</artifactId>
             <version>2.0.0-SNAPSHOT</version>
         </dependency>
 
@@ -92,9 +97,24 @@
                         </goals>
                         <phase>generate-test-resources</phase>
                         <configuration>
-                            <includeArtifactIds>nifi-py4j-framework</includeArtifactIds>
+                            <includeArtifactIds>nifi-python-framework</includeArtifactIds>
                             <excludeTransitive>true</excludeTransitive>
                             <outputDirectory>${project.build.directory}/python</outputDirectory>
+                            <silent>false</silent>
+                            <excludes>META-INF/</excludes>
+                        </configuration>
+                    </execution>
+
+                    <execution>
+                        <id>extract-python-api</id>
+                        <goals>
+                            <goal>unpack-dependencies</goal>
+                        </goals>
+                        <phase>generate-test-resources</phase>
+                        <configuration>
+                            <includeArtifactIds>nifi-python-extension-api</includeArtifactIds>
+                            <excludeTransitive>true</excludeTransitive>
+                            <outputDirectory>${project.build.directory}/python/api</outputDirectory>
                             <silent>false</silent>
                             <excludes>META-INF/</excludes>
                         </configuration>

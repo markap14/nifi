@@ -4,7 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nifiapi"
-version = "0.0.1-12"
+version = "0.0.1-13"
+license = "Apache-2.0"
 maintainers = [
     { name="Apache NiFi Developer Community", email="dev@nifi.apache.org" }
 ]

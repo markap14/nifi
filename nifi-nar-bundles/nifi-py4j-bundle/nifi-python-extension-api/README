@@ -5,7 +5,7 @@ the version cannot be overwritten. So you will need to create a unique version.
 
 Build the distribution artifacts:
 ```
-cd ${nifi-python-extension-api-dir}
+cd ${nifi-python-extension-api-dir}/src/main/python
 rm -rf dist/*
 python3 -m build
 ```

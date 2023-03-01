@@ -11,8 +11,6 @@ from pathlib import Path
 
 logger = logging.getLogger("org.apache.nifi.py4j.ExtensionManager")
 
-NIFI_API_DEPENDENCY = "nifiapi"
-
 # A simple wrapper class to encompass a processor type and its version
 class ExtensionId:
     def __init__(self, classname=None, version=None):
@@ -416,49 +414,33 @@ class ExtensionManager:
             logger.info("All dependencies have already been imported for {0}".format(class_name))
             return True
 
-        python_cmd = os.getenv("PYTHON_CMD")
+        success = False
+        if len(dependencies) > 0:
+            python_cmd = os.getenv("PYTHON_CMD")
+            args = [python_cmd, '-m', 'pip', 'install', '--target', target_dir]
+            for dep in dependencies:
+                args.append(dep)
 
-        # todo remove this! Only for testing because need to hit 'test pypi server' When ready to use real one, just add to the 'args' below.
-        install_api_cmd = [python_cmd, '-m', 'pip', 'install', '--no-deps', '-U', '-i', 'https://test.pypi.org/simple/', '--pre', '--target', target_dir, NIFI_API_DEPENDENCY]
-        install_api_result = subprocess.run(install_api_cmd)
-        if install_api_result.returncode == 0:
-            logger.info("Successfully imported NiFi API for {0} to {1}".format(class_name, target_dir))
+            logger.info("Importing dependencies {0} for {1} to {2} using command {3}".format(dependencies, class_name, target_dir, args))
+            result = subprocess.run(args)
+
+            if result.returncode == 0:
+                logger.info("Successfully imported requirements for {0} to {1}".format(class_name, target_dir))
+                success = True
+            else:
+                logger.error("Failed to import requirements for {0}: process exited with status code {1}".format(class_name, result))
+                return False
         else:
-            logger.error("Failed to import NiFi API for {0}: process exited with status code {1}".format(class_name, install_api_result))
+            logger.info("No dependencies to import for {0}".format(class_name))
+            success = True
 
-        # If no dependencies to import, just return
-        if len(dependencies) == 0:
-            # Write a completion Marker File
-            file = open(completion_marker_file, "w")
-            file.write("True")
-            file.close()
-            return True
-
-        # todo end the remove this section
-
-
-
-
-        # TODO: Need to find out the correct command to run for python, not just assume it's python3? Or is this correct, as it's run from within a virtual env?
-        args = [python_cmd, '-m', 'pip', 'install', '--target', target_dir]
-        for dep in dependencies:
-            args.append(dep)
-
-        logger.info("Importing dependencies {0} for {1} to {2} using command {3}".format(dependencies, class_name, target_dir, args))
-
-        result = subprocess.run(args)
-        if result.returncode == 0:
-            logger.info("Successfully imported requirements for {0} to {1}".format(class_name, target_dir))
-
+        if success:
             # Write a completion Marker File
             file = open(completion_marker_file, "w")
             file.write("True")
             file.close()
 
-            return True
-        else:
-            logger.error("Failed to import requirements for {0}: process exited with status code {1}".format(class_name, result))
-            return False
+        return success
 
 
     def __load_extension_module__(self, file, local_dependencies):
