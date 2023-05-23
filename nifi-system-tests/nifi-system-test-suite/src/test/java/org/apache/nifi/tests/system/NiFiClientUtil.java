@@ -1721,21 +1721,28 @@ public class NiFiClientUtil {
     public VersionedFlowUpdateRequestEntity changeFlowVersion(final String processGroupId, final int version, final boolean throwOnFailure)
                 throws NiFiClientException, IOException, InterruptedException {
 
-        final ProcessGroupEntity groupEntity = nifiClient.getProcessGroupClient().getProcessGroup(processGroupId);
-        final ProcessGroupDTO groupDto = groupEntity.getComponent();
-        final VersionControlInformationDTO vciDto = groupDto.getVersionControlInformation();
-        if (vciDto == null) {
-            throw new IllegalArgumentException("Process Group with ID " + processGroupId + " is not under Version Control");
+        logger.info("Submitting Change Flow Version request to change Group with ID {} to Version {}", processGroupId, version);
+
+        try {
+            final ProcessGroupEntity groupEntity = nifiClient.getProcessGroupClient().getProcessGroup(processGroupId);
+            final ProcessGroupDTO groupDto = groupEntity.getComponent();
+            final VersionControlInformationDTO vciDto = groupDto.getVersionControlInformation();
+            if (vciDto == null) {
+                throw new IllegalArgumentException("Process Group with ID " + processGroupId + " is not under Version Control");
+            }
+
+            vciDto.setVersion(version);
+
+            final VersionControlInformationEntity requestEntity = new VersionControlInformationEntity();
+            requestEntity.setProcessGroupRevision(groupEntity.getRevision());
+            requestEntity.setVersionControlInformation(vciDto);
+
+            final VersionedFlowUpdateRequestEntity result = nifiClient.getVersionsClient().updateVersionControlInfo(processGroupId, requestEntity);
+            return waitForVersionFlowUpdateComplete(result.getRequest().getRequestId(), throwOnFailure);
+        } catch (final Exception e) {
+            logger.error("Failed to change flow version for Process Group {} to version {}", processGroupId, version);
+            throw e;
         }
-
-        vciDto.setVersion(version);
-
-        final VersionControlInformationEntity requestEntity = new VersionControlInformationEntity();
-        requestEntity.setProcessGroupRevision(groupEntity.getRevision());
-        requestEntity.setVersionControlInformation(vciDto);
-
-        final VersionedFlowUpdateRequestEntity result = nifiClient.getVersionsClient().updateVersionControlInfo(processGroupId, requestEntity);
-        return waitForVersionFlowUpdateComplete(result.getRequest().getRequestId(), throwOnFailure);
     }
 
     public VersionedFlowUpdateRequestEntity waitForVersionFlowUpdateComplete(final String updateRequestId, final boolean throwOnFailure) throws NiFiClientException, IOException, InterruptedException {

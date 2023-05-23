@@ -41,6 +41,8 @@ import org.apache.nifi.web.api.entity.VersionControlInformationEntity;
 import org.apache.nifi.web.api.entity.VersionedFlowUpdateRequestEntity;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -60,6 +62,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class RegistryClientIT extends NiFiSystemIT {
+    private static final Logger logger = LoggerFactory.getLogger(RegistryClientIT.class);
 
     /**
      * Test a scenario where we have Parent Process Group with a child process group. The child group is under Version Control.
@@ -199,59 +202,65 @@ public class RegistryClientIT extends NiFiSystemIT {
 
     @Test
     public void testControllerServiceUpdateWhileRunning() throws NiFiClientException, IOException, InterruptedException {
-        final FlowRegistryClientEntity clientEntity = registerClient();
-        final NiFiClientUtil util = getClientUtil();
+        // TODO: This try/catch/log/rethrow is temporary
+        try {
+            final FlowRegistryClientEntity clientEntity = registerClient();
+            final NiFiClientUtil util = getClientUtil();
 
-        final ProcessGroupEntity group = util.createProcessGroup("Parent", "root");
-        final ControllerServiceEntity service = util.createControllerService("StandardCountService", group.getId());
+            final ProcessGroupEntity group = util.createProcessGroup("Parent", "root");
+            final ControllerServiceEntity service = util.createControllerService("StandardCountService", group.getId());
 
-        final ProcessorEntity generate = util.createProcessor("GenerateFlowFile", group.getId());
-        final ProcessorEntity countProcessor = util.createProcessor("CountFlowFiles", group.getId());
-        util.updateProcessorProperties(countProcessor, Collections.singletonMap("Count Service", service.getComponent().getId()));
+            final ProcessorEntity generate = util.createProcessor("GenerateFlowFile", group.getId());
+            final ProcessorEntity countProcessor = util.createProcessor("CountFlowFiles", group.getId());
+            util.updateProcessorProperties(countProcessor, Collections.singletonMap("Count Service", service.getComponent().getId()));
 
-        final ProcessorEntity terminate = util.createProcessor("TerminateFlowFile", group.getId());
-        final ConnectionEntity connectionToTerminate = util.createConnection(countProcessor, terminate, "success");
-        util.setFifoPrioritizer(connectionToTerminate);
-        util.createConnection(generate, countProcessor, "success");
+            final ProcessorEntity terminate = util.createProcessor("TerminateFlowFile", group.getId());
+            final ConnectionEntity connectionToTerminate = util.createConnection(countProcessor, terminate, "success");
+            util.setFifoPrioritizer(connectionToTerminate);
+            util.createConnection(generate, countProcessor, "success");
 
-        // Save the flow as v1
-        final VersionControlInformationEntity vci = util.startVersionControl(group, clientEntity, "testControllerServiceUpdateWhileRunning", "Parent");
+            // Save the flow as v1
+            final VersionControlInformationEntity vci = util.startVersionControl(group, clientEntity, "testControllerServiceUpdateWhileRunning", "Parent");
 
-        // Change the value of of the Controller Service's start value to 2000, and change the text of the GenerateFlowFile just to make it run each time the version is changed
-        util.updateControllerServiceProperties(service, Collections.singletonMap("Start Value", "2000"));
-        util.updateProcessorProperties(generate, Collections.singletonMap("Text", "Hello World"));
+            // Change the value of of the Controller Service's start value to 2000, and change the text of the GenerateFlowFile just to make it run each time the version is changed
+            util.updateControllerServiceProperties(service, Collections.singletonMap("Start Value", "2000"));
+            util.updateProcessorProperties(generate, Collections.singletonMap("Text", "Hello World"));
 
-        // Save the flow as v2
-        util.saveFlowVersion(group, clientEntity, vci);
+            // Save the flow as v2
+            util.saveFlowVersion(group, clientEntity, vci);
 
-        // Change back to v1 and start the flow
-        util.changeFlowVersion(group.getId(), 1);
-        util.assertFlowStaleAndUnmodified(group.getId());
-        util.enableControllerService(service);
+            // Change back to v1 and start the flow
+            util.changeFlowVersion(group.getId(), 1);
+            util.assertFlowStaleAndUnmodified(group.getId());
+            util.enableControllerService(service);
 
-        util.waitForValidProcessor(generate.getId());
-        util.startProcessor(generate);
-        util.waitForValidProcessor(countProcessor.getId());
-        util.startProcessor(countProcessor);
+            util.waitForValidProcessor(generate.getId());
+            util.startProcessor(generate);
+            util.waitForValidProcessor(countProcessor.getId());
+            util.startProcessor(countProcessor);
 
-        // Ensure that we get the expected result
-        waitForQueueCount(connectionToTerminate.getId(), getNumberOfNodes());
-        final Map<String, String> firstFlowFileAttributes = util.getQueueFlowFile(connectionToTerminate.getId(), 0).getFlowFile().getAttributes();
-        assertEquals("1", firstFlowFileAttributes.get("count"));
+            // Ensure that we get the expected result
+            waitForQueueCount(connectionToTerminate.getId(), getNumberOfNodes());
+            final Map<String, String> firstFlowFileAttributes = util.getQueueFlowFile(connectionToTerminate.getId(), 0).getFlowFile().getAttributes();
+            assertEquals("1", firstFlowFileAttributes.get("count"));
 
-        // Change to v2 and ensure that the output is correct
-        util.changeFlowVersion(group.getId(), 2);
-        util.assertFlowUpToDate(group.getId());
-        waitForQueueCount(connectionToTerminate.getId(), 2 * getNumberOfNodes());
-        final Map<String, String> secondFlowFileAttributes = util.getQueueFlowFile(connectionToTerminate.getId(), getNumberOfNodes()).getFlowFile().getAttributes();
-        assertEquals("2001", secondFlowFileAttributes.get("count"));
+            // Change to v2 and ensure that the output is correct
+            util.changeFlowVersion(group.getId(), 2);
+            util.assertFlowUpToDate(group.getId());
+            waitForQueueCount(connectionToTerminate.getId(), 2 * getNumberOfNodes());
+            final Map<String, String> secondFlowFileAttributes = util.getQueueFlowFile(connectionToTerminate.getId(), getNumberOfNodes()).getFlowFile().getAttributes();
+            assertEquals("2001", secondFlowFileAttributes.get("count"));
 
-        // Change back to v1 and ensure that the output is correct. It should reset count back to 0.
-        util.changeFlowVersion(group.getId(), 1);
-        util.assertFlowStaleAndUnmodified(group.getId());
-        waitForQueueCount(connectionToTerminate.getId(), 3 * getNumberOfNodes());
-        final Map<String, String> thirdFlowFileAttributes = util.getQueueFlowFile(connectionToTerminate.getId(), getNumberOfNodes() * 2).getFlowFile().getAttributes();
-        assertEquals("1", thirdFlowFileAttributes.get("count"));
+            // Change back to v1 and ensure that the output is correct. It should reset count back to 0.
+            util.changeFlowVersion(group.getId(), 1);
+            util.assertFlowStaleAndUnmodified(group.getId());
+            waitForQueueCount(connectionToTerminate.getId(), 3 * getNumberOfNodes());
+            final Map<String, String> thirdFlowFileAttributes = util.getQueueFlowFile(connectionToTerminate.getId(), getNumberOfNodes() * 2).getFlowFile().getAttributes();
+            assertEquals("1", thirdFlowFileAttributes.get("count"));
+        } catch (final Throwable t) {
+            logger.error("Failed to complete test #testControllerServiceUpdateWhileRunning", t);
+            throw t;
+        }
     }
 
 
