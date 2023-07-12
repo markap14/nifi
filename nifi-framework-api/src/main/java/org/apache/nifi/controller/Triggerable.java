@@ -16,16 +16,16 @@
  */
 package org.apache.nifi.controller;
 
-import java.util.concurrent.TimeUnit;
-
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.ProcessSessionFactory;
 import org.apache.nifi.processor.exception.ProcessException;
 
+import java.util.concurrent.TimeUnit;
+
 public interface Triggerable {
 
-    public static final long MINIMUM_SCHEDULING_NANOS = 1L;
+    long MINIMUM_SCHEDULING_NANOS = 1L;
 
     /**
      * <p>
@@ -79,7 +79,7 @@ public interface Triggerable {
      * no active threads, only that it is not currently scheduled to be given
      * any more threads. To determine whether or not the
      * <code>Triggerable</code> has any active threads, see
-     * {@link ProcessScheduler#getActiveThreadCount(nifi.connectable.Connectable)}.
+     * {@link ProcessScheduler#getActiveThreadCount(Object)}.
      *
      * @return the schedule state
      */

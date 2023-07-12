@@ -95,6 +95,10 @@
      */
     var getSchedulingStrategies = function (processor) {
         var strategies = [{
+            text: 'Automatic',
+            value: 'AUTOMATIC',
+            description: "Processor's schedule will be automatically managed by the framework."
+        }, {
             text: 'Timer driven',
             value: 'TIMER_DRIVEN',
             description: 'Processor will be scheduled to run on an interval defined by the run schedule.'
@@ -262,8 +266,10 @@
                 concurrentTasks = $('#event-driven-concurrently-schedulable-tasks');
             } else if (schedulingStrategy === 'CRON_DRIVEN') {
                 concurrentTasks = $('#cron-driven-concurrently-schedulable-tasks');
-            } else {
+            } else if (schedulingStrategy === 'TIMER_DRIVEN') {
                 concurrentTasks = $('#timer-driven-concurrently-schedulable-tasks');
+            } else {
+                concurrentTasks = 0;
             }
 
             // check the concurrent tasks
@@ -276,8 +282,10 @@
         var schedulingPeriod;
         if (schedulingStrategy === 'CRON_DRIVEN') {
             schedulingPeriod = $('#cron-driven-scheduling-period');
-        } else if (schedulingStrategy !== 'EVENT_DRIVEN') {
+        } else if (schedulingStrategy === 'TIMER_DRIVEN') {
             schedulingPeriod = $('#timer-driven-scheduling-period');
+        } else if (schedulingStrategy !== 'EVENT_DRIVEN') {
+            schedulingPeriod = $('#auto-scheduling-period');
         }
 
         // check the scheduling period
@@ -331,12 +339,12 @@
             concurrentTasks = $('#event-driven-concurrently-schedulable-tasks');
         } else if (schedulingStrategy === 'CRON_DRIVEN') {
             concurrentTasks = $('#cron-driven-concurrently-schedulable-tasks');
-        } else {
+        } else if (schedulingStrategy === 'TIMER_DRIVEN') {
             concurrentTasks = $('#timer-driven-concurrently-schedulable-tasks');
         }
 
         // get the concurrent tasks if appropriate
-        if (!concurrentTasks.is(':disabled')) {
+        if (nfCommon.isDefinedAndNotNull(concurrentTasks) && !concurrentTasks.is(':disabled')) {
             processorConfigDto['concurrentlySchedulableTaskCount'] = concurrentTasks.val();
         }
 
@@ -344,7 +352,7 @@
         var schedulingPeriod;
         if (schedulingStrategy === 'CRON_DRIVEN') {
             schedulingPeriod = $('#cron-driven-scheduling-period');
-        } else if (schedulingStrategy !== 'EVENT_DRIVEN') {
+        } else if (schedulingStrategy === 'TIMER_DRIVEN') {
             schedulingPeriod = $('#timer-driven-scheduling-period');
         }
 
@@ -361,7 +369,7 @@
         processorConfigDto['comments'] = $('#processor-comments').val();
 
         // run duration
-        if (processor.supportsBatching === true) {
+        if (processor.supportsBatching === true && schedulingStrategy !== 'AUTOMATIC') {
             var runDurationIndex = $('#run-duration-slider').slider('value');
             processorConfigDto['runDurationMillis'] = RUN_DURATION_VALUES[runDurationIndex];
         }
@@ -811,7 +819,8 @@
                     $('#processor-comments').val(processor.config['comments']);
 
                     // set the run duration if applicable
-                    if (processor.supportsBatching === true) {
+                    var schedulingStrategy = processor.config['schedulingStrategy'];
+                    if (processor.supportsBatching === true && schedulingStrategy !== 'AUTOMATIC') {
                         $('#run-duration-setting-container').show();
 
                         // set the run duration slider value
@@ -825,8 +834,6 @@
                     $('#bulletin-level-combo').combo('setSelectedOption', {
                         value: processor.config['bulletinLevel']
                     });
-
-                    var schedulingStrategy = processor.config['schedulingStrategy'];
 
                     // initialize the scheduling strategy
                     $('#scheduling-strategy-combo').combo({
@@ -849,10 +856,20 @@
                                     $('#timer-driven-options').hide();
                                     $('#event-driven-options').hide();
                                     $('#cron-driven-options').show();
-                                } else {
+                                    $('#automatic-scheduling-options').hide();
+                                    $('#run-duration-setting-container').show();
+                                } else if (selectedOption.value === 'TIMER_DRIVEN') {
                                     $('#timer-driven-options').show();
                                     $('#event-driven-options').hide();
                                     $('#cron-driven-options').hide();
+                                    $('#automatic-scheduling-options').hide();
+                                    $('#run-duration-setting-container').show();
+                                } else {
+                                    $('#timer-driven-options').hide();
+                                    $('#event-driven-options').hide();
+                                    $('#cron-driven-options').hide();
+                                    $('#automatic-scheduling-options').show();
+                                    $('#run-duration-setting-container').hide();
                                 }
                             }
                         }
@@ -882,7 +899,7 @@
                         concurrentTasks = $('#event-driven-concurrently-schedulable-tasks').val(processor.config['concurrentlySchedulableTaskCount']);
                     } else if (schedulingStrategy === 'CRON_DRIVEN') {
                         concurrentTasks = $('#cron-driven-concurrently-schedulable-tasks').val(processor.config['concurrentlySchedulableTaskCount']);
-                    } else {
+                    } else if (schedulingStrategy === 'TIMER_DRIVEN') {
                         concurrentTasks = $('#timer-driven-concurrently-schedulable-tasks').val(processor.config['concurrentlySchedulableTaskCount']);
                     }
 
@@ -903,7 +920,7 @@
                     // set the scheduling period as appropriate
                     if (processor.config['schedulingStrategy'] === 'CRON_DRIVEN') {
                         $('#cron-driven-scheduling-period').val(processor.config['schedulingPeriod']);
-                    } else if (processor.config['schedulingStrategy'] !== 'EVENT_DRIVEN') {
+                    } else if (processor.config['schedulingStrategy'] === 'TIMER_DRIVEN') {
                         $('#timer-driven-scheduling-period').val(processor.config['schedulingPeriod']);
                     }
 

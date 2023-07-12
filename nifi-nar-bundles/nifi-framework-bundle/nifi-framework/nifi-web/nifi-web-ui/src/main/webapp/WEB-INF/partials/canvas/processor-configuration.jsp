@@ -156,6 +156,9 @@
                         </div>
                         <div class="clear"></div>
                     </div>
+                    <div id="automatic-scheduling-options" class="setting">
+
+                    </div>
                     <div id="execution-node-options" class="setting">
                         <div class="execution-node-setting">
                             <div class="setting-name">

@@ -28,6 +28,7 @@ import org.apache.nifi.engine.FlowEngine;
 import java.util.ArrayList;
 import java.util.List;
 
+// TODO: Run Once doesn't work.
 public class AutomaticSchedulingAgent extends AbstractTimeBasedSchedulingAgent {
     private final ProcessorTaskQueue processorTaskQueue = new ProcessorTaskQueue(this::createConnectableTask);
 
@@ -35,7 +36,7 @@ public class AutomaticSchedulingAgent extends AbstractTimeBasedSchedulingAgent {
 
     public AutomaticSchedulingAgent(final FlowController flowController, final FlowEngine flowEngine, final RepositoryContextFactory contextFactory,
                                       final PropertyEncryptor encryptor) {
-        super(flowEngine, flowController, contextFactory, encryptor);
+        super(flowEngine, flowController, contextFactory);
 
         for (int i=0; i < flowEngine.getCorePoolSize(); i++) {
             final AutoScheduledProcessorTrigger trigger = new AutoScheduledProcessorTrigger(processorTaskQueue);
@@ -45,7 +46,7 @@ public class AutomaticSchedulingAgent extends AbstractTimeBasedSchedulingAgent {
     }
 
     private ConnectableTask createConnectableTask(final ProcessorNode processor, final LifecycleState lifecycleState) {
-        return new ConnectableTask(this, processor, flowController, contextFactory, lifecycleState, encryptor);
+        return new ConnectableTask(this, processor, flowController, contextFactory, lifecycleState);
     }
 
 

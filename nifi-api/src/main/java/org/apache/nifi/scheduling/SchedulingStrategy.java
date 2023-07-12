@@ -49,12 +49,14 @@ public enum SchedulingStrategy {
      * </p>
      */
     EVENT_DRIVEN(0, null),
+
     /**
      * Components should be scheduled to run on a periodic interval that is
      * user-defined with a user-defined number of concurrent tasks. All
      * Components support Timer-Driven mode.
      */
     TIMER_DRIVEN(1, "0 sec"),
+
     /**
      * NOTE: This option has been deprecated with the addition of the
      * execution-node combo box.  It still exists for backward compatibility
@@ -67,12 +69,16 @@ public enum SchedulingStrategy {
      */
     @Deprecated
     PRIMARY_NODE_ONLY(1, "0 sec"),
+
     /**
      * Indicates that the component will be scheduled to run according to a
      * Cron-style expression
      */
     CRON_DRIVEN(1, "* * * * * ?"),
 
+    /**
+     * Indicates that the framework will automatically determining scheduling parameters.
+     */
     AUTOMATIC(1, "0 sec");
 
     private final int defaultConcurrentTasks;

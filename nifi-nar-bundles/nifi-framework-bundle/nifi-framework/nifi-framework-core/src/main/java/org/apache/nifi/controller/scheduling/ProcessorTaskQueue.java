@@ -145,7 +145,12 @@ public class ProcessorTaskQueue {
 
             for (final FlowFileQueue queue : upstreamQueues) {
                 final QueueSize queueSize = queue.size();
-                final double objectRatio = (double) queueSize.getObjectCount() / queue.getBackPressureObjectThreshold();
+                final long backpressureThreshold = queue.getBackPressureObjectThreshold();
+                if (backpressureThreshold <= 0) {
+                    return 1;
+                }
+
+                final double objectRatio = (double) queueSize.getObjectCount() / backpressureThreshold;
                 maxRatio = Math.max(maxRatio, objectRatio);
             }
 
