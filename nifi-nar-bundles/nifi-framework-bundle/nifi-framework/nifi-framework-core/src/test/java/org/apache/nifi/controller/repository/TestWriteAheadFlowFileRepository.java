@@ -219,6 +219,11 @@ public class TestWriteAheadFlowFileRepository {
             }
 
             @Override
+            public double getFullRatio() {
+                return 0;
+            }
+
+            @Override
             public void put(FlowFileRecord file) {
             }
 

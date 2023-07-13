@@ -158,6 +158,11 @@ public class StatelessFlowFileQueue implements DrainableFlowFileQueue {
     }
 
     @Override
+    public double getFullRatio() {
+        return 0D;
+    }
+
+    @Override
     public void put(final FlowFileRecord flowFile) {
         flowFiles.add(flowFile);
         totalBytes.addAndGet(flowFile.getSize());

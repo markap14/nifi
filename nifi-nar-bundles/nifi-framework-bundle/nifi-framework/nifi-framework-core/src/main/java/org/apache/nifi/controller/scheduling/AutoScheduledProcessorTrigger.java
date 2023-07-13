@@ -18,7 +18,6 @@
 package org.apache.nifi.controller.scheduling;
 
 import org.apache.nifi.controller.ProcessorNode;
-import org.apache.nifi.controller.tasks.ConnectableTask;
 import org.apache.nifi.controller.tasks.InvocationResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,7 +28,6 @@ import java.util.concurrent.TimeUnit;
 public class AutoScheduledProcessorTrigger implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(AutoScheduledProcessorTrigger.class);
 
-    private static final int MAX_ACTIVE_THREAD_COUNT = 20;
     private static final int MAX_ITERATIONS_PER_TRIGGER = 500000;
     private static final int MAX_ITERATIONS_SOURCE_PROCESSOR = 500;
     private static final long MAX_RUN_DURATION_NANOS = TimeUnit.MILLISECONDS.toNanos(25L);
@@ -92,7 +90,7 @@ public class AutoScheduledProcessorTrigger implements Runnable {
                     }
 
                     if (triggerContext.isBatchSupported()) {
-                        final InvocationResult result = triggerContext.getConnectableTask().invoke(runDuration, maxIterations);
+                        final InvocationResult result = triggerContext.invoke(runDuration, maxIterations);
 
                         if (result.isYield()) {
                             triggerContext.getProcessor().yield(boredYieldMillis, TimeUnit.MILLISECONDS);
@@ -112,12 +110,10 @@ public class AutoScheduledProcessorTrigger implements Runnable {
     }
 
     private void triggerForDuration(final ProcessorTaskQueue.ProcessorTriggerContext triggerContext, final long runDuration, final long maxIterations) {
-        final ConnectableTask connectableTask = triggerContext.getConnectableTask();
-
         final long stopTime = System.nanoTime() + runDuration;
         long count = 0L;
         while (count++ < maxIterations && System.nanoTime() < stopTime) {
-            final InvocationResult result = connectableTask.invoke();
+            final InvocationResult result = triggerContext.invoke();
             if (result.isYield()) {
                 triggerContext.getProcessor().yield(boredYieldMillis, TimeUnit.MILLISECONDS);
                 return;
@@ -139,7 +135,7 @@ public class AutoScheduledProcessorTrigger implements Runnable {
         }
 
         final int activeThreadCount = lifecycleState.getActiveThreadCount();
-        if (activeThreadCount >= MAX_ACTIVE_THREAD_COUNT) {
+        if (activeThreadCount >= triggerContext.getMaxConcurrentTasks()) {
             return false;
         }
 
@@ -151,6 +147,10 @@ public class AutoScheduledProcessorTrigger implements Runnable {
     }
 
     private long getRunDurationNanos(final ProcessorTaskQueue.ProcessorTriggerContext triggerContext) {
-        return Math.max(1, (long) (triggerContext.getQueueFullRatio() * MAX_RUN_DURATION_NANOS));
+        final double incomingFullRatio = triggerContext.getIncomingQueueFullRatio();
+        final double outgoingFullRatio = triggerContext.getOutgoingQueueFullRatio();
+        final double scaler = incomingFullRatio * (1 - outgoingFullRatio);
+
+        return Math.max(1, (long) (scaler * MAX_RUN_DURATION_NANOS));
     }
 }

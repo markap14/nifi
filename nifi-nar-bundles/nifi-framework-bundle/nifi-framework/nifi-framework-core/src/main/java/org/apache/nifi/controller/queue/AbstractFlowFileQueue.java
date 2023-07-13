@@ -153,6 +153,15 @@ public abstract class AbstractFlowFileQueue implements FlowFileQueue {
         return isFull(size());
     }
 
+    public double getFullRatio() {
+        final QueueSize currentSize = size();
+        final MaxQueueSize maxSize = getMaxQueueSize();
+
+        final double flowFileRatio = (double) currentSize.getObjectCount() / maxSize.getMaxCount();
+        final double dataSizeRatio = (double) currentSize.getByteCount() / maxSize.getMaxBytes();
+        return Math.min(1, Math.max(flowFileRatio, dataSizeRatio));
+    }
+
     protected boolean isFull(final QueueSize queueSize) {
         final MaxQueueSize maxSize = getMaxQueueSize();
 

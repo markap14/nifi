@@ -22,12 +22,14 @@ import org.apache.nifi.controller.ProcessorNode;
 import org.apache.nifi.controller.queue.FlowFileQueue;
 import org.apache.nifi.controller.queue.QueueSize;
 import org.apache.nifi.controller.tasks.ConnectableTask;
+import org.apache.nifi.controller.tasks.InvocationResult;
 import org.apache.nifi.util.Connectables;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
@@ -54,6 +56,8 @@ public class ProcessorTaskQueue {
 
 
     public class ProcessorTriggerContext {
+        private static final int MAX_CONCURRENT_TASKS = 20;
+
         private final ProcessorNode processor;
         private final LifecycleState lifecycleState;
         private final boolean isSourceComponent;
@@ -62,6 +66,8 @@ public class ProcessorTaskQueue {
         private final List<FlowFileQueue> downstreamQueues;
         private final List<FlowFileQueue> upstreamQueues;
         private final boolean batchSupported;
+        private final int maxConcurrentTasks;
+        private final AtomicInteger activeTasks = new AtomicInteger(0);
 
         public ProcessorTriggerContext(final ProcessorNode processor, final LifecycleState lifecycleState) {
             this.processor = processor;
@@ -69,10 +75,8 @@ public class ProcessorTaskQueue {
 
             boolean hasNonLoopConnection = Connectables.hasNonLoopConnection(processor);
             this.isSourceComponent = processor.isTriggerWhenEmpty()
-                // No input connections
-                || !processor.hasIncomingConnection()
-                // Every incoming connection loops back to itself, no inputs from other components
-                || !hasNonLoopConnection;
+                || !processor.hasIncomingConnection()   // No input connections
+                || !hasNonLoopConnection;  // Every incoming connection loops back to itself, no inputs from other components
 
             connectableTask = connectableTaskFactory.apply(processor, lifecycleState);
 
@@ -87,6 +91,12 @@ public class ProcessorTaskQueue {
                 .map(Connection::getFlowFileQueue)
                 .collect(Collectors.toList());
             batchSupported = processor.isSessionBatchingSupported();
+
+            maxConcurrentTasks = processor.isTriggeredSerially() ? 1 : 6;
+        }
+
+        public int getMaxConcurrentTasks() {
+            return maxConcurrentTasks;
         }
 
         public boolean isBatchSupported() {
@@ -101,8 +111,30 @@ public class ProcessorTaskQueue {
             return lifecycleState;
         }
 
-        public ConnectableTask getConnectableTask() {
-            return connectableTask;
+        public InvocationResult invoke() {
+            final int taskCount = activeTasks.incrementAndGet();
+            try {
+                if (taskCount < maxConcurrentTasks) {
+                    return connectableTask.invoke();
+                } else {
+                    return InvocationResult.DO_NOT_YIELD;
+                }
+            } finally {
+                activeTasks.decrementAndGet();
+            }
+        }
+
+        public InvocationResult invoke(final long runDurationNanos, final long maxIterations) {
+            final int taskCount = activeTasks.incrementAndGet();
+            try {
+                if (taskCount < maxConcurrentTasks) {
+                    return connectableTask.invoke(runDurationNanos, maxIterations);
+                } else {
+                    return InvocationResult.DO_NOT_YIELD;
+                }
+            } finally {
+                activeTasks.decrementAndGet();
+            }
         }
 
         public boolean isSourceComponent() {
@@ -140,18 +172,27 @@ public class ProcessorTaskQueue {
             }
         }
 
-        public double getQueueFullRatio() {
+        public double getIncomingQueueFullRatio() {
             double maxRatio = 0D;
 
             for (final FlowFileQueue queue : upstreamQueues) {
                 final QueueSize queueSize = queue.size();
                 final long backpressureThreshold = queue.getBackPressureObjectThreshold();
                 if (backpressureThreshold <= 0) {
-                    return 1;
+                    continue;
                 }
 
                 final double objectRatio = (double) queueSize.getObjectCount() / backpressureThreshold;
                 maxRatio = Math.max(maxRatio, objectRatio);
+            }
+
+            return maxRatio;
+        }
+
+        public double getOutgoingQueueFullRatio() {
+            double maxRatio = 0D;
+            for (final FlowFileQueue queue : downstreamQueues) {
+                maxRatio = Math.max(maxRatio, queue.getFullRatio());
             }
 
             return maxRatio;

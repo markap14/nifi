@@ -138,6 +138,16 @@ public interface FlowFileQueue {
     boolean isFull();
 
     /**
+     * Returns a value between 0 and 1 indicating how full the queue is, based on its current size and its backpressure threshold.
+     * A value close to 1 indicates the queue is nearly full. A value of 0 indicates that the queue is empty. The ratio is based on the larger
+     * of the (FlowFile Count to Max FlowFile Count) and (Byte Count to Max Byte Count) ratios. If there are more FlowFiles or bytes than the backpressure
+     * threshold allows (due to the fact that the limits are soft limits), a value of 1 will still be returned. The value will not exceed 1.
+     *
+     * @return the ratio indicating how full the queue is
+     */
+    double getFullRatio();
+
+    /**
      * places the given file into the queue
      *
      * @param file to place into queue
