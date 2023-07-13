@@ -44,8 +44,6 @@ public class AutoScheduledProcessorTrigger implements Runnable {
     public void run() {
         while (!stopped) {
             try {
-                // TODO: Account for @TriggerSerially
-                // TODO: Allow processors to indicate default Run Schedule, and then take that into account
                 // TODO: Look into using:
                 //       ManagementFactory.getThreadMXBean().isCurrentThreadCpuTimeSupported() / ManagementFactory.getThreadMXBean().getCurrentThreadCpuTime()
                 //       in order to understand more about CPU usage. Call before/after each processor is triggered. Then add to stats.
@@ -73,10 +71,10 @@ public class AutoScheduledProcessorTrigger implements Runnable {
     }
 
     private boolean trigger() {
-        final List<ProcessorTaskQueue.ProcessorTriggerContext> triggerContexts = taskQueue.getTriggerContexts();
+        final List<ProcessorTriggerContext> triggerContexts = taskQueue.getTriggerContexts();
 
         boolean triggered = false;
-        for (final ProcessorTaskQueue.ProcessorTriggerContext triggerContext : triggerContexts) {
+        for (final ProcessorTriggerContext triggerContext : triggerContexts) {
             try {
                 if (isTrigger(triggerContext)) {
                     final long runDuration;
@@ -109,7 +107,7 @@ public class AutoScheduledProcessorTrigger implements Runnable {
         return triggered;
     }
 
-    private void triggerForDuration(final ProcessorTaskQueue.ProcessorTriggerContext triggerContext, final long runDuration, final long maxIterations) {
+    private void triggerForDuration(final ProcessorTriggerContext triggerContext, final long runDuration, final long maxIterations) {
         final long stopTime = System.nanoTime() + runDuration;
         long count = 0L;
         while (count++ < maxIterations && System.nanoTime() < stopTime) {
@@ -121,7 +119,7 @@ public class AutoScheduledProcessorTrigger implements Runnable {
         }
     }
 
-    private boolean isTrigger(final ProcessorTaskQueue.ProcessorTriggerContext triggerContext) {
+    private boolean isTrigger(final ProcessorTriggerContext triggerContext) {
         final LifecycleState lifecycleState = triggerContext.getLifecycleState();
         final ProcessorNode processorNode = triggerContext.getProcessor();
 
@@ -146,7 +144,7 @@ public class AutoScheduledProcessorTrigger implements Runnable {
         return true;
     }
 
-    private long getRunDurationNanos(final ProcessorTaskQueue.ProcessorTriggerContext triggerContext) {
+    private long getRunDurationNanos(final ProcessorTriggerContext triggerContext) {
         final double incomingFullRatio = triggerContext.getIncomingQueueFullRatio();
         final double outgoingFullRatio = triggerContext.getOutgoingQueueFullRatio();
         final double scaler = incomingFullRatio * (1 - outgoingFullRatio);
