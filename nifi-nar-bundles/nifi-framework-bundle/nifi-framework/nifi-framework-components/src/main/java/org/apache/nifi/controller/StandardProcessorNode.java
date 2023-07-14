@@ -219,7 +219,7 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
         processScheduler = scheduler;
         penalizationPeriod = new AtomicReference<>(DEFAULT_PENALIZATION_PERIOD);
 
-        schedulingStrategy = SchedulingStrategy.TIMER_DRIVEN;
+        schedulingStrategy = SchedulingStrategy.AUTOMATIC;
         executionNode = isExecutionNodeRestricted() ? ExecutionNode.PRIMARY : ExecutionNode.ALL;
         this.hashCode = new HashCodeBuilder(7, 67).append(identifier).toHashCode();
 
@@ -769,7 +769,7 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
             }
 
             if (updatedIncoming != null) {
-                setIncomingConnections(Collections.unmodifiableList(updatedIncoming));
+                setIncomingConnections(updatedIncoming);
             }
         } finally {
             LOG.debug("Resetting Validation State of {} due to connection added", this);

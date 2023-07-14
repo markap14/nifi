@@ -518,7 +518,7 @@ public class FlowController implements ReportingTaskProvider, Authorizable, Node
         eventDrivenEngineRef = new AtomicReference<>(new FlowEngine(maxEventDrivenThreads.get(), "Event-Driven Process"));
 
         final int numCores = Runtime.getRuntime().availableProcessors();
-        final int corePoolSize = 4 * numCores;
+        final int corePoolSize = 4 * numCores + 2; // +2 to provide space for additional tasks to be scheduled
         autoSchedulingFlowEngine = new FlowEngine(corePoolSize, "Automatic Scheduling Process");
 
         final FlowFileRepository flowFileRepo = createFlowFileRepository(nifiProperties, extensionManager, resourceClaimManager);
@@ -598,7 +598,7 @@ public class FlowController implements ReportingTaskProvider, Authorizable, Node
         processScheduler.setSchedulingAgent(SchedulingStrategy.PRIMARY_NODE_ONLY, timerDrivenAgent);
         processScheduler.setSchedulingAgent(SchedulingStrategy.CRON_DRIVEN, quartzSchedulingAgent);
 
-        final AutomaticSchedulingAgent automaticSchedulingAgent = new AutomaticSchedulingAgent(this,autoSchedulingFlowEngine, repositoryContextFactory, encryptor);
+        final AutomaticSchedulingAgent automaticSchedulingAgent = new AutomaticSchedulingAgent(this, autoSchedulingFlowEngine, repositoryContextFactory);
         processScheduler.setSchedulingAgent(SchedulingStrategy.AUTOMATIC, automaticSchedulingAgent);
 
         startConnectablesAfterInitialization = new HashSet<>();

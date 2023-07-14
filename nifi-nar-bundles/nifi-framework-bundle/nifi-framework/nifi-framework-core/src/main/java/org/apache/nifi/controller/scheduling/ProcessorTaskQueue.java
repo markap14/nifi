@@ -46,4 +46,7 @@ public class ProcessorTaskQueue {
         return triggerContexts;
     }
 
+    public void recalculateMaxConcurrentTasks() {
+        triggerContexts.forEach(ProcessorTriggerContext::recalculateSchedulingParameters);
+    }
 }

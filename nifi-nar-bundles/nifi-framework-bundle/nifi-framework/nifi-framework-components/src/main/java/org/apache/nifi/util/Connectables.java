@@ -27,7 +27,12 @@ import java.util.List;
 public class Connectables {
 
     public static boolean flowFilesQueued(final Connectable connectable) {
-        for (final Connection conn : connectable.getIncomingConnections()) {
+        // This method is called A LOT. Because of this, the creation of an Iterator becomes expensive to do over & over. As a result,
+        // we use the old-style index to iterate over the List, which is more efficient, especially on garbage collection.
+        final List<Connection> connections = connectable.getIncomingConnections();
+        for (int i=0; i < connections.size(); i++) {
+            final Connection conn = connections.get(i);
+
             if (conn.getFlowFileQueue().getFlowFileAvailability() == FlowFileAvailability.FLOWFILE_AVAILABLE) {
                 return true;
             }

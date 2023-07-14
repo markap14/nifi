@@ -65,6 +65,10 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class ConnectableTask {
 
+    private static final InvocationResult NOT_PRIMARY_NODE = InvocationResult.yield("This node is not the primary node", InvocationStats.ZERO_INVOCATIONS);
+    private static final InvocationResult NO_WORK_TO_DO = InvocationResult.yield("No work to do", InvocationStats.ZERO_INVOCATIONS);
+    private static final InvocationResult BACKPRESSURE_APPLIED = InvocationResult.yield("Backpressure Applied", InvocationStats.ZERO_INVOCATIONS);;
+
     private static final Logger logger = LoggerFactory.getLogger(ConnectableTask.class);
 
     private final SchedulingAgent schedulingAgent;
@@ -165,32 +169,32 @@ public class ConnectableTask {
     public InvocationResult invoke(final long runDurationNanos, final long maxIterations) {
         if (scheduleState.isTerminated()) {
             logger.debug("Will not trigger {} because task is terminated", connectable);
-            return InvocationResult.DO_NOT_YIELD;
+            return InvocationResult.NO_INVOCATIONS;
         }
 
         // make sure processor is not yielded
         if (isYielded()) {
             logger.debug("Will not trigger {} because component is yielded", connectable);
-            return InvocationResult.DO_NOT_YIELD;
+            return InvocationResult.NO_INVOCATIONS;
         }
 
         // make sure that either we're not clustered or this processor runs on all nodes or that this is the primary node
         if (!isRunOnCluster(flowController)) {
             logger.debug("Will not trigger {} because this is not the primary node", connectable);
-            return InvocationResult.yield("This node is not the primary node");
+            return NOT_PRIMARY_NODE;
         }
 
         // Make sure processor has work to do.
         if (!isWorkToDo()) {
             logger.debug("Yielding {} because it has no work to do", connectable);
-            return InvocationResult.yield("No work to do");
+            return NO_WORK_TO_DO;
         }
 
         if (numRelationships > 0) {
             final int requiredNumberOfAvailableRelationships = connectable.isTriggerWhenAnyDestinationAvailable() ? 1 : numRelationships;
             if (!repositoryContext.isRelationshipAvailabilitySatisfied(requiredNumberOfAvailableRelationships)) {
                 logger.debug("Yielding {} because Backpressure is Applied", connectable);
-                return InvocationResult.yield("Backpressure Applied");
+                return BACKPRESSURE_APPLIED;
             }
         }
 
@@ -241,13 +245,13 @@ public class ConnectableTask {
                     invocationCount++;
                     connectable.onTrigger(processContext, activeSessionFactory);
 
+                    final long nanoTime = System.nanoTime();
                     if (!batch) {
-                        return InvocationResult.DO_NOT_YIELD;
+                        return InvocationResult.doNotYield(InvocationStats.create(invocationCount, nanoTime - startNanos));
                     }
 
-                    final long nanoTime = System.nanoTime();
                     if (nanoTime > finishNanos) {
-                        return InvocationResult.DO_NOT_YIELD;
+                        return InvocationResult.doNotYield(InvocationStats.create(invocationCount, nanoTime - startNanos));
                     }
 
                     if (connectable.getScheduledState() != ScheduledState.RUNNING) {
@@ -303,7 +307,7 @@ public class ConnectableTask {
             }
         }
 
-        return InvocationResult.DO_NOT_YIELD;
+        return InvocationResult.doNotYield(InvocationStats.create(invocationCount, System.nanoTime() - startNanos));
     }
 
     private void updateEventRepo(final long startNanoTime, final long startCpuTime, final long startGcMillis, final int invocationCount, final boolean measureCpuTime,

@@ -22,20 +22,31 @@ public interface InvocationResult {
 
     String getYieldExplanation();
 
+    InvocationStats getStats();
 
-    public static InvocationResult DO_NOT_YIELD = new InvocationResult() {
-        @Override
-        public boolean isYield() {
-            return false;
-        }
 
-        @Override
-        public String getYieldExplanation() {
-            return null;
-        }
+    InvocationResult NO_INVOCATIONS = doNotYield(InvocationStats.ZERO_INVOCATIONS);
+
+    static InvocationResult doNotYield(final InvocationStats invocationStats) {
+        return new InvocationResult() {
+            @Override
+            public boolean isYield() {
+                return false;
+            }
+
+            @Override
+            public String getYieldExplanation() {
+                return null;
+            }
+
+            @Override
+            public InvocationStats getStats() {
+                return invocationStats;
+            }
+        };
     };
 
-    public static InvocationResult yield(final String explanation) {
+    static InvocationResult yield(final String explanation, final InvocationStats invocationStats) {
         return new InvocationResult() {
             @Override
             public boolean isYield() {
@@ -45,6 +56,11 @@ public interface InvocationResult {
             @Override
             public String getYieldExplanation() {
                 return explanation;
+            }
+
+            @Override
+            public InvocationStats getStats() {
+                return invocationStats;
             }
         };
     }

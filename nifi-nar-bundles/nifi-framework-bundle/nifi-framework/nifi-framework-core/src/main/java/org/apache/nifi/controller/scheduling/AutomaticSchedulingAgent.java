@@ -22,11 +22,11 @@ import org.apache.nifi.controller.FlowController;
 import org.apache.nifi.controller.ProcessorNode;
 import org.apache.nifi.controller.ReportingTaskNode;
 import org.apache.nifi.controller.tasks.ConnectableTask;
-import org.apache.nifi.encrypt.PropertyEncryptor;
 import org.apache.nifi.engine.FlowEngine;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 // TODO: Run Once doesn't work.
 public class AutomaticSchedulingAgent extends AbstractTimeBasedSchedulingAgent {
@@ -34,21 +34,21 @@ public class AutomaticSchedulingAgent extends AbstractTimeBasedSchedulingAgent {
 
     private final List<AutoScheduledProcessorTrigger> autoScheduledProcessorTriggers = new ArrayList<>();
 
-    public AutomaticSchedulingAgent(final FlowController flowController, final FlowEngine flowEngine, final RepositoryContextFactory contextFactory,
-                                      final PropertyEncryptor encryptor) {
+    public AutomaticSchedulingAgent(final FlowController flowController, final FlowEngine flowEngine, final RepositoryContextFactory contextFactory) {
         super(flowEngine, flowController, contextFactory);
 
-        for (int i=0; i < flowEngine.getCorePoolSize(); i++) {
+        for (int i=0; i < flowEngine.getCorePoolSize() - 2; i++) {
             final AutoScheduledProcessorTrigger trigger = new AutoScheduledProcessorTrigger(processorTaskQueue);
             autoScheduledProcessorTriggers.add(trigger);
             flowEngine.submit(trigger);
         }
+
+        flowEngine.scheduleWithFixedDelay(processorTaskQueue::recalculateMaxConcurrentTasks, 10, 10, TimeUnit.SECONDS);
     }
 
     private ConnectableTask createConnectableTask(final ProcessorNode processor, final LifecycleState lifecycleState) {
         return new ConnectableTask(this, processor, flowController, contextFactory, lifecycleState);
     }
-
 
     @Override
     public void onEvent(final Connectable connectable) {

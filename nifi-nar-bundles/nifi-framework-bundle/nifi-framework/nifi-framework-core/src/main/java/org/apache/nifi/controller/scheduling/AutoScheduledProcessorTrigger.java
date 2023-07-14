@@ -30,7 +30,6 @@ public class AutoScheduledProcessorTrigger implements Runnable {
 
     private static final int MAX_ITERATIONS_PER_TRIGGER = 500000;
     private static final int MAX_ITERATIONS_SOURCE_PROCESSOR = 500;
-    private static final long MAX_RUN_DURATION_NANOS = TimeUnit.MILLISECONDS.toNanos(25L);
 
     private final ProcessorTaskQueue taskQueue;
     private final long boredYieldMillis = 5;
@@ -77,24 +76,21 @@ public class AutoScheduledProcessorTrigger implements Runnable {
         for (final ProcessorTriggerContext triggerContext : triggerContexts) {
             try {
                 if (isTrigger(triggerContext)) {
-                    final long runDuration;
                     final long maxIterations;
                     if (triggerContext.isSourceComponent()) {
-                        runDuration = MAX_RUN_DURATION_NANOS;
                         maxIterations = MAX_ITERATIONS_SOURCE_PROCESSOR;
                     } else {
-                        runDuration = getRunDurationNanos(triggerContext);
                         maxIterations = MAX_ITERATIONS_PER_TRIGGER;
                     }
 
                     if (triggerContext.isBatchSupported()) {
-                        final InvocationResult result = triggerContext.invoke(runDuration, maxIterations);
+                        final InvocationResult result = triggerContext.invoke(triggerContext.getRunDurationNanos(), maxIterations);
 
                         if (result.isYield()) {
                             triggerContext.getProcessor().yield(boredYieldMillis, TimeUnit.MILLISECONDS);
                         }
                     } else {
-                        triggerForDuration(triggerContext, runDuration, maxIterations);
+                        triggerForDuration(triggerContext, triggerContext.getRunDurationNanos(), maxIterations);
                     }
 
                     triggered = true;
@@ -120,6 +116,10 @@ public class AutoScheduledProcessorTrigger implements Runnable {
     }
 
     private boolean isTrigger(final ProcessorTriggerContext triggerContext) {
+        if (true) {
+            return true;
+        }
+
         final LifecycleState lifecycleState = triggerContext.getLifecycleState();
         final ProcessorNode processorNode = triggerContext.getProcessor();
 
@@ -142,13 +142,5 @@ public class AutoScheduledProcessorTrigger implements Runnable {
         }
 
         return true;
-    }
-
-    private long getRunDurationNanos(final ProcessorTriggerContext triggerContext) {
-        final double incomingFullRatio = triggerContext.getIncomingQueueFullRatio();
-        final double outgoingFullRatio = triggerContext.getOutgoingQueueFullRatio();
-        final double scaler = incomingFullRatio * (1 - outgoingFullRatio);
-
-        return Math.max(1, (long) (scaler * MAX_RUN_DURATION_NANOS));
     }
 }
