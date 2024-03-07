@@ -117,6 +117,10 @@
         <nifi.status.repository.questdb.persist.component.days>3</nifi.status.repository.questdb.persist.component.days>
         <nifi.status.repository.questdb.persist.location>./status_repository</nifi.status.repository.questdb.persist.location>
 
+        <!-- Asset Management properties -->
+        <nifi.asset.manager.implementation>org.apache.nifi.asset.StandardAssetManager</nifi.asset.manager.implementation>
+        <nifi.asset.manager.properties.directory>./assets</nifi.asset.manager.properties.directory>
+
         <!-- nifi.properties: web properties -->
         <nifi.web.http.host />
         <nifi.web.http.port />

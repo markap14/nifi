@@ -17,24 +17,6 @@
 package org.apache.nifi.web.api;
 
 import com.google.common.base.Functions;
-
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
-
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -125,6 +107,23 @@ import org.apache.nifi.web.util.LifecycleManagementException;
 import org.apache.nifi.web.util.ParameterUpdateManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /**
  * RESTful endpoint for managing a Parameter Provider.
@@ -1697,27 +1696,15 @@ public class ParameterProviderResource extends AbstractParameterResource {
         this.authorizer = authorizer;
     }
 
-    public ComponentLifecycle getClusterComponentLifecycle() {
-        return clusterComponentLifecycle;
-    }
-
     public void setClusterComponentLifecycle(final ComponentLifecycle clusterComponentLifecycle) {
         this.clusterComponentLifecycle = clusterComponentLifecycle;
-    }
-
-    public ComponentLifecycle getLocalComponentLifecycle() {
-        return localComponentLifecycle;
     }
 
     public void setLocalComponentLifecycle(final ComponentLifecycle localComponentLifecycle) {
         this.localComponentLifecycle = localComponentLifecycle;
     }
 
-    public DtoFactory getDtoFactory() {
-        return dtoFactory;
-    }
-
-    public void setDtoFactory(DtoFactory dtoFactory) {
+    public void setDtoFactory(final DtoFactory dtoFactory) {
         this.dtoFactory = dtoFactory;
     }
 }

@@ -76,6 +76,10 @@
         <property name="nifiProperties" ref="nifiProperties" />
     </bean>
 
+    <bean id="assetManager" class="org.apache.nifi.spring.AssetManagerFactoryBean">
+        <property name="flowController" ref="flowController" />
+    </bean>
+
     <bean id="eventReporter" class="org.apache.nifi.events.StandardEventReporter">
         <constructor-arg ref="bulletinRepository" />
     </bean>

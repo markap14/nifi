@@ -16,6 +16,8 @@
  */
 package org.apache.nifi.web.util;
 
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import org.apache.nifi.authorization.AuthorizableLookup;
 import org.apache.nifi.authorization.Authorizer;
 import org.apache.nifi.authorization.RequestAction;
@@ -37,8 +39,6 @@ import org.apache.nifi.web.api.entity.ParameterContextEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -166,7 +166,7 @@ public class ParameterUpdateManager {
         asyncRequest.markStepComplete();
         final List<ParameterContextEntity> updatedEntities = new ArrayList<>();
         try {
-            for(final ParameterContextEntity updatedContextEntity : updatedContextEntities) {
+            for (final ParameterContextEntity updatedContextEntity : updatedContextEntities) {
                 logger.info("Updating Parameter Context with ID {}", updatedContextEntity.getId());
 
                 updatedEntities.add(performParameterContextUpdate(asyncRequest, uri, replicateRequest, revision, updatedContextEntity));

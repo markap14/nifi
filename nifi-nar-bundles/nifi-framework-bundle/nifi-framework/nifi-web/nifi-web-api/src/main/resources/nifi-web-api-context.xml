@@ -649,6 +649,8 @@
         <property name="dtoFactory" ref="dtoFactory" />
         <property name="clusterComponentLifecycle" ref="clusterComponentLifecycle" />
         <property name="localComponentLifecycle" ref="localComponentLifecycle" />
+        <property name="assetManager" ref="assetManager" />
+        <property name="assetRequestReplicator" ref="assetRequestReplicator" />
     </bean>
     <bean id="jmxMetricsService" class="org.apache.nifi.web.api.metrics.jmx.StandardJmxMetricsService">
         <property name="properties" ref="nifiProperties"/>

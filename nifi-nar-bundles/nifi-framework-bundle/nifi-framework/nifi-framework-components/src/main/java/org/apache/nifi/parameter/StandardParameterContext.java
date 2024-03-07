@@ -239,14 +239,12 @@ public class StandardParameterContext implements ParameterContext {
      * if the given proposed parameter does not have its value populated
      */
     private Parameter createFullyPopulatedParameter(final Parameter proposedParameter) {
-        final ParameterDescriptor descriptor = getFullyPopulatedDescriptor(proposedParameter);
-        final String value = getFullyPopulatedValue(proposedParameter);
-        return new Parameter(descriptor, value, proposedParameter.getParameterContextId(), proposedParameter.isProvided());
+        return new Parameter.Builder()
+            .fromParameter(proposedParameter)
+            .descriptor(getFullyPopulatedDescriptor(proposedParameter))
+            .build();
     }
 
-    private String getFullyPopulatedValue(final Parameter proposedParameter) {
-        return proposedParameter.getValue();
-    }
 
     private ParameterDescriptor getFullyPopulatedDescriptor(final Parameter proposedParameter) {
         final ParameterDescriptor descriptor = proposedParameter.getDescriptor();
@@ -410,13 +408,13 @@ public class StandardParameterContext implements ParameterContext {
                                     final Map<ParameterDescriptor, Parameter> overridingParameters,
                                     final ParameterContext overridingContext) {
         final Map<ParameterDescriptor, List<Parameter>> allOverrides = new HashMap<>();
-        for(final Map.Entry<ParameterDescriptor, Parameter> entry : existingParameters.entrySet()) {
+        for (final Map.Entry<ParameterDescriptor, Parameter> entry : existingParameters.entrySet()) {
             final List<Parameter> parameters = new ArrayList<>();
             parameters.add(entry.getValue());
             allOverrides.put(entry.getKey(), parameters);
         }
 
-        for(final Map.Entry<ParameterDescriptor, Parameter> entry : overridingParameters.entrySet()) {
+        for (final Map.Entry<ParameterDescriptor, Parameter> entry : overridingParameters.entrySet()) {
             final ParameterDescriptor overridingParameterDescriptor = entry.getKey();
             Parameter overridingParameter = entry.getValue();
 
@@ -434,8 +432,9 @@ public class StandardParameterContext implements ParameterContext {
                             "a Sensitive Parameter with the same name", existingParameterDescriptor.getName()));
                 }
             }
+
             if (overridingParameter.getParameterContextId() == null) {
-                overridingParameter = new Parameter(overridingParameter, overridingContext.getIdentifier());
+                overridingParameter = new Parameter.Builder().fromParameter(overridingParameter).parameterContextId(overridingContext.getIdentifier()).build();
             }
             allOverrides.computeIfAbsent(overridingParameterDescriptor, p -> new ArrayList<>()).add(overridingParameter);
 

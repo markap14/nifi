@@ -529,12 +529,12 @@ public class StandardParameterProviderNode extends AbstractComponentNode impleme
                         throw new IllegalArgumentException(String.format("Parameter sensitivity must be specified for parameter [%s] in group [%s]",
                                 parameterName, groupConfiguration.getGroupName()));
                     }
-                    final ParameterDescriptor parameterDescriptor = new ParameterDescriptor.Builder()
-                            .from(parameter.getDescriptor())
-                            .name(parameterName)
-                            .sensitive(sensitivity == ParameterSensitivity.SENSITIVE)
-                            .build();
-                    return new Parameter(parameterDescriptor, parameter.getValue(), parameter.getParameterContextId(), true);
+
+                    return new Parameter.Builder()
+                        .fromParameter(parameter)
+                        .sensitive(sensitivity == ParameterSensitivity.SENSITIVE)
+                        .provided(true)
+                        .build();
                 })
                 .collect(Collectors.toList());
     }
@@ -546,7 +546,7 @@ public class StandardParameterProviderNode extends AbstractComponentNode impleme
      */
     private static List<Parameter> toProvidedParameters(final Collection<Parameter> parameters) {
         return parameters == null ? Collections.emptyList() : parameters.stream()
-                .map(parameter -> new Parameter(parameter.getDescriptor(), parameter.getValue(), null, true))
+                .map(parameter -> new Parameter.Builder().descriptor(parameter.getDescriptor()).value(parameter.getValue()).provided(true).build())
                 .collect(Collectors.toList());
     }
 

@@ -65,7 +65,6 @@ import org.apache.nifi.nar.StandardExtensionDiscoveringManager;
 import org.apache.nifi.nar.SystemBundle;
 import org.apache.nifi.parameter.Parameter;
 import org.apache.nifi.parameter.ParameterContext;
-import org.apache.nifi.parameter.ParameterDescriptor;
 import org.apache.nifi.parameter.mock.PlaceholderParameterProvider;
 import org.apache.nifi.persistence.FlowConfigurationArchiveManager;
 import org.apache.nifi.processor.Relationship;
@@ -474,7 +473,7 @@ public class TestFlowController {
             controller.initializeFlow();
 
             final Map<String, Parameter> parameters = new HashMap<>();
-            parameters.put("param", new Parameter(new ParameterDescriptor.Builder().name("param").build(), "value"));
+            parameters.put("param", new Parameter.Builder().name("param").value("value").build());
 
             // No problem since there are no inherited parameter contexts
             controller.getFlowManager().createParameterContext("id", "name", "description", parameters, Collections.emptyList(), null);
