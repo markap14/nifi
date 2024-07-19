@@ -17,16 +17,17 @@
 
 package org.apache.nifi.provenance.index.lucene;
 
-import java.util.List;
-import java.util.Optional;
-
 import org.apache.nifi.provenance.ProvenanceEventRecord;
 import org.apache.nifi.provenance.search.Query;
 import org.apache.nifi.provenance.serialization.StorageSummary;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
 public interface CachedQuery {
 
-    void update(ProvenanceEventRecord event, StorageSummary storageSummary);
+    void update(Map<ProvenanceEventRecord, StorageSummary> events);
 
     Optional<List<Long>> evaluate(Query query);
 
