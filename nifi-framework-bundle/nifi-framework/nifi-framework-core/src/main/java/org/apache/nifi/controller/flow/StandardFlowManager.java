@@ -27,6 +27,8 @@ import org.apache.nifi.bundle.Bundle;
 import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.ConfigurableComponent;
 import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.components.connector.Connector;
+import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.connectable.ConnectableType;
 import org.apache.nifi.connectable.Connection;
@@ -62,6 +64,7 @@ import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.groups.RemoteProcessGroup;
 import org.apache.nifi.groups.StandardProcessGroup;
 import org.apache.nifi.groups.StatelessGroupNodeFactory;
+import org.apache.nifi.logging.ConnectorLogObserver;
 import org.apache.nifi.logging.ControllerServiceLogObserver;
 import org.apache.nifi.logging.FlowAnalysisRuleLogObserver;
 import org.apache.nifi.logging.FlowRegistryClientLogObserver;
@@ -106,6 +109,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import javax.net.ssl.SSLContext;
 
 import static java.util.Objects.requireNonNull;
 
@@ -123,6 +127,7 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
     private final FlowController flowController;
 
     private final ConcurrentMap<String, ControllerServiceNode> rootControllerServices = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, ConnectorNode> allConnectors = new ConcurrentHashMap<>();
 
     private final boolean isSiteToSiteSecure;
 
@@ -717,6 +722,72 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
         extensionManager.removeInstanceClassLoader(service.getIdentifier());
 
         logger.info("{} removed from Flow Controller", service);
+    }
+
+    @Override
+    public ConnectorNode createConnector(final String type, final String id, final BundleCoordinate coordinate, final ProcessGroup managedRootGroup,
+                final boolean firstTimeAdded, final boolean registerLogObserver) {
+
+        requireNonNull(type, "Connector Type");
+        requireNonNull(id, "Connector ID");
+        requireNonNull(coordinate, "Bundle Coordinate");
+
+        final ExtensionManager extensionManager = flowController.getExtensionManager();
+
+        final ConnectorNode connectorNode = new ExtensionBuilder()
+            .identifier(id)
+            .type(type)
+            .bundleCoordinate(coordinate)
+            .extensionManager(extensionManager)
+            .managedProcessGroup(managedRootGroup)
+            .buildConnector();
+
+        // Set up logging for the connector
+        final LogRepository logRepository = LogRepositoryFactory.getRepository(id);
+        logRepository.setLogger(connectorNode.getComponentLog());
+        if (registerLogObserver) {
+            logRepository.addObserver(LogLevel.WARN, new ConnectorLogObserver(bulletinRepository, connectorNode));
+        }
+
+        if (firstTimeAdded) {
+            final Connector connector = connectorNode.getConnector();
+            try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, connector.getClass(), connectorNode.getIdentifier())) {
+                ReflectionUtils.invokeMethodsWithAnnotation(OnAdded.class, connector);
+            } catch (final Exception e) {
+                if (registerLogObserver) {
+                    logRepository.removeAllObservers();
+                }
+                throw new ComponentLifeCycleException("Failed to invoke @OnAdded methods of " + connectorNode.getConnector(), e);
+            }
+        }
+
+        // Register the connector with the flow manager
+        onConnectorAdded(connectorNode);
+
+        return connectorNode;
+    }
+
+    @Override
+    public void onConnectorAdded(final ConnectorNode connector) {
+        if (connector == null) {
+            return;
+        }
+        allConnectors.put(connector.getIdentifier(), connector);
+    }
+
+    @Override
+    public void onConnectorRemoved(final ConnectorNode connector) {
+        if (connector == null) {
+            return;
+        }
+
+        final String identifier = connector.getIdentifier();
+        allConnectors.remove(identifier);
+    }
+
+    @Override
+    public List<ConnectorNode> getAllConnectors() {
+        return new ArrayList<>(allConnectors.values());
     }
 
     @Override

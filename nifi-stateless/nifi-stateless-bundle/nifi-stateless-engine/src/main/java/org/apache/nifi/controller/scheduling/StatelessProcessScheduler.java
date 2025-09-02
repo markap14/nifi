@@ -20,6 +20,7 @@ package org.apache.nifi.controller.scheduling;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.lifecycle.OnShutdown;
 import org.apache.nifi.annotation.notification.PrimaryNodeState;
+import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.connectable.Funnel;
@@ -332,6 +333,30 @@ public class StatelessProcessScheduler implements ProcessScheduler {
     public CompletableFuture<Void> disableControllerService(final ControllerServiceNode service) {
         logger.info("Disabling {}", service);
         return service.disable(componentLifeCycleThreadPool);
+    }
+
+    @Override
+    public Future<Void> startConnector(final ConnectorNode connectorNode) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Future<Void> stopConnector(final ConnectorNode connectorNode) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void enableConnector(final ConnectorNode connectorNode) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void disableConnector(final ConnectorNode connectorNode) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void onConnectorRemoved(final ConnectorNode connectorNode) {
     }
 
     @Override

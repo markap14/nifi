@@ -19,6 +19,8 @@ package org.apache.nifi.controller.service.mock;
 
 import org.apache.nifi.authorization.Resource;
 import org.apache.nifi.authorization.resource.Authorizable;
+import org.apache.nifi.components.connector.Connector;
+import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.connectable.Connection;
 import org.apache.nifi.connectable.Funnel;
@@ -901,6 +903,45 @@ public class MockProcessGroup implements ProcessGroup {
     @Override
     public String getStatelessFlowTimeout() {
         return null;
+    }
+
+    @Override
+    public void addConnector(final ConnectorNode connector) {
+    }
+
+    @Override
+    public void removeConnector(final ConnectorNode connector) {
+    }
+
+    @Override
+    public ConnectorNode getConnector(final String id) {
+        return null;
+    }
+
+    @Override
+    public List<ConnectorNode> findAllConnectors() {
+        return List.of();
+    }
+
+    @Override
+    public ConnectorNode findConnector(final String id) {
+        return null;
+    }
+
+    @Override
+    public void startConnector(final ConnectorNode connector) {
+    }
+
+    @Override
+    public void stopConnector(final ConnectorNode connector) {
+    }
+
+    @Override
+    public void enableConnector(final ConnectorNode connector) {
+    }
+
+    @Override
+    public void disableConnector(final ConnectorNode connector) {
     }
 
     @Override

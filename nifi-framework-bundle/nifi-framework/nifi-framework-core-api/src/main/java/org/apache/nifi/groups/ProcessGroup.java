@@ -18,6 +18,7 @@ package org.apache.nifi.groups;
 
 import org.apache.nifi.authorization.resource.ComponentAuthorizable;
 import org.apache.nifi.components.VersionedComponent;
+import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.connectable.Connection;
 import org.apache.nifi.connectable.Funnel;
@@ -1269,4 +1270,64 @@ public interface ProcessGroup extends ComponentAuthorizable, Positionable, Versi
      * @return the configured maximum amount of time that a Stateless Flow can run before it times out and is considered a failure
      */
     String getStatelessFlowTimeout();
+
+    /**
+     * Adds the given Connector to this Process Group
+     * @param connector to add
+     */
+    void addConnector(ConnectorNode connector);
+
+    /**
+     * Removes the given Connector from this Process Group
+     * @param connector to remove
+     */
+    void removeConnector(ConnectorNode connector);
+
+    /**
+     * Returns the Connector with the given ID
+     * @param id of the Connector
+     * @return the Connector with the given ID, or <code>null</code> if no such Connector exists
+     */
+    ConnectorNode getConnector(String id);
+
+    /**
+     * Returns a List of all Connectors that belong to this Process Group
+     * @return a List of all Connectors that belong to this Process Group
+     */
+    List<ConnectorNode> findAllConnectors();
+
+    /**
+     * Finds the Connector with the given ID, if it exists as a child or descendant of this ProcessGroup. This performs a recursive search of all
+     * descendant ProcessGroups
+     *
+     * @param id of the Connector
+     * @return the Connector with the given ID, or <code>null</code> if no such Connector exists
+     */
+    ConnectorNode findConnector(String id);
+
+    /**
+     * Starts the given Connector
+     *
+     * @param connector to start
+     */
+    void startConnector(ConnectorNode connector);
+
+    /**
+     * Stops the given Connector
+     *
+     * @param connector to stop
+     */
+    void stopConnector(ConnectorNode connector);
+
+    /**
+     * Enables the given connector
+     * @param connector to enable
+     */
+    void enableConnector(ConnectorNode connector);
+
+    /**
+     * Disables the given connector
+     * @param connector to disable
+     */
+    void disableConnector(ConnectorNode connector);
 }

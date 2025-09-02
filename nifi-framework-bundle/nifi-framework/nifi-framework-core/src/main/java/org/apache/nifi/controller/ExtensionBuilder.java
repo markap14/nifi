@@ -25,6 +25,11 @@ import org.apache.nifi.bundle.Bundle;
 import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.ConfigurableComponent;
 import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.components.connector.Connector;
+import org.apache.nifi.components.connector.ConnectorDetails;
+import org.apache.nifi.components.connector.ConnectorNode;
+import org.apache.nifi.components.connector.GhostConnector;
+import org.apache.nifi.components.connector.StandardConnectorNode;
 import org.apache.nifi.components.state.StateManager;
 import org.apache.nifi.components.state.StateManagerProvider;
 import org.apache.nifi.components.validation.ValidationTrigger;
@@ -51,6 +56,7 @@ import org.apache.nifi.controller.service.StandardControllerServiceNode;
 import org.apache.nifi.flowanalysis.FlowAnalysisRule;
 import org.apache.nifi.flowanalysis.FlowAnalysisRuleInitializationContext;
 import org.apache.nifi.flowanalysis.GhostFlowAnalysisRule;
+import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.logging.LoggingContext;
 import org.apache.nifi.logging.StandardLoggingContext;
@@ -84,7 +90,6 @@ import org.apache.nifi.validation.RuleViolationsManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.net.ssl.SSLContext;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.net.URL;
@@ -94,6 +99,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import javax.net.ssl.SSLContext;
 
 public class ExtensionBuilder {
    private static final Logger logger = LoggerFactory.getLogger(ExtensionBuilder.class);
@@ -117,6 +123,7 @@ public class ExtensionBuilder {
    private String classloaderIsolationKey;
    private SSLContext systemSslContext;
    private PythonBridge pythonBridge;
+   private ProcessGroup managedProcessGroup;
 
    public ExtensionBuilder type(final String type) {
        this.type = type;
@@ -221,28 +228,19 @@ public class ExtensionBuilder {
        return this;
    }
 
+   public ExtensionBuilder managedProcessGroup(final ProcessGroup managedProcessGroup) {
+       this.managedProcessGroup = managedProcessGroup;
+       return this;
+   }
+
    public ProcessorNode buildProcessor() {
-       if (identifier == null) {
-           throw new IllegalStateException("Processor ID must be specified");
-       }
-       if (type == null) {
-           throw new IllegalStateException("Processor Type must be specified");
-       }
-       if (bundleCoordinate == null) {
-           throw new IllegalStateException("Bundle Coordinate must be specified");
-       }
-       if (extensionManager == null) {
-           throw new IllegalStateException("Extension Manager must be specified");
-       }
-       if (serviceProvider == null) {
-           throw new IllegalStateException("Controller Service Provider must be specified");
-       }
-       if (nodeTypeProvider == null) {
-           throw new IllegalStateException("Node Type Provider must be specified");
-       }
-       if (reloadComponent == null) {
-           throw new IllegalStateException("Reload Component must be specified");
-       }
+       requireNonNull(identifier, "Processor ID");
+       requireNonNull(type, "Processor Type");
+       requireNonNull(bundleCoordinate, "Bundle Coordinate");
+       requireNonNull(extensionManager, "Extension Manager");
+       requireNonNull(serviceProvider, "Controller Service Provider");
+       requireNonNull(nodeTypeProvider, "Node Type Provider");
+       requireNonNull(reloadComponent, "Reload Component");
 
        boolean creationSuccessful = true;
        final StandardLoggingContext loggingContext = new StandardLoggingContext();
@@ -277,30 +275,14 @@ public class ExtensionBuilder {
    }
 
    public FlowRegistryClientNode buildFlowRegistryClient() {
-       if (identifier == null) {
-           throw new IllegalStateException("ReportingTask ID must be specified");
-       }
-       if (type == null) {
-           throw new IllegalStateException("ReportingTask Type must be specified");
-       }
-       if (bundleCoordinate == null) {
-           throw new IllegalStateException("Bundle Coordinate must be specified");
-       }
-       if (serviceProvider == null) {
-           throw new IllegalStateException("Controller Service Provider must be specified");
-       }
-       if (extensionManager == null) {
-           throw new IllegalStateException("Extension Manager must be specified");
-       }
-       if (nodeTypeProvider == null) {
-           throw new IllegalStateException("Node Type Provider must be specified");
-       }
-       if (reloadComponent == null) {
-           throw new IllegalStateException("Reload Component must be specified");
-       }
-       if (flowController == null) {
-           throw new IllegalStateException("FlowController must be specified");
-       }
+       requireNonNull(identifier, "Flow Registry Client ID");
+       requireNonNull(type, "Flow Registry Client Type");
+       requireNonNull(bundleCoordinate, "Bundle Coordinate");
+       requireNonNull(serviceProvider, "Controller Service Provider");
+       requireNonNull(extensionManager, "Extension Manager");
+       requireNonNull(nodeTypeProvider, "Node Type Provider");
+       requireNonNull(reloadComponent, "Reload Component");
+       requireNonNull(flowController, "FlowController");
 
        boolean creationSuccessful = true;
        LoggableComponent<FlowRegistryClient> loggableComponent;
@@ -321,30 +303,14 @@ public class ExtensionBuilder {
    }
 
    public ReportingTaskNode buildReportingTask() {
-       if (identifier == null) {
-           throw new IllegalStateException("ReportingTask ID must be specified");
-       }
-       if (type == null) {
-           throw new IllegalStateException("ReportingTask Type must be specified");
-       }
-       if (bundleCoordinate == null) {
-           throw new IllegalStateException("Bundle Coordinate must be specified");
-       }
-       if (extensionManager == null) {
-           throw new IllegalStateException("Extension Manager must be specified");
-       }
-       if (serviceProvider == null) {
-           throw new IllegalStateException("Controller Service Provider must be specified");
-       }
-       if (nodeTypeProvider == null) {
-           throw new IllegalStateException("Node Type Provider must be specified");
-       }
-       if (reloadComponent == null) {
-           throw new IllegalStateException("Reload Component must be specified");
-       }
-       if (flowController == null) {
-           throw new IllegalStateException("FlowController must be specified");
-       }
+       requireNonNull(identifier, "ReportingTask ID");
+       requireNonNull(type, "ReportingTask Type");
+       requireNonNull(bundleCoordinate, "Bundle Coordinate");
+       requireNonNull(extensionManager, "Extension Manager");
+       requireNonNull(serviceProvider, "Controller Service Provider");
+       requireNonNull(nodeTypeProvider, "Node Type Provider");
+       requireNonNull(reloadComponent, "Reload Component");
+       requireNonNull(flowController, "FlowController");
 
        boolean creationSuccessful = true;
        LoggableComponent<ReportingTask> loggableComponent;
@@ -367,30 +333,14 @@ public class ExtensionBuilder {
    }
 
    public ParameterProviderNode buildParameterProvider() {
-       if (identifier == null) {
-           throw new IllegalStateException("ParameterProvider ID must be specified");
-       }
-       if (type == null) {
-           throw new IllegalStateException("ParameterProvider Type must be specified");
-       }
-       if (bundleCoordinate == null) {
-           throw new IllegalStateException("Bundle Coordinate must be specified");
-       }
-       if (extensionManager == null) {
-           throw new IllegalStateException("Extension Manager must be specified");
-       }
-       if (serviceProvider == null) {
-           throw new IllegalStateException("Controller Service Provider must be specified");
-       }
-       if (nodeTypeProvider == null) {
-           throw new IllegalStateException("Node Type Provider must be specified");
-       }
-       if (reloadComponent == null) {
-           throw new IllegalStateException("Reload Component must be specified");
-       }
-       if (flowController == null) {
-           throw new IllegalStateException("FlowController must be specified");
-       }
+       requireNonNull(identifier, "ParameterProvider ID");
+       requireNonNull(type, "ParameterProvider Type");
+       requireNonNull(bundleCoordinate, "Bundle Coordinate");
+       requireNonNull(extensionManager, "Extension Manager");
+       requireNonNull(serviceProvider, "Controller Service Provider");
+       requireNonNull(nodeTypeProvider, "Node Type Provider");
+       requireNonNull(reloadComponent, "Reload Component");
+       requireNonNull(flowController, "FlowController");
 
        boolean creationSuccessful = true;
        LoggableComponent<ParameterProvider> loggableComponent;
@@ -451,30 +401,14 @@ public class ExtensionBuilder {
    }
 
    public FlowAnalysisRuleNode buildFlowAnalysisRuleNode() {
-       if (identifier == null) {
-           throw new IllegalStateException("FlowAnalysisRule ID must be specified");
-       }
-       if (type == null) {
-           throw new IllegalStateException("FlowAnalysisRule Type must be specified");
-       }
-       if (bundleCoordinate == null) {
-           throw new IllegalStateException("Bundle Coordinate must be specified");
-       }
-       if (extensionManager == null) {
-           throw new IllegalStateException("Extension Manager must be specified");
-       }
-       if (serviceProvider == null) {
-           throw new IllegalStateException("Controller Service Provider must be specified");
-       }
-       if (nodeTypeProvider == null) {
-           throw new IllegalStateException("Node Type Provider must be specified");
-       }
-       if (reloadComponent == null) {
-           throw new IllegalStateException("Reload Component must be specified");
-       }
-       if (flowController == null) {
-           throw new IllegalStateException("FlowController must be specified");
-       }
+       requireNonNull(identifier, "FlowAnalysisRule ID");
+       requireNonNull(type, "FlowAnalysisRule Type");
+       requireNonNull(bundleCoordinate, "Bundle Coordinate");
+       requireNonNull(extensionManager, "Extension Manager");
+       requireNonNull(serviceProvider, "Controller Service Provider");
+       requireNonNull(nodeTypeProvider, "Node Type Provider");
+       requireNonNull(reloadComponent, "Reload Component");
+       requireNonNull(flowController, "FlowController");
 
        boolean creationSuccessful = true;
        LoggableComponent<FlowAnalysisRule> loggableComponent;
@@ -497,6 +431,55 @@ public class ExtensionBuilder {
        return flowAnalysisRuleNode;
    }
 
+   public ConnectorNode buildConnector() {
+       requireNonNull(identifier, "Connector ID");
+       requireNonNull(type, "Connector Type");
+       requireNonNull(bundleCoordinate, "Bundle Coordinate");
+       requireNonNull(extensionManager, "Extension Manager");
+       requireNonNull(managedProcessGroup, "Managed Process Group");
+
+       boolean creationSuccessful = true;
+       Connector connector;
+       
+       try {
+           connector = createConnector();
+       } catch (final Exception e) {
+           logger.error("Could not create Connector of type {} from {} for ID {} due to: {}; creating \"Ghost\" implementation", type, bundleCoordinate, identifier, e.getMessage());
+           if (logger.isDebugEnabled()) {
+               logger.debug(e.getMessage(), e);
+           }
+
+           connector = new GhostConnector(identifier, type);
+           creationSuccessful = false;
+       }
+
+       final String componentType;
+       if (creationSuccessful) {
+           componentType = connector.getClass().getSimpleName();
+       } else {
+           final String simpleClassName = type.contains(".") ? StringUtils.substringAfterLast(type, ".") : type;
+           componentType = "(Missing) " + simpleClassName;
+       }
+
+       final ComponentLog logger = new SimpleProcessLogger(identifier, connector, new StandardLoggingContext(null));
+       final ConnectorDetails connectorDetails = new ConnectorDetails(connector, bundleCoordinate, logger);
+       final ConnectorNode connectorNode = new StandardConnectorNode(
+           identifier,
+           extensionManager,
+           managedProcessGroup,
+           connectorDetails,
+           componentType,
+           bundleCoordinate
+       );
+       
+       return connectorNode;
+   }
+
+   private void requireNonNull(final Object value, final String fieldName) {
+       if (value == null) {
+           throw new IllegalStateException(fieldName + " must be specified");
+       }
+   }
 
    private ProcessorNode createProcessorNode(final LoggableComponent<Processor> processor, final String componentType, final boolean extensionMissing) {
        final ValidationContextFactory validationContextFactory = createValidationContextFactory(serviceProvider);
@@ -909,6 +892,37 @@ public class ExtensionBuilder {
            processor.initialize(initContext);
 
            return new LoggableComponent<>(processor, bundleCoordinate, terminationAwareLogger);
+       } finally {
+           if (ctxClassLoader != null) {
+               Thread.currentThread().setContextClassLoader(ctxClassLoader);
+           }
+       }
+   }
+
+   private Connector createConnector() throws Exception {
+       final ClassLoader ctxClassLoader = Thread.currentThread().getContextClassLoader();
+       try {
+           final Bundle bundle = extensionManager.getBundle(bundleCoordinate);
+           if (bundle == null) {
+               throw new IllegalStateException("Unable to find bundle for coordinate " + bundleCoordinate.getCoordinate());
+           }
+
+           final ClassLoader detectedClassLoader = extensionManager.createInstanceClassLoader(type, identifier, bundle, 
+               classpathUrls == null ? Collections.emptySet() : classpathUrls, true, classloaderIsolationKey);
+           final Class<?> rawClass = Class.forName(type, true, detectedClassLoader);
+           Thread.currentThread().setContextClassLoader(detectedClassLoader);
+
+           final Object extensionInstance = rawClass.getDeclaredConstructor().newInstance();
+           final Connector connector = (Connector) extensionInstance;
+
+           // TODO: Initialize the Connector - this will require creating a ConnectorInitializationContext
+           // For now, we'll skip initialization as it requires additional infrastructure
+           // that may not be available at this point. The initialization should happen
+           // when the connector is actually started/configured.
+
+           return connector;
+       } catch (final Throwable t) {
+           throw new Exception("Failed to create Connector of type " + type, t);
        } finally {
            if (ctxClassLoader != null) {
                Thread.currentThread().setContextClassLoader(ctxClassLoader);

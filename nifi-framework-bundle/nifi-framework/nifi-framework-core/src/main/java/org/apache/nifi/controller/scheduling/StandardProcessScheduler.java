@@ -22,6 +22,7 @@ import org.apache.nifi.annotation.lifecycle.OnStopped;
 import org.apache.nifi.annotation.lifecycle.OnUnscheduled;
 import org.apache.nifi.annotation.notification.PrimaryNodeState;
 import org.apache.nifi.authorization.resource.ComponentAuthorizable;
+import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.components.state.StateManager;
 import org.apache.nifi.components.state.StateManagerProvider;
 import org.apache.nifi.components.validation.ValidationStatus;
@@ -890,6 +891,36 @@ public final class StandardProcessScheduler implements ProcessScheduler {
                 return disableControllerServiceWithStandaloneThreadPool(service);
             }
         }
+    }
+
+    @Override
+    public Future<Void> startConnector(final ConnectorNode connectorNode) {
+        // TODO: Implement
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Future<Void> stopConnector(final ConnectorNode connectorNode) {
+        // TODO: Implement
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void enableConnector(final ConnectorNode connectorNode) {
+        // TODO: Implement
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void disableConnector(final ConnectorNode connectorNode) {
+        // TODO: Implement
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void onConnectorRemoved(final ConnectorNode connectorNode) {
+        // TODO: Implement
+        throw new UnsupportedOperationException();
     }
 
     private CompletableFuture<Void> disableControllerServiceWithStandaloneThreadPool(final ControllerServiceNode service) {
