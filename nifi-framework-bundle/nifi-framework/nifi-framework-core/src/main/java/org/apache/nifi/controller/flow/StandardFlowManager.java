@@ -29,6 +29,7 @@ import org.apache.nifi.components.ConfigurableComponent;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.connector.Connector;
 import org.apache.nifi.components.connector.ConnectorNode;
+import org.apache.nifi.components.connector.components.ProcessGroupFacade;
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.connectable.ConnectableType;
 import org.apache.nifi.connectable.Connection;
@@ -58,6 +59,10 @@ import org.apache.nifi.controller.service.ControllerServiceProvider;
 import org.apache.nifi.controller.service.StandardConfigurationContext;
 import org.apache.nifi.deprecation.log.DeprecationLogger;
 import org.apache.nifi.deprecation.log.DeprecationLoggerFactory;
+import org.apache.nifi.flow.ExecutionEngine;
+import org.apache.nifi.flow.Position;
+import org.apache.nifi.flow.ScheduledState;
+import org.apache.nifi.flow.VersionedProcessGroup;
 import org.apache.nifi.flowanalysis.FlowAnalysisRule;
 import org.apache.nifi.flowfile.FlowFilePrioritizer;
 import org.apache.nifi.groups.ProcessGroup;
@@ -76,10 +81,12 @@ import org.apache.nifi.logging.ProcessorLogObserver;
 import org.apache.nifi.logging.ReportingTaskLogObserver;
 import org.apache.nifi.nar.ExtensionManager;
 import org.apache.nifi.nar.NarCloseable;
+import org.apache.nifi.parameter.ParameterContext;
 import org.apache.nifi.parameter.ParameterContextManager;
 import org.apache.nifi.parameter.ParameterProvider;
 import org.apache.nifi.processor.Processor;
 import org.apache.nifi.registry.flow.FlowRegistryClientNode;
+import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedProcessGroup;
 import org.apache.nifi.remote.PublicPort;
 import org.apache.nifi.remote.StandardPublicPort;
 import org.apache.nifi.remote.StandardRemoteProcessGroup;
@@ -97,6 +104,7 @@ import javax.net.ssl.SSLContext;
 
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -105,6 +113,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
@@ -725,8 +734,7 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
     }
 
     @Override
-    public ConnectorNode createConnector(final String type, final String id, final BundleCoordinate coordinate, final ProcessGroup managedRootGroup,
-                final boolean firstTimeAdded, final boolean registerLogObserver) {
+    public ConnectorNode createConnector(final String type, final String id, final BundleCoordinate coordinate, final boolean firstTimeAdded, final boolean registerLogObserver) {
 
         requireNonNull(type, "Connector Type");
         requireNonNull(id, "Connector ID");
@@ -734,13 +742,20 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
 
         final ExtensionManager extensionManager = flowController.getExtensionManager();
 
+        final String managedGroupId = UUID.nameUUIDFromBytes((id + "-root").getBytes(StandardCharsets.UTF_8)).toString();
+        final ProcessGroup managedRootGroup = createProcessGroup(managedGroupId);
+
+        final VersionedProcessGroup versionedManagedGroup = createVersionedProcessGroup(managedRootGroup);
+
         final ConnectorNode connectorNode = new ExtensionBuilder()
             .identifier(id)
             .type(type)
             .bundleCoordinate(coordinate)
             .extensionManager(extensionManager)
-            .managedProcessGroup(managedRootGroup)
+            .managedProcessGroup(managedRootGroup, versionedManagedGroup)
             .buildConnector();
+
+        versionedManagedGroup.setParameterContextName(connectorNode.getParameterContext().getName());
 
         // Set up logging for the connector
         final LogRepository logRepository = LogRepositoryFactory.getRepository(id);
@@ -765,6 +780,29 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
         onConnectorAdded(connectorNode);
 
         return connectorNode;
+    }
+
+    private VersionedProcessGroup createVersionedProcessGroup(final ProcessGroup managedProcessGroup) {
+        final String versionedGroupId = UUID.nameUUIDFromBytes(managedProcessGroup.getIdentifier().getBytes(StandardCharsets.UTF_8)).toString();
+        final InstantiatedVersionedProcessGroup versionedGroup = new InstantiatedVersionedProcessGroup(managedProcessGroup.getIdentifier(), null);
+        versionedGroup.setIdentifier(versionedGroupId);
+
+        versionedGroup.setName(managedProcessGroup.getName());
+        versionedGroup.setComments(managedProcessGroup.getComments());
+        versionedGroup.setPosition(new Position(0, 0));
+        versionedGroup.setFlowFileConcurrency(managedProcessGroup.getFlowFileConcurrency().name());
+        versionedGroup.setFlowFileOutboundPolicy(managedProcessGroup.getFlowFileOutboundPolicy().name());
+        versionedGroup.setDefaultFlowFileExpiration(managedProcessGroup.getDefaultFlowFileExpiration());
+        versionedGroup.setDefaultBackPressureObjectThreshold(managedProcessGroup.getDefaultBackPressureObjectThreshold());
+        versionedGroup.setDefaultBackPressureDataSizeThreshold(managedProcessGroup.getDefaultBackPressureDataSizeThreshold());
+        versionedGroup.setLogFileSuffix(managedProcessGroup.getLogFileSuffix());
+
+        versionedGroup.setExecutionEngine(ExecutionEngine.valueOf(managedProcessGroup.getExecutionEngine().name()));
+        versionedGroup.setScheduledState(ScheduledState.ENABLED);
+        versionedGroup.setMaxConcurrentTasks(managedProcessGroup.getMaxConcurrentTasks());
+        versionedGroup.setStatelessFlowTimeout(managedProcessGroup.getStatelessFlowTimeout());
+
+        return versionedGroup;
     }
 
     @Override

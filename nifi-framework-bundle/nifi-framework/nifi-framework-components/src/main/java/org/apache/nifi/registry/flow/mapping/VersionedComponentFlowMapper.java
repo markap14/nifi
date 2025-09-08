@@ -108,7 +108,7 @@ import java.util.function.BiFunction;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-public class NiFiRegistryFlowMapper {
+public class VersionedComponentFlowMapper {
     private static final String ENCRYPTED_PREFIX = "enc{";
     private static final String ENCRYPTED_SUFFIX = "}";
 
@@ -122,11 +122,11 @@ public class NiFiRegistryFlowMapper {
     // created before attempting to create the connection, where the ConnectableDTO is converted.
     private final Map<String, String> versionedComponentIds = new HashMap<>();
 
-    public NiFiRegistryFlowMapper(final ExtensionManager extensionManager) {
+    public VersionedComponentFlowMapper(final ExtensionManager extensionManager) {
         this(extensionManager, FlowMappingOptions.DEFAULT_OPTIONS);
     }
 
-    public NiFiRegistryFlowMapper(final ExtensionManager extensionManager, final FlowMappingOptions flowMappingOptions) {
+    public VersionedComponentFlowMapper(final ExtensionManager extensionManager, final FlowMappingOptions flowMappingOptions) {
         this.extensionManager = extensionManager;
         this.flowMappingOptions = flowMappingOptions;
 

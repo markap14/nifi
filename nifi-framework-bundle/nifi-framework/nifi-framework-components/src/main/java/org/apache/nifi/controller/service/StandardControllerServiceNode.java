@@ -35,6 +35,10 @@ import org.apache.nifi.components.ConfigurableComponent;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.ValidationContext;
 import org.apache.nifi.components.ValidationResult;
+import org.apache.nifi.components.connector.InvocationFailedException;
+import org.apache.nifi.components.connector.components.ComponentState;
+import org.apache.nifi.components.connector.components.ConnectorMethod;
+import org.apache.nifi.components.connector.components.MethodArgument;
 import org.apache.nifi.components.validation.ValidationState;
 import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.components.validation.ValidationTrigger;
@@ -44,6 +48,7 @@ import org.apache.nifi.controller.ConfigurationContext;
 import org.apache.nifi.controller.ControllerService;
 import org.apache.nifi.controller.LoggableComponent;
 import org.apache.nifi.controller.ReloadComponent;
+import org.apache.nifi.controller.ScheduledState;
 import org.apache.nifi.controller.TerminationAwareLogger;
 import org.apache.nifi.controller.ValidationContextFactory;
 import org.apache.nifi.controller.VerifiableControllerService;
@@ -865,6 +870,68 @@ public class StandardControllerServiceNode extends AbstractComponentNode impleme
 
             overwriteProperties(propertyConfig.getRawProperties());
         }
+    }
+
+    // TODO: Refactor, this is the same between ProcessorNode / ControllerServiceNode except for getComponentState
+    public Object invokeConnectorMethod(final String methodName, final Map<String, Object> arguments) throws InvocationFailedException {
+        final ConfigurableComponent component = getComponent();
+
+        try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(getExtensionManager(), component.getClass(), getIdentifier())) {
+            final Method implementationMethod = discoverConnectorMethod(component.getClass(), methodName);
+            final MethodArgument[] methodArguments = getConnectorMethodArguments(methodName, implementationMethod, component);
+            final List<Object> argumentValues = new ArrayList<>();
+            for (final MethodArgument methodArgument : methodArguments) {
+                final Object argumentValue = arguments.get(methodArgument.name());
+                if (argumentValue == null && methodArgument.required()) {
+                    throw new IllegalArgumentException("Cannot invoke Connector Method '" + methodName + "' on " + this + " because the required argument '"
+                                                       + methodArgument.name() + "' was not provided");
+                }
+
+                if ( argumentValue != null && !(methodArgument.type().isAssignableFrom(argumentValue.getClass()))) {
+                    throw new IllegalArgumentException("Cannot invoke Connector Method '" + methodName + "' on " + this + " because the argument '"
+                                                       + methodArgument.name() + "' is of type " + argumentValue.getClass().getName() + " defined by " + argumentValue.getClass().getClassLoader()
+                                                       + " but the method expects type " + methodArgument.type().getName() + " defined by " + methodArgument.type().getClassLoader());
+                }
+
+                argumentValues.add(argumentValue);
+            }
+
+            try {
+                implementationMethod.setAccessible(true);
+                return implementationMethod.invoke(component, argumentValues.toArray());
+            } catch (final Exception e) {
+                throw new InvocationFailedException(e);
+            }
+        }
+    }
+
+    private MethodArgument[] getConnectorMethodArguments(final String methodName, final Method implementationMethod, final ConfigurableComponent component) throws InvocationFailedException {
+        if (implementationMethod == null) {
+            throw new InvocationFailedException("No such connector method '" + methodName + "' exists for " + component.getClass().getName());
+        }
+
+        final ConnectorMethod connectorMethodDefinition = implementationMethod.getAnnotation(ConnectorMethod.class);
+        final ComponentState[] componentStates = connectorMethodDefinition.allowedStates();
+        final ComponentState currentState = getComponentState();
+        final boolean validState = Set.of(componentStates).contains(currentState);
+        if (!validState) {
+            throw new IllegalStateException("Cannot invoke Connector Method '" + methodName + "' on " + this + " because Processor is in state " + currentState
+                                            + " but the Connector Method does not allow invocation in this state");
+        }
+
+        final MethodArgument[] methodArguments = connectorMethodDefinition.arguments();
+        return methodArguments;
+    }
+
+    private ComponentState getComponentState() {
+        final ControllerServiceState scheduledState = getState();
+
+        return switch (scheduledState) {
+            case DISABLED -> ComponentState.STOPPED;
+            case DISABLING -> ComponentState.STOPPING;
+            case ENABLING -> ComponentState.STARTING;
+            case ENABLED -> ComponentState.RUNNING;
+        };
     }
 
     @Override

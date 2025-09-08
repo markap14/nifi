@@ -8,6 +8,7 @@ import org.apache.nifi.components.ValidationResult;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 public class SleepingConnector implements Connector {
     private final Duration sleepDuration;
@@ -64,5 +65,15 @@ public class SleepingConnector implements Connector {
         } catch (final InterruptedException e) {
             throw new FlowUpdateException(e);
         }
+    }
+
+    @Override
+    public void onPropertyGroupConfigured(final String groupName) {
+
+    }
+
+    @Override
+    public List<ValidationResult> validatePropertyGroup(final String groupName, final Map<String, String> propertyValues) {
+        return List.of();
     }
 }

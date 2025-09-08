@@ -40,7 +40,7 @@ import org.apache.nifi.parameter.ParameterContext;
 import org.apache.nifi.registry.flow.FlowRegistryClientNode;
 import org.apache.nifi.registry.flow.mapping.ComponentIdLookup;
 import org.apache.nifi.registry.flow.mapping.FlowMappingOptions;
-import org.apache.nifi.registry.flow.mapping.NiFiRegistryFlowMapper;
+import org.apache.nifi.registry.flow.mapping.VersionedComponentFlowMapper;
 import org.apache.nifi.registry.flow.mapping.SensitiveValueEncryptor;
 import org.apache.nifi.registry.flow.mapping.VersionedComponentStateLookup;
 
@@ -53,7 +53,7 @@ public class VersionedDataflowMapper {
     private static final VersionedFlowEncodingVersion ENCODING_VERSION = new VersionedFlowEncodingVersion(2, 0);
 
     private final FlowController flowController;
-    private final NiFiRegistryFlowMapper flowMapper;
+    private final VersionedComponentFlowMapper flowMapper;
     private final ScheduledStateLookup stateLookup;
 
     public VersionedDataflowMapper(final FlowController flowController, final ExtensionManager extensionManager, final SensitiveValueEncryptor encryptor, final ScheduledStateLookup stateLookup) {
@@ -74,7 +74,7 @@ public class VersionedDataflowMapper {
             .mapAssetReferences(true)
             .build();
 
-        flowMapper = new NiFiRegistryFlowMapper(extensionManager, mappingOptions);
+        flowMapper = new VersionedComponentFlowMapper(extensionManager, mappingOptions);
     }
 
     public VersionedDataflow createMapping() {

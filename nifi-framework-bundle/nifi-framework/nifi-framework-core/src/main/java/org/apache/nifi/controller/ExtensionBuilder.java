@@ -26,10 +26,19 @@ import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.ConfigurableComponent;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.connector.Connector;
+import org.apache.nifi.components.connector.ConnectorConfigurationContext;
 import org.apache.nifi.components.connector.ConnectorDetails;
+import org.apache.nifi.components.connector.ConnectorInitializationContext;
 import org.apache.nifi.components.connector.ConnectorNode;
+import org.apache.nifi.components.connector.ConnectorParameterContext;
 import org.apache.nifi.components.connector.GhostConnector;
+import org.apache.nifi.components.connector.SecretsManager;
+import org.apache.nifi.components.connector.StandardConnectorInitializationContext;
 import org.apache.nifi.components.connector.StandardConnectorNode;
+import org.apache.nifi.components.connector.components.ParameterContextFacade;
+import org.apache.nifi.components.connector.components.ProcessGroupFacade;
+import org.apache.nifi.components.connector.facades.standalone.StandaloneParameterContextFacade;
+import org.apache.nifi.components.connector.facades.standalone.StandaloneProcessGroupFacade;
 import org.apache.nifi.components.state.StateManager;
 import org.apache.nifi.components.state.StateManagerProvider;
 import org.apache.nifi.components.validation.ValidationTrigger;
@@ -53,6 +62,7 @@ import org.apache.nifi.controller.service.GhostControllerService;
 import org.apache.nifi.controller.service.StandardControllerServiceInitializationContext;
 import org.apache.nifi.controller.service.StandardControllerServiceInvocationHandler;
 import org.apache.nifi.controller.service.StandardControllerServiceNode;
+import org.apache.nifi.flow.VersionedProcessGroup;
 import org.apache.nifi.flowanalysis.FlowAnalysisRule;
 import org.apache.nifi.flowanalysis.FlowAnalysisRuleInitializationContext;
 import org.apache.nifi.flowanalysis.GhostFlowAnalysisRule;
@@ -64,6 +74,7 @@ import org.apache.nifi.nar.ExtensionManager;
 import org.apache.nifi.nar.NarCloseable;
 import org.apache.nifi.nar.PythonBundle;
 import org.apache.nifi.parameter.GhostParameterProvider;
+import org.apache.nifi.parameter.ParameterContext;
 import org.apache.nifi.parameter.ParameterProvider;
 import org.apache.nifi.parameter.ParameterProviderInitializationContext;
 import org.apache.nifi.parameter.StandardParameterProviderInitializationContext;
@@ -124,6 +135,7 @@ public class ExtensionBuilder {
    private SSLContext systemSslContext;
    private PythonBridge pythonBridge;
    private ProcessGroup managedProcessGroup;
+   private VersionedProcessGroup versionedProcessGroup;
 
    public ExtensionBuilder type(final String type) {
        this.type = type;
@@ -228,8 +240,9 @@ public class ExtensionBuilder {
        return this;
    }
 
-   public ExtensionBuilder managedProcessGroup(final ProcessGroup managedProcessGroup) {
+   public ExtensionBuilder managedProcessGroup(final ProcessGroup managedProcessGroup, final VersionedProcessGroup versionedProcessGroup) {
        this.managedProcessGroup = managedProcessGroup;
+       this.versionedProcessGroup = versionedProcessGroup;
        return this;
    }
 
@@ -463,6 +476,7 @@ public class ExtensionBuilder {
 
        final ComponentLog logger = new SimpleProcessLogger(identifier, connector, new StandardLoggingContext(null));
        final ConnectorDetails connectorDetails = new ConnectorDetails(connector, bundleCoordinate, logger);
+
        final ConnectorNode connectorNode = new StandardConnectorNode(
            identifier,
            extensionManager,
@@ -471,8 +485,39 @@ public class ExtensionBuilder {
            componentType,
            bundleCoordinate
        );
-       
+
+       final ConnectorParameterContext parameterContext = new ConnectorParameterContext(connectorNode);
+       connectorNode.setParameterContext(parameterContext);
+
+       final ConnectorInitializationContext initContext = createConnectorInitializationContext(connectorNode);
+       try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(connectorDetails.getConnector().getClass().getClassLoader())) {
+           connectorDetails.getConnector().initialize(initContext);
+       }
+
        return connectorNode;
+   }
+
+   private ConnectorInitializationContext createConnectorInitializationContext(final ConnectorNode connectorNode) {
+       final org.apache.nifi.flow.Bundle bundle = new org.apache.nifi.flow.Bundle(bundleCoordinate.getGroup(), bundleCoordinate.getId(), bundleCoordinate.getVersion());
+       final String name = type.contains(".") ? StringUtils.substringAfterLast(type, ".") : type;
+       final ParameterContextFacade parameterContextFacade = new StandaloneParameterContextFacade();
+       final ConnectorConfigurationContext configurationContext = null;
+       final SecretsManager secretsManager = null;
+
+       final ProcessGroupFacade processGroupFacade = new StandaloneProcessGroupFacade(managedProcessGroup, versionedProcessGroup,
+           processScheduler, connectorNode.getParameterContext(), serviceProvider);
+
+       return new StandardConnectorInitializationContext.Builder()
+           .identifier(identifier)
+           .name(name)
+           .componentLog(connectorNode.getComponentLog())
+           .configurationContext(configurationContext)
+           .parameterContextFacade(parameterContextFacade)
+           .processGroupFacade(processGroupFacade)
+           .secretsManager(secretsManager)
+           .configuredBundle(bundle)
+           .activeBundle(bundle)
+           .build();
    }
 
    private void requireNonNull(final Object value, final String fieldName) {

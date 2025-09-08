@@ -32,6 +32,9 @@ import org.apache.nifi.components.ConfigurableComponent;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.ValidationContext;
 import org.apache.nifi.components.ValidationResult;
+import org.apache.nifi.components.connector.InvocationFailedException;
+import org.apache.nifi.components.connector.components.ComponentState;
+import org.apache.nifi.components.connector.components.ConnectorMethod;
 import org.apache.nifi.components.resource.ResourceContext;
 import org.apache.nifi.components.resource.ResourceReferenceFactory;
 import org.apache.nifi.components.resource.ResourceReferences;
@@ -49,6 +52,7 @@ import org.apache.nifi.controller.service.ControllerServiceState;
 import org.apache.nifi.flow.ExecutionEngine;
 import org.apache.nifi.flowanalysis.EnforcementPolicy;
 import org.apache.nifi.groups.ProcessGroup;
+import org.apache.nifi.init.ReflectionUtils;
 import org.apache.nifi.nar.ExtensionManager;
 import org.apache.nifi.nar.NarCloseable;
 import org.apache.nifi.parameter.ExpressionLanguageAgnosticParameterParser;
@@ -68,6 +72,7 @@ import org.apache.nifi.validation.RuleViolation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -469,6 +474,22 @@ public abstract class AbstractComponentNode implements ComponentNode {
         }
 
         return results;
+    }
+
+    @Override
+    public ValidationContext createValidationContext(final Map<String, String> propertyValues, final String annotationData,
+                final ParameterContext parameterContext, final boolean validateConnections) {
+
+        final Map<PropertyDescriptor, PropertyConfiguration> descriptorToRawValueMap = new LinkedHashMap<>();
+        for (final Map.Entry<String, String> entry : propertyValues.entrySet()) {
+            final PropertyDescriptor descriptor = getPropertyDescriptor(entry.getKey());
+            final PropertyConfiguration propertyConfiguration = new PropertyConfiguration(entry.getValue(), null, Collections.emptyList(), VariableImpact.NEVER_IMPACTED);
+
+            descriptorToRawValueMap.put(descriptor, propertyConfiguration);
+        }
+
+        return getValidationContextFactory().newValidationContext(descriptorToRawValueMap, annotationData, getProcessGroupIdentifier(), getIdentifier(),
+            parameterContext, validateConnections);
     }
 
     private static Map<PropertyDescriptor, PropertyConfiguration> createDescriptorToConfigMap(final Map<PropertyDescriptor, String> propertyValues) {
@@ -1537,6 +1558,23 @@ public abstract class AbstractComponentNode implements ComponentNode {
                         getIdentifier(), existingCoordinate.getCoordinate(), incomingCoordinate.getCoordinate()));
             }
         }
+    }
+
+
+    protected Method discoverConnectorMethod(final Class<?> componentClass, final String connectorMethodName) {
+        for (final Method method : componentClass.getDeclaredMethods()) {
+            final ConnectorMethod annotation = method.getAnnotation(ConnectorMethod.class);
+            if (annotation != null && annotation.name().equals(connectorMethodName)) {
+                return method;
+            }
+        }
+
+        final Class<?> superClass = componentClass.getSuperclass();
+        if (superClass != null && !Object.class.equals(superClass)) {
+            return discoverConnectorMethod(superClass, connectorMethodName);
+        }
+
+        return null;
     }
 
     protected void setAdditionalResourcesFingerprint(String additionalResourcesFingerprint) {

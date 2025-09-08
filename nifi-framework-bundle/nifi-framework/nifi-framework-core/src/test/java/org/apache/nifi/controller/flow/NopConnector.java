@@ -24,6 +24,7 @@ import org.apache.nifi.components.connector.ConnectorPropertyGroup;
 import org.apache.nifi.components.connector.FlowUpdateException;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * A simple no-op Connector implementation for testing purposes.
@@ -95,6 +96,16 @@ public class NopConnector implements Connector {
             throw new FlowUpdateException("Connector must be initialized before configuration");
         }
         configured = true;
+    }
+
+    @Override
+    public void onPropertyGroupConfigured(final String groupName) {
+
+    }
+
+    @Override
+    public List<ValidationResult> validatePropertyGroup(final String groupName, final Map<String, String> propertyValues) {
+        return List.of();
     }
 
     // Getters for test assertions

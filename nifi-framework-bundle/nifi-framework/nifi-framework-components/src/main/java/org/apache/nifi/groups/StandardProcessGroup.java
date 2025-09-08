@@ -106,7 +106,7 @@ import org.apache.nifi.registry.flow.diff.StandardComparableDataFlow;
 import org.apache.nifi.registry.flow.diff.StandardFlowComparator;
 import org.apache.nifi.registry.flow.mapping.ComponentIdLookup;
 import org.apache.nifi.registry.flow.mapping.FlowMappingOptions;
-import org.apache.nifi.registry.flow.mapping.NiFiRegistryFlowMapper;
+import org.apache.nifi.registry.flow.mapping.VersionedComponentFlowMapper;
 import org.apache.nifi.registry.flow.mapping.VersionedComponentStateLookup;
 import org.apache.nifi.remote.PublicPort;
 import org.apache.nifi.remote.RemoteGroupPort;
@@ -3939,7 +3939,7 @@ public final class StandardProcessGroup implements ProcessGroup {
             // because this allows us to find the Controller Service when doing a Flow Diff.
             ancestorServiceIds = parentGroup.getControllerServices(true).stream()
                 .map(cs -> cs.getVersionedComponentId().orElse(
-                    NiFiRegistryFlowMapper.generateVersionedComponentId(cs.getIdentifier())))
+                    VersionedComponentFlowMapper.generateVersionedComponentId(cs.getIdentifier())))
                 .collect(Collectors.toSet());
         }
 
@@ -3984,7 +3984,7 @@ public final class StandardProcessGroup implements ProcessGroup {
         }
 
         try {
-            final NiFiRegistryFlowMapper mapper = new NiFiRegistryFlowMapper(extensionManager);
+            final VersionedComponentFlowMapper mapper = new VersionedComponentFlowMapper(extensionManager);
             final VersionedProcessGroup versionedGroup = mapper.mapProcessGroup(this, controllerServiceProvider, flowManager, false);
 
             final ComparableDataFlow currentFlow = new StandardComparableDataFlow("Local Flow", versionedGroup);

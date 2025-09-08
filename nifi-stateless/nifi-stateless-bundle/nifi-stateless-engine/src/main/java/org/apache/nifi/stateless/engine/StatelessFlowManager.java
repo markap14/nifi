@@ -444,7 +444,7 @@ public class StatelessFlowManager extends AbstractFlowManager implements FlowMan
     }
 
     @Override
-    public ConnectorNode createConnector(final String type, final String id, final BundleCoordinate coordinate, final ProcessGroup managedRootGroup, final boolean firstTimeAdded, final boolean registerLogObserver) {
+    public ConnectorNode createConnector(final String type, final String id, final BundleCoordinate coordinate, final boolean firstTimeAdded, final boolean registerLogObserver) {
         throw new UnsupportedOperationException();
     }
 

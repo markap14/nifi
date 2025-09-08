@@ -75,6 +75,8 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
 
     ProcessGroup getParentProcessGroup();
 
+    ProcessGroup getManagedProcessGroup();
+
     BundleCoordinate getBundleCoordinate();
 
     /**
@@ -111,4 +113,10 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
     void resumeValidationTrigger();
 
     ComponentLog getComponentLog();
+
+    ConnectorParameterContext getParameterContext();
+
+    void setParameterContext(ConnectorParameterContext parameterContext);
+
+    ConnectorConfigurationContext getConfigurationContext();
 }

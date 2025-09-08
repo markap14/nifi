@@ -32,6 +32,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
@@ -51,6 +53,7 @@ public class StandardConnectorNode implements ConnectorNode {
     private final ConnectorDetails connectorDetails;
     private final String componentType;
     private final BundleCoordinate bundleCoordinate;
+    private final ConnectorConfigurationContext configurationContext;
     private final AtomicReference<String> versionedComponentId = new AtomicReference<>();
     private final AtomicReference<ScheduledState> currentState = new AtomicReference<>(ScheduledState.STOPPED);
     private final AtomicReference<ScheduledState> desiredState = new AtomicReference<>(ScheduledState.STOPPED);
@@ -60,6 +63,7 @@ public class StandardConnectorNode implements ConnectorNode {
     private volatile ConnectorConfiguration configuration;
     private volatile ProcessGroup parentProcessGroup;
     private volatile boolean performValidation = true;
+    private volatile ConnectorParameterContext parameterContext;
 
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final Lock readLock = rwLock.readLock();
@@ -79,6 +83,32 @@ public class StandardConnectorNode implements ConnectorNode {
         this.connectorDetails = connectorDetails;
         this.componentType = componentType;
         this.bundleCoordinate = bundleCoordinate;
+        this.configurationContext = createConfigurationContext();
+    }
+
+    private ConnectorConfigurationContext createConfigurationContext() {
+        return new ConnectorConfigurationContext() {
+            @Override
+            public String getProperty(final String groupName, final String propertyName) {
+                for (final PropertyGroupConfiguration groupConfiguration : configuration.getPropertyGroupConfigurations()) {
+                    if (groupConfiguration.getPropertyGroupName().equals(groupName)) {
+                        for (final PropertySubGroupConfiguration subGroupConfig : groupConfiguration.getSubGroupConfigurations()) {
+                            final Map<String, String> propertyValues = subGroupConfig.getPropertyValues();
+                            if (propertyValues.containsKey(propertyName)) {
+                                return propertyValues.get(propertyName);
+                            }
+                        }
+                    }
+                }
+
+                return null;
+            }
+
+            @Override
+            public String getProperty(final ConnectorPropertyGroup connectorPropertyGroup, final ConnectorPropertyDescriptor connectorPropertyDescriptor) {
+                return getProperty(connectorPropertyGroup.getName(), connectorPropertyDescriptor.getName());
+            }
+        };
     }
 
     @Override
@@ -384,6 +414,11 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
+    public ProcessGroup getManagedProcessGroup() {
+        return managedProcessGroup;
+    }
+
+    @Override
     public BundleCoordinate getBundleCoordinate() {
         return bundleCoordinate;
     }
@@ -414,6 +449,21 @@ public class StandardConnectorNode implements ConnectorNode {
     @Override
     public ComponentLog getComponentLog() {
         return connectorDetails.getComponentLog();
+    }
+
+    @Override
+    public ConnectorParameterContext getParameterContext() {
+        return parameterContext;
+    }
+
+    @Override
+    public void setParameterContext(final ConnectorParameterContext parameterContext) {
+        this.parameterContext = parameterContext;
+    }
+
+    @Override
+    public ConnectorConfigurationContext getConfigurationContext() {
+        return configurationContext;
     }
 
     @Override
@@ -451,5 +501,24 @@ public class StandardConnectorNode implements ConnectorNode {
 
     private void resetValidationState() {
         // TODO: Implement
+    }
+
+    @Override
+    public boolean equals(final Object o) {
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        final StandardConnectorNode that = (StandardConnectorNode) o;
+        return Objects.equals(identifier, that.identifier);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(identifier);
+    }
+
+    @Override
+    public String toString() {
+        return "StandardConnectorNode[id=" + identifier + ", name=" + name + ", state=" + currentState.get() + "]";
     }
 }

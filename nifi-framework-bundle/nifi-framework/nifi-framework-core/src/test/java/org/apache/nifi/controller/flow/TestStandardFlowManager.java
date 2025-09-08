@@ -31,12 +31,11 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
-import javax.net.ssl.SSLContext;
 import java.util.List;
+import javax.net.ssl.SSLContext;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -91,17 +90,17 @@ public class TestStandardFlowManager {
         final String validConnectorId = "test-connector-123";
 
         final NullPointerException typeException = assertThrows(NullPointerException.class, () -> {
-            flowManager.createConnector(null, validConnectorId, bundleCoordinate, managedProcessGroup, true, true);
+            flowManager.createConnector(null, validConnectorId, bundleCoordinate, true, true);
         });
         assertEquals("Connector Type", typeException.getMessage());
 
         final NullPointerException idException = assertThrows(NullPointerException.class, () -> {
-            flowManager.createConnector(validConnectorType, null, bundleCoordinate, managedProcessGroup, true, true);
+            flowManager.createConnector(validConnectorType, null, bundleCoordinate, true, true);
         });
         assertEquals("Connector ID", idException.getMessage());
 
         final NullPointerException bundleException = assertThrows(NullPointerException.class, () -> {
-            flowManager.createConnector(validConnectorType, validConnectorId, null, managedProcessGroup, true, true);
+            flowManager.createConnector(validConnectorType, validConnectorId, null, true, true);
         });
         assertEquals("Bundle Coordinate", bundleException.getMessage());
     }

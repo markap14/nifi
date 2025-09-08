@@ -399,13 +399,12 @@ public interface FlowManager extends ParameterProviderLookup {
      * @param type the fully qualified class name of the connector
      * @param id the unique ID of the connector
      * @param coordinate the bundle coordinate for this connector
-     * @param managedRootGroup the root of the flow that the connector will be responsible for managing
      * @param firstTimeAdded whether or not this is the first time this connector is added to the graph. If {@code true}, will invoke methods
      *                       annotated with the {@link org.apache.nifi.annotation.lifecycle.OnAdded} annotation.
      * @param registerLogObserver whether or not to register a log observer for this connector
      * @return the created connector
      */
-    ConnectorNode createConnector(String type, String id, BundleCoordinate coordinate, ProcessGroup managedRootGroup, boolean firstTimeAdded, boolean registerLogObserver);
+    ConnectorNode createConnector(String type, String id, BundleCoordinate coordinate, boolean firstTimeAdded, boolean registerLogObserver);
 
     void onConnectorAdded(ConnectorNode connector);
 

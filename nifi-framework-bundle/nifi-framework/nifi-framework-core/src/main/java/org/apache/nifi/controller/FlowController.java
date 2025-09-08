@@ -187,7 +187,7 @@ import org.apache.nifi.python.PythonBridge;
 import org.apache.nifi.python.PythonBridgeInitializationContext;
 import org.apache.nifi.python.PythonProcessConfig;
 import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedProcessGroup;
-import org.apache.nifi.registry.flow.mapping.NiFiRegistryFlowMapper;
+import org.apache.nifi.registry.flow.mapping.VersionedComponentFlowMapper;
 import org.apache.nifi.registry.flow.mapping.VersionedComponentStateLookup;
 import org.apache.nifi.remote.HttpRemoteSiteListener;
 import org.apache.nifi.remote.RemoteGroupPort;
@@ -584,7 +584,7 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
         );
 
         controllerServiceProvider = new StandardControllerServiceProvider(processScheduler, bulletinRepository, flowManager, extensionManager);
-        controllerServiceResolver = new StandardControllerServiceResolver(authorizer, flowManager, new NiFiRegistryFlowMapper(extensionManager),
+        controllerServiceResolver = new StandardControllerServiceResolver(authorizer, flowManager, new VersionedComponentFlowMapper(extensionManager),
                 controllerServiceProvider, new StandardControllerServiceApiLookup(extensionManager));
 
         final PythonBridge rawPythonBridge = createPythonBridge(nifiProperties, controllerServiceProvider);
@@ -1167,7 +1167,7 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
             Supplier<VersionedProcessGroup> rootProcessGroupSupplier = () -> {
                 ProcessGroup rootProcessGroup = getFlowManager().getRootGroup();
 
-                NiFiRegistryFlowMapper mapper = FlowAnalysisUtil.createMapper(getExtensionManager());
+                VersionedComponentFlowMapper mapper = FlowAnalysisUtil.createMapper(getExtensionManager());
 
                 InstantiatedVersionedProcessGroup versionedRootProcessGroup = mapper.mapNonVersionedProcessGroup(
                     rootProcessGroup,

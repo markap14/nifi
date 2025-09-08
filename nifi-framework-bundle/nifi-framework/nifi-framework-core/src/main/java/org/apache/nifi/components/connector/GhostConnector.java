@@ -7,6 +7,7 @@ package org.apache.nifi.components.connector;
 import org.apache.nifi.components.ValidationResult;
 
 import java.util.List;
+import java.util.Map;
 
 public class GhostConnector implements  Connector {
     private final String identifier;
@@ -45,12 +46,22 @@ public class GhostConnector implements  Connector {
     }
 
     @Override
-    public ConnectorPropertyGroup getPropertyGroup(final String s) {
+    public ConnectorPropertyGroup getPropertyGroup(final String groupName) {
         return null;
     }
 
     @Override
     public void onConfigured() {
+    }
+
+    @Override
+    public void onPropertyGroupConfigured(final String groupName) {
+
+    }
+
+    @Override
+    public List<ValidationResult> validatePropertyGroup(final String groupName, final Map<String, String> propertyValues) {
+        return List.of();
     }
 
     @Override
