@@ -501,7 +501,6 @@ public class ExtensionBuilder {
        final org.apache.nifi.flow.Bundle bundle = new org.apache.nifi.flow.Bundle(bundleCoordinate.getGroup(), bundleCoordinate.getId(), bundleCoordinate.getVersion());
        final String name = type.contains(".") ? StringUtils.substringAfterLast(type, ".") : type;
        final ParameterContextFacade parameterContextFacade = new StandaloneParameterContextFacade();
-       final ConnectorConfigurationContext configurationContext = null;
        final SecretsManager secretsManager = null;
 
        final ProcessGroupFacade processGroupFacade = new StandaloneProcessGroupFacade(managedProcessGroup, versionedProcessGroup,
@@ -511,7 +510,7 @@ public class ExtensionBuilder {
            .identifier(identifier)
            .name(name)
            .componentLog(connectorNode.getComponentLog())
-           .configurationContext(configurationContext)
+           .configurationContext(connectorNode.getConfigurationContext())
            .parameterContextFacade(parameterContextFacade)
            .processGroupFacade(processGroupFacade)
            .secretsManager(secretsManager)

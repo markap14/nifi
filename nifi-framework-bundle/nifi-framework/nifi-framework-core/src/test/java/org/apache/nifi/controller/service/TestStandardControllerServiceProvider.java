@@ -29,6 +29,7 @@ import org.apache.nifi.components.validation.ValidationTrigger;
 import org.apache.nifi.controller.ExtensionBuilder;
 import org.apache.nifi.controller.FlowController;
 import org.apache.nifi.controller.LoggableComponent;
+import org.apache.nifi.controller.MockStateManagerProvider;
 import org.apache.nifi.controller.NodeTypeProvider;
 import org.apache.nifi.controller.ProcessScheduler;
 import org.apache.nifi.controller.ProcessorNode;
@@ -82,41 +83,7 @@ import static org.mockito.ArgumentMatchers.any;
 
 public class TestStandardControllerServiceProvider {
 
-    private static StateManagerProvider stateManagerProvider = new StateManagerProvider() {
-        @Override
-        public StateManager getStateManager(final String componentId, final boolean dropStateKeySupported) {
-            final StateManager stateManager = Mockito.mock(StateManager.class);
-            final StateMap emptyStateMap = new StandardStateMap(Collections.emptyMap(), Optional.empty());
-            try {
-                Mockito.when(stateManager.getState(any(Scope.class))).thenReturn(emptyStateMap);
-            } catch (IOException e) {
-                throw new AssertionError();
-            }
-
-            return stateManager;
-        }
-
-        @Override
-        public void shutdown() {
-        }
-
-        @Override
-        public void enableClusterProvider() {
-        }
-
-        @Override
-        public void disableClusterProvider() {
-        }
-
-        @Override
-        public void onComponentRemoved(final String componentId) {
-        }
-
-        @Override
-        public boolean isClusterProviderEnabled() {
-            return false;
-        }
-    };
+    private static final StateManagerProvider stateManagerProvider = new MockStateManagerProvider();
 
     private static NiFiProperties niFiProperties;
     private static ExtensionDiscoveringManager extensionManager;
