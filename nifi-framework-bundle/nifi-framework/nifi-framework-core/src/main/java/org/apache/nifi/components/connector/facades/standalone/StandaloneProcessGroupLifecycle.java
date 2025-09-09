@@ -40,7 +40,7 @@ public class StandaloneProcessGroupLifecycle implements ProcessGroupLifecycle {
     }
 
     @Override
-    public Future<Void> enableControllerServices() {
+    public CompletableFuture<Void> enableControllerServices() {
         final Set<ControllerServiceNode> controllerServices = processGroup.findAllControllerServices();
         if (controllerServices.isEmpty()) {
             return CompletableFuture.completedFuture(null);
@@ -50,7 +50,7 @@ public class StandaloneProcessGroupLifecycle implements ProcessGroupLifecycle {
     }
 
     @Override
-    public Future<Void> disableControllerServices() {
+    public CompletableFuture<Void> disableControllerServices() {
         final Set<ControllerServiceNode> controllerServices = processGroup.findAllControllerServices();
         if (controllerServices.isEmpty()) {
             return CompletableFuture.completedFuture(null);
@@ -60,15 +60,18 @@ public class StandaloneProcessGroupLifecycle implements ProcessGroupLifecycle {
     }
 
     @Override
-    public void startProcessors() {
+    public CompletableFuture<Void> startProcessors() {
         final Collection<ProcessorNode> processors = processGroup.getProcessors();
+        final List<CompletableFuture<Void>> startFutures = new ArrayList<>();
         for (final ProcessorNode processor : processors) {
-            processGroup.startProcessor(processor, true);
+            startFutures.add(processGroup.startProcessor(processor, true));
         }
+
+        return CompletableFuture.allOf(startFutures.toArray(new CompletableFuture[0]));
     }
 
     @Override
-    public Future<Void> stopProcessors() {
+    public CompletableFuture<Void> stopProcessors() {
         final Collection<ProcessorNode> processors = processGroup.getProcessors();
         final List<CompletableFuture<Void>> stopFutures = new ArrayList<>();
         for (final ProcessorNode processor : processors) {

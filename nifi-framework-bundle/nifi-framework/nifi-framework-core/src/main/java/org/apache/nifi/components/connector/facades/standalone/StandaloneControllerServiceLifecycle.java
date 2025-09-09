@@ -22,6 +22,7 @@ import org.apache.nifi.components.connector.components.ControllerServiceState;
 import org.apache.nifi.controller.ProcessScheduler;
 import org.apache.nifi.controller.service.ControllerServiceNode;
 
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
 public class StandaloneControllerServiceLifecycle implements ControllerServiceLifecycle {
@@ -44,12 +45,12 @@ public class StandaloneControllerServiceLifecycle implements ControllerServiceLi
     }
 
     @Override
-    public Future<Void> enable() {
+    public CompletableFuture<Void> enable() {
         return processScheduler.enableControllerService(controllerServiceNode);
     }
 
     @Override
-    public Future<Void> disable() {
+    public CompletableFuture<Void> disable() {
         return processScheduler.disableControllerService(controllerServiceNode);
     }
 }

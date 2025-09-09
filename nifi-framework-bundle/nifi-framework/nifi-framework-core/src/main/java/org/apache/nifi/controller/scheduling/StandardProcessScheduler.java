@@ -894,13 +894,13 @@ public final class StandardProcessScheduler implements ProcessScheduler {
     }
 
     @Override
-    public Future<Void> startConnector(final ConnectorNode connectorNode) {
+    public CompletableFuture<Void> startConnector(final ConnectorNode connectorNode) {
         // TODO: Implement
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public Future<Void> stopConnector(final ConnectorNode connectorNode) {
+    public CompletableFuture<Void> stopConnector(final ConnectorNode connectorNode) {
         // TODO: Implement
         throw new UnsupportedOperationException();
     }

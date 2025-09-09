@@ -257,7 +257,7 @@ public interface ProcessGroup extends ComponentAuthorizable, Positionable, Versi
      * @throws IllegalStateException if the processor is not valid, or is
      *             already running
      */
-    Future<Void> startProcessor(ProcessorNode processor, boolean failIfStopping);
+    CompletableFuture<Void> startProcessor(ProcessorNode processor, boolean failIfStopping);
 
     /**
      * Runs the given Processor once and the stops it by calling the provided callback.

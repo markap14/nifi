@@ -1722,7 +1722,7 @@ public final class StandardProcessGroup implements ProcessGroup {
     }
 
     @Override
-    public Future<Void> startProcessor(final ProcessorNode processor, final boolean failIfStopping) {
+    public CompletableFuture<Void> startProcessor(final ProcessorNode processor, final boolean failIfStopping) {
         readLock.lock();
         try {
             if (getProcessor(processor.getIdentifier()) == null) {

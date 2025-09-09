@@ -24,6 +24,7 @@ import org.apache.nifi.controller.ProcessorNode;
 import org.apache.nifi.controller.ScheduledState;
 import org.apache.nifi.lifecycle.ProcessorStopLifecycleMethods;
 
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
 public class StandaloneProcessorLifecycle implements ProcessorLifecycle {
@@ -58,12 +59,12 @@ public class StandaloneProcessorLifecycle implements ProcessorLifecycle {
     }
 
     @Override
-    public Future<Void> stop() {
+    public CompletableFuture<Void> stop() {
         return processScheduler.stopProcessor(processorNode, ProcessorStopLifecycleMethods.TRIGGER_ALL);
     }
 
     @Override
-    public Future<Void> start() {
+    public CompletableFuture<Void> start() {
         return processScheduler.startProcessor(processorNode, false);
     }
 

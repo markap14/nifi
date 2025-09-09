@@ -129,7 +129,7 @@ public class StatelessProcessScheduler implements ProcessScheduler {
     }
 
     @Override
-    public Future<Void> startProcessor(final ProcessorNode procNode, final boolean failIfStopping) {
+    public CompletableFuture<Void> startProcessor(final ProcessorNode procNode, final boolean failIfStopping) {
         final CompletableFuture<Void> future = new CompletableFuture<>();
         final SchedulingAgentCallback callback = new SchedulingAgentCallback() {
             @Override
@@ -336,12 +336,12 @@ public class StatelessProcessScheduler implements ProcessScheduler {
     }
 
     @Override
-    public Future<Void> startConnector(final ConnectorNode connectorNode) {
+    public CompletableFuture<Void> startConnector(final ConnectorNode connectorNode) {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public Future<Void> stopConnector(final ConnectorNode connectorNode) {
+    public CompletableFuture<Void> stopConnector(final ConnectorNode connectorNode) {
         throw new UnsupportedOperationException();
     }
 

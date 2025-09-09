@@ -61,7 +61,7 @@ public interface ProcessScheduler {
      *            will throw an {@link IllegalStateException}.
      * @throws IllegalStateException if the Processor is disabled
      */
-    Future<Void> startProcessor(ProcessorNode procNode, boolean failIfStopping);
+    CompletableFuture<Void> startProcessor(ProcessorNode procNode, boolean failIfStopping);
 
     /**
      * Starts scheduling the given processor to run once, after invoking all methods
@@ -265,9 +265,9 @@ public interface ProcessScheduler {
      */
     CompletableFuture<Void> disableControllerService(ControllerServiceNode service);
 
-    Future<Void> startConnector(ConnectorNode connectorNode);
+    CompletableFuture<Void> startConnector(ConnectorNode connectorNode);
 
-    Future<Void> stopConnector(ConnectorNode connectorNode);
+    CompletableFuture<Void> stopConnector(ConnectorNode connectorNode);
 
     void enableConnector(ConnectorNode connectorNode);
 
