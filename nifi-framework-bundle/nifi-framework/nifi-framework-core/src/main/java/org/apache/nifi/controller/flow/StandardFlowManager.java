@@ -29,7 +29,6 @@ import org.apache.nifi.components.ConfigurableComponent;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.connector.Connector;
 import org.apache.nifi.components.connector.ConnectorNode;
-import org.apache.nifi.components.connector.components.ProcessGroupFacade;
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.connectable.ConnectableType;
 import org.apache.nifi.connectable.Connection;
@@ -81,7 +80,6 @@ import org.apache.nifi.logging.ProcessorLogObserver;
 import org.apache.nifi.logging.ReportingTaskLogObserver;
 import org.apache.nifi.nar.ExtensionManager;
 import org.apache.nifi.nar.NarCloseable;
-import org.apache.nifi.parameter.ParameterContext;
 import org.apache.nifi.parameter.ParameterContextManager;
 import org.apache.nifi.parameter.ParameterProvider;
 import org.apache.nifi.processor.Processor;
@@ -136,7 +134,6 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
     private final FlowController flowController;
 
     private final ConcurrentMap<String, ControllerServiceNode> rootControllerServices = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String, ConnectorNode> allConnectors = new ConcurrentHashMap<>();
 
     private final boolean isSiteToSiteSecure;
 
@@ -774,10 +771,11 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
                 }
                 throw new ComponentLifeCycleException("Failed to invoke @OnAdded methods of " + connectorNode.getConnector(), e);
             }
-        }
 
-        // Register the connector with the flow manager
-        onConnectorAdded(connectorNode);
+            flowController.getConnectorRepository().addConnector(connectorNode);
+        } else {
+            flowController.getConnectorRepository().restoreConnector(connectorNode);
+        }
 
         return connectorNode;
     }
@@ -805,27 +803,10 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
         return versionedGroup;
     }
 
-    @Override
-    public void onConnectorAdded(final ConnectorNode connector) {
-        if (connector == null) {
-            return;
-        }
-        allConnectors.put(connector.getIdentifier(), connector);
-    }
-
-    @Override
-    public void onConnectorRemoved(final ConnectorNode connector) {
-        if (connector == null) {
-            return;
-        }
-
-        final String identifier = connector.getIdentifier();
-        allConnectors.remove(identifier);
-    }
 
     @Override
     public List<ConnectorNode> getAllConnectors() {
-        return new ArrayList<>(allConnectors.values());
+        return flowController.getConnectorRepository().getConnectors();
     }
 
     @Override

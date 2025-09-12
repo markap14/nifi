@@ -449,15 +449,6 @@ public class StatelessFlowManager extends AbstractFlowManager implements FlowMan
     }
 
     @Override
-    public void onConnectorAdded(final ConnectorNode connector) {
-        throw new UnsupportedOperationException("Connectors are not supported in Stateless NiFi");
-    }
-
-    @Override
-    public void onConnectorRemoved(final ConnectorNode connector) {
-    }
-
-    @Override
     public List<ConnectorNode> getAllConnectors() {
         return List.of();
     }

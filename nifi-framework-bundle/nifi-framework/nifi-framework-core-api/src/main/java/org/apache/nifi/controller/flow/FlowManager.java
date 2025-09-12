@@ -406,10 +406,6 @@ public interface FlowManager extends ParameterProviderLookup {
      */
     ConnectorNode createConnector(String type, String id, BundleCoordinate coordinate, boolean firstTimeAdded, boolean registerLogObserver);
 
-    void onConnectorAdded(ConnectorNode connector);
-
-    void onConnectorRemoved(ConnectorNode connector);
-
     List<ConnectorNode> getAllConnectors();
 
     /**

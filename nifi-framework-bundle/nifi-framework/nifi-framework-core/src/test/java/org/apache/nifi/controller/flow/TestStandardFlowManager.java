@@ -22,8 +22,7 @@ import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.connector.Connector;
 import org.apache.nifi.components.connector.ConnectorInitializationContext;
 import org.apache.nifi.components.connector.ConnectorNode;
-import org.apache.nifi.components.state.StateManager;
-import org.apache.nifi.components.state.StateManagerProvider;
+import org.apache.nifi.components.connector.ConnectorRepository;
 import org.apache.nifi.controller.FlowController;
 import org.apache.nifi.controller.GarbageCollectionLog;
 import org.apache.nifi.controller.MockStateManagerProvider;
@@ -32,7 +31,6 @@ import org.apache.nifi.controller.repository.FlowFileRepository;
 import org.apache.nifi.controller.scheduling.LifecycleStateManager;
 import org.apache.nifi.controller.scheduling.RepositoryContextFactory;
 import org.apache.nifi.controller.service.ControllerServiceProvider;
-import org.apache.nifi.nar.ExtensionDefinition;
 import org.apache.nifi.nar.ExtensionManager;
 import org.apache.nifi.nar.StandardExtensionDiscoveringManager;
 import org.apache.nifi.nar.SystemBundle;
@@ -43,22 +41,17 @@ import org.apache.nifi.util.NiFiProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import java.util.Collections;
-import java.util.List;
-import java.util.Set;
 import javax.net.ssl.SSLContext;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -102,6 +95,7 @@ public class TestStandardFlowManager {
         flowManager = new StandardFlowManager(nifiProperties, sslContext, flowController, flowFileEventRepository, parameterContextManager);
     }
 
+
     @Test
     public void testCreateConnectorParameterValidation() {
         final String validConnectorType = NopConnector.class.getName();
@@ -115,90 +109,6 @@ public class TestStandardFlowManager {
 
         final NullPointerException bundleException = assertThrows(NullPointerException.class, () -> flowManager.createConnector(validConnectorType, validConnectorId, null, true, true));
         assertEquals("Bundle Coordinate", bundleException.getMessage());
-    }
-
-    @Test
-    public void testConnectorRegistryOperations() {
-        final ConnectorNode connector1 = createMockConnectorNode("connector-1");
-        final ConnectorNode connector2 = createMockConnectorNode("connector-2");
-
-        flowManager.onConnectorAdded(connector1);
-        assertEquals(1, flowManager.getAllConnectors().size());
-        assertTrue(flowManager.getAllConnectors().contains(connector1));
-
-        flowManager.onConnectorAdded(connector2);
-        assertEquals(2, flowManager.getAllConnectors().size());
-        assertTrue(flowManager.getAllConnectors().contains(connector1));
-        assertTrue(flowManager.getAllConnectors().contains(connector2));
-
-        flowManager.onConnectorRemoved(connector1);
-        assertEquals(1, flowManager.getAllConnectors().size());
-        assertFalse(flowManager.getAllConnectors().contains(connector1));
-        assertTrue(flowManager.getAllConnectors().contains(connector2));
-
-        flowManager.onConnectorRemoved(connector2);
-        assertEquals(0, flowManager.getAllConnectors().size());
-    }
-
-    @Test
-    public void testConnectorRegistryNullHandling() {
-        flowManager.onConnectorAdded(null);
-        assertEquals(0, flowManager.getAllConnectors().size());
-
-        flowManager.onConnectorRemoved(null);
-        assertEquals(0, flowManager.getAllConnectors().size());
-    }
-
-    @Test
-    public void testGetAllConnectorsReturnsNewListInstances() {
-        final ConnectorNode connector1 = createMockConnectorNode("connector-1");
-        final ConnectorNode connector2 = createMockConnectorNode("connector-2");
-
-        flowManager.onConnectorAdded(connector1);
-        flowManager.onConnectorAdded(connector2);
-
-        final List<ConnectorNode> allConnectors1 = flowManager.getAllConnectors();
-        final List<ConnectorNode> allConnectors2 = flowManager.getAllConnectors();
-
-        assertEquals(2, allConnectors1.size());
-        assertEquals(2, allConnectors2.size());
-        assertEquals(allConnectors1, allConnectors2);
-        assertNotSame(allConnectors1, allConnectors2); // Different object references
-    }
-
-    @Test
-    public void testConnectorRegistryComplexOperations() {
-        final ConnectorNode connector1 = createMockConnectorNode("connector-1");
-        final ConnectorNode connector2 = createMockConnectorNode("connector-2");
-        final ConnectorNode connector3 = createMockConnectorNode("connector-3");
-        
-        flowManager.onConnectorAdded(connector1);
-        flowManager.onConnectorAdded(connector2);
-        flowManager.onConnectorAdded(connector3);
-        assertEquals(3, flowManager.getAllConnectors().size());
-
-        flowManager.onConnectorRemoved(connector2);
-        final List<ConnectorNode> connectorsAfterRemoval = flowManager.getAllConnectors();
-        assertEquals(2, connectorsAfterRemoval.size());
-        assertTrue(connectorsAfterRemoval.contains(connector1));
-        assertFalse(connectorsAfterRemoval.contains(connector2));
-        assertTrue(connectorsAfterRemoval.contains(connector3));
-
-        flowManager.onConnectorRemoved(connector1);
-        flowManager.onConnectorRemoved(connector3);
-        assertEquals(0, flowManager.getAllConnectors().size());
-    }
-
-    @Test
-    public void testConnectorIdUniquenessHandling() {
-        final ConnectorNode connector1 = createMockConnectorNode("same-connector-id");
-        final ConnectorNode connector2 = createMockConnectorNode("same-connector-id");
-
-        flowManager.onConnectorAdded(connector1);
-        assertEquals(1, flowManager.getAllConnectors().size());
-
-        flowManager.onConnectorAdded(connector2);
-        assertEquals(List.of(connector2), flowManager.getAllConnectors());
     }
 
     @Test
@@ -225,6 +135,9 @@ public class TestStandardFlowManager {
         when(flowController.getLifecycleStateManager()).thenReturn(mock(LifecycleStateManager.class));
         when(flowController.getFlowFileEventRepository()).thenReturn(mock(FlowFileEventRepository.class));
 
+        final ConnectorRepository connectorRepository = mock(ConnectorRepository.class);
+        when(flowController.getConnectorRepository()).thenReturn(connectorRepository);
+
         // Create the connector
         final String type = NopConnector.class.getName();
         final String id = "connector-init-test";
@@ -247,9 +160,5 @@ public class TestStandardFlowManager {
         assertEquals(NopConnector.class.getSimpleName(), initializationContext.getName());
     }
 
-    private ConnectorNode createMockConnectorNode(final String identifier) {
-        final ConnectorNode connectorNode = mock(ConnectorNode.class);
-        when(connectorNode.getIdentifier()).thenReturn(identifier);
-        return connectorNode;
-    }
+    
 }

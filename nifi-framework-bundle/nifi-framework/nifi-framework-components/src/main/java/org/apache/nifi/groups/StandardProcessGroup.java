@@ -28,7 +28,6 @@ import org.apache.nifi.authorization.resource.Authorizable;
 import org.apache.nifi.authorization.resource.ResourceFactory;
 import org.apache.nifi.authorization.resource.ResourceType;
 import org.apache.nifi.components.PropertyDescriptor;
-import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.components.state.StateManager;
 import org.apache.nifi.components.state.StateManagerProvider;
 import org.apache.nifi.components.validation.ValidationStatus;
@@ -188,7 +187,6 @@ public final class StandardProcessGroup implements ProcessGroup {
     private final Map<String, ProcessorNode> processors = new HashMap<>();
     private final Map<String, Funnel> funnels = new HashMap<>();
     private final Map<String, ControllerServiceNode> controllerServices = new ConcurrentHashMap<>();
-    private final Map<String, ConnectorNode> connectors = new HashMap<>();
     private final PropertyEncryptor encryptor;
     private final VersionControlFields versionControlFields = new VersionControlFields();
     private volatile ParameterContext parameterContext;
@@ -3031,12 +3029,6 @@ public final class StandardProcessGroup implements ProcessGroup {
         }
     }
 
-    private void verifyCanStart(final ConnectorNode connector) {
-        if (connector.getCurrentState() == ScheduledState.STOPPED) {
-            connector.verifyCanStart();
-        }
-    }
-
     @Override
     public void verifyCanStart() {
         readLock.lock();
@@ -4557,192 +4549,6 @@ public final class StandardProcessGroup implements ProcessGroup {
     @Override
     public String getStatelessFlowTimeout() {
         return statelessFlowTimeout;
-    }
-
-    @Override
-    public void addConnector(final ConnectorNode connector) {
-        writeLock.lock();
-        try {
-            final String connectorId = Objects.requireNonNull(connector).getIdentifier();
-            if (connectors.containsKey(connectorId)) {
-                throw new IllegalStateException("A connector is already registered to this ProcessGroup with ID " + connectorId);
-            }
-
-            ensureUniqueVersionControlId(connector, ProcessGroup::getProcessors);
-            connector.setParentProcessGroup(this);
-
-            connectors.put(connectorId, connector);
-            flowManager.onConnectorAdded(connector);
-
-            onComponentModified();
-
-            LOG.info("{} added to {}", connector, this);
-        } finally {
-            writeLock.unlock();
-        }
-    }
-
-    @Override
-    public void removeConnector(final ConnectorNode connector) {
-        final String id = Objects.requireNonNull(connector).getIdentifier();
-
-        writeLock.lock();
-        try {
-            if (!connectors.containsKey(id)) {
-                throw new IllegalStateException(id + " is not a member of this Process Group");
-            }
-
-            connector.verifyCanDelete();
-
-            try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, connector.getConnector().getClass(), connector.getIdentifier())) {
-                ReflectionUtils.quietlyInvokeMethodsWithAnnotation(OnRemoved.class, connector.getConnector());
-            } catch (final Exception e) {
-                throw new ComponentLifeCycleException("Failed to invoke 'OnRemoved' methods of Connector " + connector, e);
-            }
-
-            connectors.remove(id);
-            onComponentModified();
-
-            scheduler.onConnectorRemoved(connector);
-            scheduler.submitFrameworkTask(() -> stateManagerProvider.onComponentRemoved(id));
-
-            try {
-                LogRepositoryFactory.removeRepository(connector.getIdentifier());
-                extensionManager.removeInstanceClassLoader(id);
-            } catch (Throwable ignored) {
-            }
-
-            LOG.info("{} removed from flow", connector);
-        } finally {
-            writeLock.unlock();
-        }
-    }
-
-    @Override
-    public ConnectorNode getConnector(final String id) {
-        readLock.lock();
-        try {
-            return connectors.get(Objects.requireNonNull(id));
-        } finally {
-            readLock.unlock();
-        }
-    }
-
-    @Override
-    public List<ConnectorNode> findAllConnectors() {
-        final List<ConnectorNode> allConnectors = new ArrayList<>(connectors.values());
-        for (final ProcessGroup child : getProcessGroups()) {
-            allConnectors.addAll(child.findAllConnectors());
-        }
-        return allConnectors;
-    }
-
-    @Override
-    public ConnectorNode findConnector(final String id) {
-        readLock.lock();
-        try {
-            final ConnectorNode local = connectors.get(Objects.requireNonNull(id));
-            if (local != null) {
-                return local;
-            }
-
-            for (final ProcessGroup child : processGroups.values()) {
-                final ConnectorNode found = child.findConnector(id);
-                if (found != null) {
-                    return found;
-                }
-            }
-
-            return null;
-        } finally {
-            readLock.unlock();
-        }
-    }
-
-    @Override
-    public void startConnector(final ConnectorNode connector) {
-        readLock.lock();
-        try {
-            if (getConnector(Objects.requireNonNull(connector).getIdentifier()) == null) {
-                throw new IllegalStateException("Connector is not a member of this Process Group");
-            }
-
-            verifyCanStart(connector);
-
-            final ScheduledState state = connector.getCurrentState();
-            if (state == ScheduledState.DISABLED) {
-                throw new IllegalStateException("Connector " + connector + " is disabled");
-            } else if (state == ScheduledState.RUNNING) {
-                return;
-            }
-
-            scheduler.startConnector(connector);
-        } finally {
-            readLock.unlock();
-        }
-    }
-
-    @Override
-    public void stopConnector(final ConnectorNode connector) {
-        readLock.lock();
-        try {
-            final String id = Objects.requireNonNull(connector).getIdentifier();
-            if (getConnector(id) == null) {
-                throw new IllegalStateException("Connector is not a member of this Process Group");
-            }
-
-            final ScheduledState state = connector.getCurrentState();
-            if (state == ScheduledState.DISABLED || state == ScheduledState.STOPPED) {
-                return;
-            }
-
-            scheduler.stopConnector(connector);
-        } finally {
-            readLock.unlock();
-        }
-    }
-
-    @Override
-    public void enableConnector(final ConnectorNode connector) {
-        readLock.lock();
-        try {
-            final String id = Objects.requireNonNull(connector).getIdentifier();
-            if (getConnector(id) == null) {
-                throw new IllegalStateException("No Connector with ID " + id + " belongs to " + this);
-            }
-
-            final ScheduledState state = connector.getCurrentState();
-            if (state != ScheduledState.DISABLED) {
-                return;
-            }
-
-            scheduler.enableConnector(connector);
-        } finally {
-            readLock.unlock();
-        }
-    }
-
-    @Override
-    public void disableConnector(final ConnectorNode connector) {
-        readLock.lock();
-        try {
-            final String id = Objects.requireNonNull(connector).getIdentifier();
-            if (getConnector(id) == null) {
-                throw new IllegalStateException("No Connector with ID " + id + " belongs to " + this);
-            }
-
-            final ScheduledState state = connector.getCurrentState();
-            if (state == ScheduledState.DISABLED) {
-                return;
-            }
-            if (state != ScheduledState.STOPPED) {
-                throw new IllegalStateException("Connector " + connector + " has a state of " + state + " and must be stopped before it can be disabled");
-            }
-
-            scheduler.disableConnector(connector);
-        } finally {
-            readLock.unlock();
-        }
     }
 
     @Override
