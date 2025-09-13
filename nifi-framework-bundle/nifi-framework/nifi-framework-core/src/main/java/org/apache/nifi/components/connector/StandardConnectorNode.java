@@ -22,7 +22,6 @@ import org.apache.nifi.authorization.resource.Authorizable;
 import org.apache.nifi.authorization.resource.ResourceFactory;
 import org.apache.nifi.authorization.resource.ResourceType;
 import org.apache.nifi.bundle.BundleCoordinate;
-import org.apache.nifi.controller.ScheduledState;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.nar.ExtensionManager;
@@ -31,6 +30,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -55,8 +55,8 @@ public class StandardConnectorNode implements ConnectorNode {
     private final BundleCoordinate bundleCoordinate;
     private final ConnectorConfigurationContext configurationContext;
     private final AtomicReference<String> versionedComponentId = new AtomicReference<>();
-    private final AtomicReference<ScheduledState> currentState = new AtomicReference<>(ScheduledState.STOPPED);
-    private final AtomicReference<ScheduledState> desiredState = new AtomicReference<>(ScheduledState.STOPPED);
+    private final AtomicReference<ConnectorState> currentState = new AtomicReference<>(ConnectorState.STOPPED);
+    private final AtomicReference<ConnectorState> desiredState = new AtomicReference<>(ConnectorState.STOPPED);
 
     private volatile String name;
     private volatile String description;
@@ -138,24 +138,131 @@ public class StandardConnectorNode implements ConnectorNode {
 
     @Override
     public void setConfiguration(final ConnectorConfiguration configuration) {
+        // Ensure that the Connector is fully stopped before allowing configuration to be updated
+        final ConnectorState currentState = getCurrentState();
+        if (currentState != ConnectorState.STOPPED && currentState != ConnectorState.DISABLED) {
+            throw new IllegalStateException("Cannot update the configuration of " + this + " because its state is currently " + currentState + "; it must be fully stopped before the configuration can be changed.");
+        }
+
+        // Desired State must also be STOPPED or DISABLED to ensure that the Connector is not transitioning to a new state during the configuration change
+        final ConnectorState desiredState = getDesiredState();
+        if (desiredState != ConnectorState.STOPPED && desiredState != ConnectorState.DISABLED) {
+            throw new IllegalStateException("Cannot update the configuration of " + this + " because its desired state is currently " + desiredState + "; it must be fully stopped before the configuration can be changed.");
+        }
+
+        // Determine which property groups will change as a result of applying this new configuration
+        final List<String> changedPropertyGroups = determineChangedPropertyGroups(this.configuration, configuration);
+
         this.configuration = configuration;
+
+        final Connector connector = connectorDetails.getConnector();
+        try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, connector.getClass(), getIdentifier())) {
+
+            for (final String changedGroup : changedPropertyGroups) {
+                logger.debug("Notifying {} of configuration change for property group {}", this, changedGroup);
+
+                try {
+                    connector.onPropertyGroupConfigured(changedGroup);
+                } catch (final Throwable t) {
+                    logger.error("{} Failed to notify Connector that property group {} was configured", this, changedGroup, t);
+                }
+            }
+
+            connectorDetails.getConnector().onConfigured();
+        } catch (final Exception e) {
+            logger.error("Failed to invoke onConfigured for {}", this, e);
+            throw new RuntimeException("Failed to invoke onConfigured for " + this, e);
+        }
+    }
+
+    private List<String> determineChangedPropertyGroups(final ConnectorConfiguration oldConfig, final ConnectorConfiguration newConfig) {
+        final List<String> changedPropertyGroups = new ArrayList<>();
+
+        if (oldConfig == null) {
+            // If there was no previous configuration, all property groups are considered changed
+            for (final PropertyGroupConfiguration groupConfiguration : newConfig.getPropertyGroupConfigurations()) {
+                changedPropertyGroups.add(groupConfiguration.getPropertyGroupName());
+            }
+            return changedPropertyGroups;
+        }
+
+        final Map<String, List<PropertySubGroupConfiguration>> oldSubGroupsByGroup = mapPropertyGroups(oldConfig);
+        final Map<String, List<PropertySubGroupConfiguration>> newSubGroupsByGroup = mapPropertyGroups(newConfig);
+        for (final Map.Entry<String, List<PropertySubGroupConfiguration>> entry : oldSubGroupsByGroup.entrySet()) {
+            final String groupName = entry.getKey();
+            final List<PropertySubGroupConfiguration> oldSubGroups = entry.getValue();
+            final List<PropertySubGroupConfiguration> newSubGroups = newSubGroupsByGroup.get(groupName);
+            if (newSubGroups == null) {
+                // Entire group has been removed
+                changedPropertyGroups.add(groupName);
+                continue;
+            }
+
+            final Map<String, Map<String, String>> oldPropertiesBySubGroup = new HashMap<>();
+            for (final PropertySubGroupConfiguration subGroupConfig : oldSubGroups) {
+                oldPropertiesBySubGroup.putAll(mapPropertySubGroups(subGroupConfig));
+            }
+
+            final Map<String, Map<String, String>> newPropertiesBySubGroup = new HashMap<>();
+            for (final PropertySubGroupConfiguration subGroupConfig : newSubGroups) {
+                newPropertiesBySubGroup.putAll(mapPropertySubGroups(subGroupConfig));
+            }
+
+            for (final Map.Entry<String, Map<String, String>> subGroupEntry : oldPropertiesBySubGroup.entrySet()) {
+                final String subGroupName = subGroupEntry.getKey();
+                final Map<String, String> oldProperties = subGroupEntry.getValue();
+                final Map<String, String> newProperties = newPropertiesBySubGroup.get(subGroupName);
+                if (newProperties == null) {
+                    // Entire sub-group has been removed
+                    changedPropertyGroups.add(groupName);
+                    break;
+                }
+
+                for (final Map.Entry<String, String> propertyEntry : oldProperties.entrySet()) {
+                    final String propertyName = propertyEntry.getKey();
+                    final String oldValue = propertyEntry.getValue();
+                    final String newValue = newProperties.get(propertyName);
+                    if (!Objects.equals(oldValue, newValue)) {
+                        changedPropertyGroups.add(groupName);
+                        break;
+                    }
+                }
+            }
+        }
+
+        return changedPropertyGroups;
+    }
+
+    private Map<String, List<PropertySubGroupConfiguration>> mapPropertyGroups(final ConnectorConfiguration config) {
+        final Map<String, List<PropertySubGroupConfiguration>> groups = new HashMap<>();
+        for (final PropertyGroupConfiguration groupConfig : config.getPropertyGroupConfigurations()) {
+            groups.put(groupConfig.getPropertyGroupName(), groupConfig.getSubGroupConfigurations());
+        }
+
+        return groups;
+    }
+
+    private Map<String, Map<String, String>> mapPropertySubGroups(final PropertySubGroupConfiguration subGroupConfiguration) {
+        final Map<String, Map<String, String>> propertyMap = new HashMap<>();
+        propertyMap.put(subGroupConfiguration.getSubGroupName(), subGroupConfiguration.getPropertyValues());
+        return propertyMap;
     }
 
     @Override
-    public ScheduledState getCurrentState() {
+    public ConnectorState getCurrentState() {
         return currentState.get();
     }
 
     @Override
-    public ScheduledState getDesiredState() {
+    public ConnectorState getDesiredState() {
         return desiredState.get();
     }
 
     @Override
     public void enable() {
-        setDesiredState(ScheduledState.STOPPED);
-        if (trySetCurrentState(ScheduledState.DISABLED, ScheduledState.STOPPED)) {
-            logger.info("Transitioned current state for {} to {}", this, ScheduledState.STOPPED);
+        setDesiredState(ConnectorState.STOPPED);
+        if (trySetCurrentState(ConnectorState.DISABLED, ConnectorState.STOPPED)) {
+            logger.info("Transitioned current state for {} to {}", this, ConnectorState.STOPPED);
             return;
         }
 
@@ -164,29 +271,21 @@ public class StandardConnectorNode implements ConnectorNode {
 
     @Override
     public void disable() {
-        setDesiredState(ScheduledState.DISABLED);
-        if (trySetCurrentState(ScheduledState.STOPPED, ScheduledState.DISABLED)) {
-            logger.info("Transitioned current state for {} to {}", this, ScheduledState.DISABLED);
+        setDesiredState(ConnectorState.DISABLED);
+        if (trySetCurrentState(ConnectorState.STOPPED, ConnectorState.DISABLED)) {
+            logger.info("Transitioned current state for {} to {}", this, ConnectorState.DISABLED);
             return;
         }
 
         logger.info("{} disabled but not currently STOPPED so set desired state to DISABLED; current state is {}", this, currentState.get());
     }
 
-    private void setDesiredState(final ScheduledState desiredState) {
-        if (desiredState == ScheduledState.RUN_ONCE) {
-            throw new IllegalArgumentException("Connectors cannot be scheduled to Run Once");
-        }
-
+    private void setDesiredState(final ConnectorState desiredState) {
         this.desiredState.set(desiredState);
         logger.info("Desired State for {} set to {}", this, desiredState);
     }
 
-    private boolean trySetCurrentState(final ScheduledState expected, final ScheduledState newState) {
-        if (newState == ScheduledState.RUN_ONCE) {
-            throw new IllegalArgumentException("Connectors cannot be scheduled to Run Once");
-        }
-
+    private boolean trySetCurrentState(final ConnectorState expected, final ConnectorState newState) {
         final boolean changed = currentState.compareAndSet(expected, newState);
         if (changed) {
             logger.info("Transitioned current state for {} from {} to {}", this, expected, newState);
@@ -197,17 +296,17 @@ public class StandardConnectorNode implements ConnectorNode {
         return changed;
     }
 
-    private void setCurrentState(final ScheduledState newState) {
-        final ScheduledState oldState = currentState.getAndSet(newState);
+    private void setCurrentState(final ConnectorState newState) {
+        final ConnectorState oldState = currentState.getAndSet(newState);
         logger.info("Transitioned current state for {} from {} to {}", this, oldState, newState);
 
         // Complete appropriate futures when state changes
         completeFuturesForStateTransition(newState);
     }
 
-    private void completeFuturesForStateTransition(final ScheduledState newState) {
+    private void completeFuturesForStateTransition(final ConnectorState newState) {
         // Complete start futures when transitioning to RUNNING
-        if (newState == ScheduledState.RUNNING) {
+        if (newState == ConnectorState.RUNNING) {
             writeLock.lock();
             try {
                 final List<CompletableFuture<Void>> futuresToComplete = new ArrayList<>(pendingStartFutures);
@@ -226,7 +325,7 @@ public class StandardConnectorNode implements ConnectorNode {
         }
         
         // Complete stop futures when transitioning to STOPPED or DISABLED
-        if (newState == ScheduledState.STOPPED) {
+        if (newState == ConnectorState.STOPPED) {
             writeLock.lock();
             try {
                 final List<CompletableFuture<Void>> futuresToComplete = new ArrayList<>(pendingStopFutures);
@@ -258,11 +357,11 @@ public class StandardConnectorNode implements ConnectorNode {
         // Ensure that we're in the proper state to start and update the desired and current states
         writeLock.lock();
         try {
-            setDesiredState(ScheduledState.RUNNING);
+            setDesiredState(ConnectorState.RUNNING);
 
             boolean stateUpdated = false;
             while (!stateUpdated) {
-                final ScheduledState currentState = getCurrentState();
+                final ConnectorState currentState = getCurrentState();
 
                 switch (currentState) {
                     case STARTING -> {
@@ -280,7 +379,7 @@ public class StandardConnectorNode implements ConnectorNode {
                         return;
                     }
                     case STOPPED -> {
-                        stateUpdated = trySetCurrentState(currentState, ScheduledState.STARTING);
+                        stateUpdated = trySetCurrentState(currentState, ConnectorState.STARTING);
                         scheduler.schedule(() -> startComponent(scheduler, startCompleteFuture), 0, TimeUnit.SECONDS);
                     }
                 }
@@ -302,24 +401,24 @@ public class StandardConnectorNode implements ConnectorNode {
         // Ensure that we're in the proper state to stop and update the desired and current states
         writeLock.lock();
         try {
-            setDesiredState(ScheduledState.STOPPED);
+            setDesiredState(ConnectorState.STOPPED);
 
             boolean stateUpdated = false;
             while (!stateUpdated) {
-                final ScheduledState currentState = getCurrentState();
-                if (currentState == ScheduledState.STOPPED || currentState == ScheduledState.DISABLED) {
+                final ConnectorState currentState = getCurrentState();
+                if (currentState == ConnectorState.STOPPED || currentState == ConnectorState.DISABLED) {
                     logger.debug("{} is already {}; will not attempt to stop", this, currentState);
                     stopCompleteFuture.complete(null);
                     return stopCompleteFuture;
                 }
                 
-                if (currentState == ScheduledState.STOPPING) {
+                if (currentState == ConnectorState.STOPPING) {
                     logger.debug("{} is already stopping; adding future to pending stop futures", this);
                     pendingStopFutures.add(stopCompleteFuture);
                     return stopCompleteFuture;
                 }
 
-                stateUpdated = trySetCurrentState(currentState, ScheduledState.STOPPING);
+                stateUpdated = trySetCurrentState(currentState, ConnectorState.STOPPING);
             }
         } finally {
             writeLock.unlock();
@@ -339,10 +438,10 @@ public class StandardConnectorNode implements ConnectorNode {
             return;
         }
 
-        setCurrentState(ScheduledState.STOPPED);
+        setCurrentState(ConnectorState.STOPPED);
         stopCompleteFuture.complete(null);
 
-        final ScheduledState desiredState = getDesiredState();
+        final ConnectorState desiredState = getDesiredState();
         switch (desiredState) {
             case DISABLED -> {
                 logger.info("{} was requested to be DISABLED while it was stopping so will now transition to DISABLED", this);
@@ -356,8 +455,8 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     private void startComponent(final ScheduledExecutorService scheduler, final CompletableFuture<Void> startCompleteFuture) {
-        final ScheduledState desiredState = getDesiredState();
-        if (desiredState != ScheduledState.RUNNING) {
+        final ConnectorState desiredState = getDesiredState();
+        if (desiredState != ConnectorState.RUNNING) {
             logger.info("Will not start {} because the desired state is no longer RUNNING but is now {}", this, desiredState);
             return;
         }
@@ -370,15 +469,15 @@ public class StandardConnectorNode implements ConnectorNode {
             return;
         }
 
-        setCurrentState(ScheduledState.RUNNING);
+        setCurrentState(ConnectorState.RUNNING);
         startCompleteFuture.complete(null);
     }
 
 
     @Override
     public void verifyCanDelete() {
-        final ScheduledState currentState = getCurrentState();
-        if (currentState == ScheduledState.STOPPED || currentState == ScheduledState.DISABLED) {
+        final ConnectorState currentState = getCurrentState();
+        if (currentState == ConnectorState.STOPPED || currentState == ConnectorState.DISABLED) {
             return;
         }
 
@@ -387,8 +486,8 @@ public class StandardConnectorNode implements ConnectorNode {
 
     @Override
     public void verifyCanStart() {
-        final ScheduledState currentState = getCurrentState();
-        if (currentState == ScheduledState.DISABLED) {
+        final ConnectorState currentState = getCurrentState();
+        if (currentState == ConnectorState.DISABLED) {
             throw new IllegalStateException("Cannot start " + this + " because its state is currently " + currentState + "; it must be fully stopped before it can be started.");
         }
     }

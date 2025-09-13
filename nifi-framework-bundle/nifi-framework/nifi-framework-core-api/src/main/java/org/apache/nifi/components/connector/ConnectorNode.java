@@ -21,7 +21,6 @@ import org.apache.nifi.authorization.resource.ComponentAuthorizable;
 import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.VersionedComponent;
 import org.apache.nifi.components.validation.ValidationStatus;
-import org.apache.nifi.controller.ScheduledState;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 
@@ -42,9 +41,9 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
 
     void setConfiguration(ConnectorConfiguration configuration);
 
-    ScheduledState getCurrentState();
+    ConnectorState getCurrentState();
 
-    ScheduledState getDesiredState();
+    ConnectorState getDesiredState();
 
     void enable();
 
