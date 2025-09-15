@@ -188,6 +188,8 @@ public class StandardConnectorNode implements ConnectorNode {
 
         final Map<String, List<PropertySubGroupConfiguration>> oldSubGroupsByGroup = mapPropertyGroups(oldConfig);
         final Map<String, List<PropertySubGroupConfiguration>> newSubGroupsByGroup = mapPropertyGroups(newConfig);
+        
+        // Check for changes in existing groups and removed groups
         for (final Map.Entry<String, List<PropertySubGroupConfiguration>> entry : oldSubGroupsByGroup.entrySet()) {
             final String groupName = entry.getKey();
             final List<PropertySubGroupConfiguration> oldSubGroups = entry.getValue();
@@ -227,6 +229,13 @@ public class StandardConnectorNode implements ConnectorNode {
                         break;
                     }
                 }
+            }
+        }
+        
+        // Check for newly added groups
+        for (final String newGroupName : newSubGroupsByGroup.keySet()) {
+            if (!oldSubGroupsByGroup.containsKey(newGroupName)) {
+                changedPropertyGroups.add(newGroupName);
             }
         }
 

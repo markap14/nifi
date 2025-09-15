@@ -17,7 +17,7 @@
 
 package org.apache.nifi.components.connector;
 
-import org.apache.nifi.bundle.BundleCoordinate;
+import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.nar.ExtensionManager;
@@ -29,20 +29,23 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.time.Duration;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestStandardConnectorNode {
 
-    private StandardConnectorNode connectorNode;
     private ScheduledExecutorService scheduler;
 
     @Mock
@@ -51,38 +54,20 @@ public class TestStandardConnectorNode {
     @Mock
     private ProcessGroup managedProcessGroup;
     
-    @Mock
-    private BundleCoordinate bundleCoordinate;
 
     @BeforeEach
     public void setUp() {
         MockitoAnnotations.openMocks(this);
-
         scheduler = new ScheduledThreadPoolExecutor(4);
-
-        final SleepingConnector sleepingConnector = new SleepingConnector();
-        connectorNode = new StandardConnectorNode(
-            "test-connector-id",
-            extensionManager,
-            managedProcessGroup,
-            createConnectorDetails(sleepingConnector),
-            "TestConnector",
-            bundleCoordinate
-        );
-    }
-
-    private ConnectorDetails createConnectorDetails(final Connector connector) {
-        final ComponentLog componentLog = new MockComponentLog("TestConnector", connector);
-        return new ConnectorDetails(connector, bundleCoordinate, componentLog);
     }
 
     @Test
     public void testStartFromStoppedState() throws Exception {
+        final StandardConnectorNode connectorNode = createConnectorNode();
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
         
         final Future<Void> startFuture = connectorNode.start(scheduler);
         
-        // Wait for start to complete
         startFuture.get(5, TimeUnit.SECONDS);
         
         assertEquals(ConnectorState.RUNNING, connectorNode.getCurrentState());
@@ -93,12 +78,11 @@ public class TestStandardConnectorNode {
 
     @Test
     public void testStopFromRunningState() throws Exception {
-        // First start the connector
+        final StandardConnectorNode connectorNode = createConnectorNode();
         final Future<Void> startFuture = connectorNode.start(scheduler);
         startFuture.get(5, TimeUnit.SECONDS);
         assertEquals(ConnectorState.RUNNING, connectorNode.getCurrentState());
         
-        // Now stop it
         final Future<Void> stopFuture = connectorNode.stop(scheduler);
         stopFuture.get(5, TimeUnit.SECONDS);
         
@@ -110,6 +94,7 @@ public class TestStandardConnectorNode {
 
     @Test
     public void testCannotStartFromDisabledState() {
+        final StandardConnectorNode connectorNode = createConnectorNode();
         connectorNode.disable();
         assertEquals(ConnectorState.DISABLED, connectorNode.getCurrentState());
         
@@ -118,18 +103,18 @@ public class TestStandardConnectorNode {
 
     @Test
     public void testCannotTransitionFromDisabledToRunning() {
+        final StandardConnectorNode connectorNode = createConnectorNode();
         connectorNode.disable();
         assertEquals(ConnectorState.DISABLED, connectorNode.getCurrentState());
         
-        // Verify that starting throws an exception
         assertThrows(IllegalStateException.class, () -> connectorNode.start(scheduler));
         
-        // State should remain disabled
         assertEquals(ConnectorState.DISABLED, connectorNode.getCurrentState());
     }
 
     @Test
     public void testEnableFromDisabledState() {
+        final StandardConnectorNode connectorNode = createConnectorNode();
         connectorNode.disable();
         assertEquals(ConnectorState.DISABLED, connectorNode.getCurrentState());
         
@@ -140,6 +125,7 @@ public class TestStandardConnectorNode {
 
     @Test
     public void testDisableFromStoppedState() {
+        final StandardConnectorNode connectorNode = createConnectorNode();
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
         
         connectorNode.disable();
@@ -149,9 +135,9 @@ public class TestStandardConnectorNode {
 
     @Test
     public void testStartFutureCompletedOnlyWhenRunning() throws Exception {
+        final StandardConnectorNode connectorNode = createConnectorNode();
         final Future<Void> startFuture = connectorNode.start(scheduler);
         
-        // Future should complete when connector reaches RUNNING state
         startFuture.get(5, TimeUnit.SECONDS);
         assertEquals(ConnectorState.RUNNING, connectorNode.getCurrentState());
         assertTrue(startFuture.isDone());
@@ -159,11 +145,10 @@ public class TestStandardConnectorNode {
 
     @Test
     public void testStopFutureCompletedOnlyWhenStopped() throws Exception {
-        // Start first
+        final StandardConnectorNode connectorNode = createConnectorNode();
         connectorNode.start(scheduler).get(5, TimeUnit.SECONDS);
         assertEquals(ConnectorState.RUNNING, connectorNode.getCurrentState());
         
-        // Then stop
         final Future<Void> stopFuture = connectorNode.stop(scheduler);
         stopFuture.get(5, TimeUnit.SECONDS);
         
@@ -174,15 +159,14 @@ public class TestStandardConnectorNode {
     @Test
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     public void testMultipleStartCallsReturnCompletedFutures() throws Exception {
+        final StandardConnectorNode connectorNode = createConnectorNode();
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
         
         final Future<Void> startFuture1 = connectorNode.start(scheduler);
         
-        // Wait a bit then call start again while first is in progress
         Thread.sleep(50);
         final Future<Void> startFuture2 = connectorNode.start(scheduler);
         
-        // Both futures should complete
         startFuture1.get(5, TimeUnit.SECONDS);
         startFuture2.get(5, TimeUnit.SECONDS);
         
@@ -193,53 +177,55 @@ public class TestStandardConnectorNode {
 
     @Test
     public void testVerifyCanDeleteWhenStopped() {
+        final StandardConnectorNode connectorNode = createConnectorNode();
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
-        assertDoesNotThrow(() -> connectorNode.verifyCanDelete());
+        connectorNode.verifyCanDelete();
     }
 
     @Test
     public void testVerifyCanDeleteWhenDisabled() {
+        final StandardConnectorNode connectorNode = createConnectorNode();
         connectorNode.disable();
         assertEquals(ConnectorState.DISABLED, connectorNode.getCurrentState());
-        assertDoesNotThrow(() -> connectorNode.verifyCanDelete());
+        connectorNode.verifyCanDelete();
     }
 
     @Test
     public void testCannotDeleteWhenRunning() throws Exception {
+        final StandardConnectorNode connectorNode = createConnectorNode();
         connectorNode.start(scheduler).get(5, TimeUnit.SECONDS);
         assertEquals(ConnectorState.RUNNING, connectorNode.getCurrentState());
         
-        assertThrows(IllegalStateException.class, () -> connectorNode.verifyCanDelete());
+        assertThrows(IllegalStateException.class, connectorNode::verifyCanDelete);
     }
 
     @Test
     public void testVerifyCanStartWhenStopped() {
+        final StandardConnectorNode connectorNode = createConnectorNode();
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
-        assertDoesNotThrow(() -> connectorNode.verifyCanStart());
+        connectorNode.verifyCanStart();
     }
 
     @Test
     public void testStartAlreadyRunningReturnsImmediately() throws Exception {
-        // Start the connector first
+        final StandardConnectorNode connectorNode = createConnectorNode();
         connectorNode.start(scheduler).get(5, TimeUnit.SECONDS);
         assertEquals(ConnectorState.RUNNING, connectorNode.getCurrentState());
         
-        // Starting again should return immediately
         final Future<Void> startFuture = connectorNode.start(scheduler);
         assertTrue(startFuture.isDone());
 
-        // Should complete very quickly since it's already running
         assertEquals(ConnectorState.RUNNING, connectorNode.getCurrentState());
     }
 
     @Test
     public void testStopAlreadyStoppedReturnsImmediately() {
+        final StandardConnectorNode connectorNode = createConnectorNode();
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
         
         final Future<Void> stopFuture = connectorNode.stop(scheduler);
         assertTrue(stopFuture.isDone());
 
-        // Should complete very quickly since it's already stopped
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
     }
 
@@ -253,7 +239,7 @@ public class TestStandardConnectorNode {
             managedProcessGroup,
             createConnectorDetails(slowConnector),
             "SlowConnector",
-            bundleCoordinate
+            null
         );
         
         // Start the slow connector
@@ -287,7 +273,7 @@ public class TestStandardConnectorNode {
             managedProcessGroup,
             createConnectorDetails(slowConnector),
             "SlowStartingConnector",
-            bundleCoordinate
+            null
         );
         
         // Start the connector - this will take time
@@ -301,6 +287,278 @@ public class TestStandardConnectorNode {
         // Wait for start to complete
         startFuture.get(5, TimeUnit.SECONDS);
         assertEquals(ConnectorState.RUNNING, slowNode.getCurrentState());
+    }
+
+    @Test
+    public void testSetConfigurationWhenStopped() {
+        final StandardConnectorNode connectorNode = createConnectorNode();
+        assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
+        assertEquals(ConnectorState.STOPPED, connectorNode.getDesiredState());
+        
+        final ConnectorConfiguration newConfiguration = createTestConfiguration();
+        
+        connectorNode.setConfiguration(newConfiguration);
+        assertEquals(newConfiguration, connectorNode.getConfiguration());
+    }
+
+    @Test
+    public void testSetConfigurationWhenDisabled() {
+        final StandardConnectorNode connectorNode = createConnectorNode();
+        connectorNode.disable();
+        assertEquals(ConnectorState.DISABLED, connectorNode.getCurrentState());
+        assertEquals(ConnectorState.DISABLED, connectorNode.getDesiredState());
+        
+        final ConnectorConfiguration newConfiguration = createTestConfiguration();
+        
+        connectorNode.setConfiguration(newConfiguration);
+        assertEquals(newConfiguration, connectorNode.getConfiguration());
+    }
+
+    @Test
+    public void testCannotSetConfigurationWhenRunning() throws Exception {
+        final StandardConnectorNode connectorNode = createConnectorNode();
+        connectorNode.start(scheduler).get(5, TimeUnit.SECONDS);
+        assertEquals(ConnectorState.RUNNING, connectorNode.getCurrentState());
+        
+        final ConnectorConfiguration newConfiguration = createTestConfiguration();
+        
+        final IllegalStateException exception = assertThrows(IllegalStateException.class, 
+            () -> connectorNode.setConfiguration(newConfiguration));
+        assertTrue(exception.getMessage().contains("state is currently RUNNING"));
+    }
+
+    @Test
+    public void testCannotSetConfigurationWhenStarting() throws Exception {
+        final SleepingConnector slowConnector = new SleepingConnector(Duration.ofMillis(300));
+        final StandardConnectorNode slowNode = new StandardConnectorNode(
+            "slow-starting-connector-id",
+            extensionManager,
+            managedProcessGroup,
+            createConnectorDetails(slowConnector),
+            "SlowStartingConnector",
+            null
+        );
+        
+        final Future<Void> startFuture = slowNode.start(scheduler);
+        assertEquals(ConnectorState.STARTING, slowNode.getCurrentState());
+        
+        final ConnectorConfiguration newConfig = createTestConfiguration();
+        
+        final IllegalStateException exception = assertThrows(IllegalStateException.class, 
+            () -> slowNode.setConfiguration(newConfig));
+        assertTrue(exception.getMessage().contains("state is currently STARTING"));
+        
+        startFuture.get(5, TimeUnit.SECONDS);
+    }
+
+    @Test
+    public void testCannotSetConfigurationWhenStopping() throws Exception {
+        final SleepingConnector slowConnector = new SleepingConnector(Duration.ofMillis(300));
+        final StandardConnectorNode slowNode = new StandardConnectorNode(
+            "slow-stopping-connector-id",
+            extensionManager,
+            managedProcessGroup,
+            createConnectorDetails(slowConnector),
+            "SlowStoppingConnector",
+            null
+        );
+        
+        slowNode.start(scheduler).get(5, TimeUnit.SECONDS);
+        final Future<Void> stopFuture = slowNode.stop(scheduler);
+        assertEquals(ConnectorState.STOPPING, slowNode.getCurrentState());
+        
+        final ConnectorConfiguration newConfig = createTestConfiguration();
+        
+        final IllegalStateException exception = assertThrows(IllegalStateException.class, 
+            () -> slowNode.setConfiguration(newConfig));
+        assertTrue(exception.getMessage().contains("state is currently STOPPING"));
+        
+        stopFuture.get(5, TimeUnit.SECONDS);
+    }
+
+    @Test
+    public void testSetConfigurationWithNullOldConfiguration() {
+        final StandardConnectorNode connectorNode = createConnectorNode();
+        assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
+        
+        assertNull(connectorNode.getConfiguration());
+        
+        final ConnectorConfiguration newConfiguration = createTestConfiguration();
+        
+        connectorNode.setConfiguration(newConfiguration);
+        assertEquals(newConfiguration, connectorNode.getConfiguration());
+    }
+
+    @Test
+    public void testSetConfigurationWithPropertyChanges() {
+        final StandardConnectorNode connectorNode = createConnectorNode();
+        assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
+        
+        final ConnectorConfiguration initialConfiguration = createTestConfiguration("group1", "prop1", "value1");
+        connectorNode.setConfiguration(initialConfiguration);
+        
+        final ConnectorConfiguration newConfiguration = createTestConfiguration("group1", "prop1", "value2");
+        
+        connectorNode.setConfiguration(newConfiguration);
+        assertEquals(newConfiguration, connectorNode.getConfiguration());
+    }
+
+    @Test
+    public void testSetConfigurationWithNewPropertyGroup() {
+        final StandardConnectorNode connectorNode = createConnectorNode();
+        assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
+        
+        final ConnectorConfiguration initialConfiguration = createTestConfiguration("group1", "prop1", "value1");
+        connectorNode.setConfiguration(initialConfiguration);
+        
+        final ConnectorConfiguration newConfiguration = createTestConfigurationWithMultipleGroups();
+        
+        connectorNode.setConfiguration(newConfiguration);
+        assertEquals(newConfiguration, connectorNode.getConfiguration());
+    }
+
+    @Test
+    public void testSetConfigurationWithRemovedPropertyGroup() {
+        final StandardConnectorNode connectorNode = createConnectorNode();
+        assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
+        
+        final ConnectorConfiguration initialConfiguration = createTestConfigurationWithMultipleGroups();
+        connectorNode.setConfiguration(initialConfiguration);
+        
+        final ConnectorConfiguration newConfiguration = createTestConfiguration("group1", "prop1", "value1");
+        
+        connectorNode.setConfiguration(newConfiguration);
+        assertEquals(newConfiguration, connectorNode.getConfiguration());
+    }
+
+    @Test
+    public void testSetConfigurationCallsOnConfigured() {
+        final TrackingConnector trackingConnector = new TrackingConnector();
+        final StandardConnectorNode connectorNode = createConnectorNode(trackingConnector);
+        assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
+        
+        final ConnectorConfiguration newConfiguration = createTestConfiguration();
+        
+        connectorNode.setConfiguration(newConfiguration);
+        
+        assertTrue(trackingConnector.wasOnConfiguredCalled());
+    }
+
+    @Test
+    public void testSetConfigurationCallsOnPropertyGroupConfiguredForChangedGroups() {
+        final TrackingConnector trackingConnector = new TrackingConnector();
+        final StandardConnectorNode connectorNode = createConnectorNode(trackingConnector);
+        assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
+        
+        final ConnectorConfiguration initialConfiguration = createTestConfiguration("group1", "prop1", "value1");
+        connectorNode.setConfiguration(initialConfiguration);
+        trackingConnector.reset();
+        
+        final ConnectorConfiguration newConfiguration = createTestConfiguration("group1", "prop1", "value2");
+        connectorNode.setConfiguration(newConfiguration);
+        
+        assertTrue(trackingConnector.wasOnPropertyGroupConfiguredCalled("group1"));
+        assertTrue(trackingConnector.wasOnConfiguredCalled());
+    }
+
+    private StandardConnectorNode createConnectorNode() {
+        final SleepingConnector sleepingConnector = new SleepingConnector();
+        return new StandardConnectorNode("test-connector-id", extensionManager, managedProcessGroup, createConnectorDetails(sleepingConnector), "TestConnector", null);
+    }
+
+    private StandardConnectorNode createConnectorNode(final Connector connector) {
+        return new StandardConnectorNode("test-connector-id", extensionManager, managedProcessGroup, createConnectorDetails(connector), "TestConnector", null);
+    }
+
+    private ConnectorDetails createConnectorDetails(final Connector connector) {
+        final ComponentLog componentLog = new MockComponentLog("TestConnector", connector);
+        return new ConnectorDetails(connector, null, componentLog);
+    }
+
+    private ConnectorConfiguration createTestConfiguration() {
+        return createTestConfiguration("testGroup", "testProperty", "testValue");
+    }
+
+    private ConnectorConfiguration createTestConfiguration(final String groupName, final String propertyName, final String propertyValue) {
+        final Map<String, String> properties = Map.of(propertyName, propertyValue);
+        final PropertySubGroupConfiguration subGroupConfiguration = new PropertySubGroupConfiguration("subGroup1", properties);
+        final PropertyGroupConfiguration groupConfiguration = new PropertyGroupConfiguration(groupName, List.of(subGroupConfiguration));
+        return new ConnectorConfiguration(List.of(groupConfiguration));
+    }
+
+    private ConnectorConfiguration createTestConfigurationWithMultipleGroups() {
+        final Map<String, String> firstGroupProperties = Map.of("prop1", "value1");
+        final PropertySubGroupConfiguration firstSubGroupConfiguration = new PropertySubGroupConfiguration("subGroup1", firstGroupProperties);
+        final PropertyGroupConfiguration firstGroupConfiguration = new PropertyGroupConfiguration("group1", List.of(firstSubGroupConfiguration));
+        
+        final Map<String, String> secondGroupProperties = Map.of("prop2", "value2");
+        final PropertySubGroupConfiguration secondSubGroupConfiguration = new PropertySubGroupConfiguration("subGroup2", secondGroupProperties);
+        final PropertyGroupConfiguration secondGroupConfiguration = new PropertyGroupConfiguration("group2", List.of(secondSubGroupConfiguration));
+        
+        return new ConnectorConfiguration(List.of(firstGroupConfiguration, secondGroupConfiguration));
+    }
+
+    /**
+     * Test connector that tracks method calls for verification
+     */
+    private static class TrackingConnector implements Connector {
+        private boolean onConfiguredCalled = false;
+        private final Set<String> onPropertyGroupConfiguredCalls = new HashSet<>();
+
+        @Override
+        public void initialize(final ConnectorInitializationContext connectorInitializationContext) {
+        }
+
+        @Override
+        public void start() {
+        }
+
+        @Override
+        public void stop() {
+        }
+
+        @Override
+        public List<org.apache.nifi.components.ValidationResult> validate() {
+            return List.of();
+        }
+
+        @Override
+        public List<String> getPropertyGroupNames() {
+            return List.of();
+        }
+
+        @Override
+        public ConnectorPropertyGroup getPropertyGroup(final String s) {
+            return null;
+        }
+
+        @Override
+        public void onConfigured() {
+            onConfiguredCalled = true;
+        }
+
+        @Override
+        public void onPropertyGroupConfigured(final String groupName) {
+            onPropertyGroupConfiguredCalls.add(groupName);
+        }
+
+        @Override
+        public List<ValidationResult> validatePropertyGroup(final String groupName, final Map<String, String> propertyValues) {
+            return List.of();
+        }
+
+        public boolean wasOnConfiguredCalled() {
+            return onConfiguredCalled;
+        }
+
+        public boolean wasOnPropertyGroupConfiguredCalled(final String groupName) {
+            return onPropertyGroupConfiguredCalls.contains(groupName);
+        }
+
+        public void reset() {
+            onConfiguredCalled = false;
+            onPropertyGroupConfiguredCalls.clear();
+        }
     }
 
 }
