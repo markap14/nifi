@@ -20,13 +20,25 @@ package org.apache.nifi.components.connector;
 import org.apache.nifi.components.connector.components.ParameterContextFacade;
 import org.apache.nifi.components.connector.components.ProcessGroupFacade;
 import org.apache.nifi.flow.Bundle;
+import org.apache.nifi.flow.VersionedExternalFlow;
+import org.apache.nifi.flow.VersionedExternalFlowMetadata;
+import org.apache.nifi.flow.VersionedParameter;
+import org.apache.nifi.flow.VersionedParameterContext;
 import org.apache.nifi.flow.VersionedProcessGroup;
+import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
+
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class StandardConnectorInitializationContext implements ConnectorInitializationContext {
     private final String identifier;
     private final String name;
     private final ComponentLog componentLog;
+    private final ProcessGroup managedProcessGroup;
     private final ProcessGroupFacade processGroupFacade;
     private final SecretsManager secretsManager;
     private final ConnectorConfigurationContext connectorConfigurationContext;
@@ -38,6 +50,7 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
         this.identifier = builder.identifier;
         this.name = builder.name;
         this.componentLog = builder.componentLog;
+        this.managedProcessGroup = builder.managedProcessGroup;
         this.processGroupFacade = builder.processGroupFacade;
         this.secretsManager = builder.secretsManager;
         this.connectorConfigurationContext = builder.connectorConfigurationContext;
@@ -83,7 +96,43 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
 
     @Override
     public void updateFlow(final VersionedProcessGroup versionedProcessGroup, final FlowDrain flowDrain) {
-        // TODO: Implement flow update logic
+        final VersionedExternalFlow versionedExternalFlow = createVersionedExternalFlow(versionedProcessGroup);
+        managedProcessGroup.verifyCanUpdate(versionedExternalFlow, true, false);
+        managedProcessGroup.updateFlow(versionedExternalFlow, managedProcessGroup.getIdentifier(), false, true, true);
+    }
+
+    private VersionedExternalFlow createVersionedExternalFlow(final VersionedProcessGroup versionedProcessGroup) {
+        final VersionedExternalFlow versionedExternalFlow = new VersionedExternalFlow();
+        versionedExternalFlow.setFlowContents(versionedProcessGroup);
+        versionedExternalFlow.setExternalControllerServices(Collections.emptyMap());
+        versionedExternalFlow.setParameterProviders(Collections.emptyMap());
+
+        final VersionedExternalFlowMetadata metadata = new VersionedExternalFlowMetadata();
+        versionedExternalFlow.setMetadata(metadata);
+        metadata.setFlowName(versionedProcessGroup.getName());
+        metadata.setTimestamp(System.currentTimeMillis());
+        metadata.setVersion("Unversioned");
+
+        final Set<VersionedParameter> versionedParameters = new HashSet<>();
+        for (final String parameterName : getParameterContext().getDefinedParameterNames()) {
+            final String parameterValue = parameterContextFacade.getValue(parameterName);
+            final VersionedParameter parameter = new VersionedParameter();
+            parameter.setName(parameterName);
+            parameter.setValue(parameterValue);
+            parameter.setSensitive(parameterContextFacade.isSensitive(parameterName));
+            versionedParameters.add(parameter);
+        }
+
+        final VersionedParameterContext versionedParameterContext = new VersionedParameterContext();
+        versionedParameterContext.setInheritedParameterContexts(List.of());
+        versionedParameterContext.setDescription("Implicit Parameter Context for Connector");
+        versionedParameterContext.setName("implicit-parameter-context");
+        versionedParameterContext.setIdentifier("implicit-parameter-context");
+        versionedParameterContext.setParameters(versionedParameters);
+        final Map<String, VersionedParameterContext> parameterContextMap = Map.of("implicit-parameter-context", versionedParameterContext);
+        versionedExternalFlow.setParameterContexts(parameterContextMap);
+
+        return versionedExternalFlow;
     }
 
     @Override
@@ -100,6 +149,7 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
         private String identifier;
         private String name;
         private ComponentLog componentLog;
+        private ProcessGroup managedProcessGroup;
         private ProcessGroupFacade processGroupFacade;
         private SecretsManager secretsManager;
         private ConnectorConfigurationContext connectorConfigurationContext;
@@ -119,6 +169,11 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
 
         public Builder componentLog(final ComponentLog componentLog) {
             this.componentLog = componentLog;
+            return this;
+        }
+
+        public Builder managedProcessGroup(final ProcessGroup managedProcessGroup) {
+            this.managedProcessGroup = managedProcessGroup;
             return this;
         }
 

@@ -21,17 +21,28 @@ import org.apache.nifi.components.connector.components.ParameterContextFacade;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Set;
 
 // TODO: Implement
 public class StandaloneParameterContextFacade implements ParameterContextFacade {
     @Override
-    public String setValue(final String parameterName, final String parameterValue) {
+    public String setValue(final String parameterName, final String parameterValue, final boolean sensitive) {
         return "";
     }
 
     @Override
     public String getValue(final String parameterName) {
         return "";
+    }
+
+    @Override
+    public Set<String> getDefinedParameterNames() {
+        return Set.of();
+    }
+
+    @Override
+    public boolean isSensitive(final String s) {
+        return false;
     }
 
     @Override

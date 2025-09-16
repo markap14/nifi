@@ -512,6 +512,7 @@ public class ExtensionBuilder {
            .componentLog(connectorNode.getComponentLog())
            .configurationContext(connectorNode.getConfigurationContext())
            .parameterContextFacade(parameterContextFacade)
+           .managedProcessGroup(managedProcessGroup)
            .processGroupFacade(processGroupFacade)
            .secretsManager(secretsManager)
            .configuredBundle(bundle)

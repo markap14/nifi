@@ -183,12 +183,13 @@ public class StandardConnectorNode implements ConnectorNode {
             for (final PropertyGroupConfiguration groupConfiguration : newConfig.getPropertyGroupConfigurations()) {
                 changedPropertyGroups.add(groupConfiguration.getPropertyGroupName());
             }
+
             return changedPropertyGroups;
         }
 
         final Map<String, List<PropertySubGroupConfiguration>> oldSubGroupsByGroup = mapPropertyGroups(oldConfig);
         final Map<String, List<PropertySubGroupConfiguration>> newSubGroupsByGroup = mapPropertyGroups(newConfig);
-        
+
         // Check for changes in existing groups and removed groups
         for (final Map.Entry<String, List<PropertySubGroupConfiguration>> entry : oldSubGroupsByGroup.entrySet()) {
             final String groupName = entry.getKey();
