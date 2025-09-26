@@ -63,19 +63,18 @@ public class StandardConnectorNode implements ConnectorNode {
     private volatile ConnectorConfiguration configuration;
     private volatile ProcessGroup parentProcessGroup;
     private volatile boolean performValidation = true;
-    private volatile ConnectorParameterContext parameterContext;
 
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final Lock readLock = rwLock.readLock();
     private final Lock writeLock = rwLock.writeLock();
-    
+
     // Pending futures for state transitions; guarded by read/write lock
     private final List<CompletableFuture<Void>> pendingStartFutures = new ArrayList<>();
     private final List<CompletableFuture<Void>> pendingStopFutures = new ArrayList<>();
 
 
     public StandardConnectorNode(final String identifier, final ExtensionManager extensionManager, final ProcessGroup managedProcessGroup,
-                final ConnectorDetails connectorDetails, final String componentType, final BundleCoordinate bundleCoordinate) {
+        final ConnectorDetails connectorDetails, final String componentType, final BundleCoordinate bundleCoordinate) {
 
         this.identifier = identifier;
         this.extensionManager = extensionManager;
@@ -163,13 +162,15 @@ public class StandardConnectorNode implements ConnectorNode {
         // Ensure that the Connector is fully stopped before allowing configuration to be updated
         final ConnectorState currentState = getCurrentState();
         if (currentState != ConnectorState.STOPPED && currentState != ConnectorState.DISABLED) {
-            throw new IllegalStateException("Cannot update the configuration of " + this + " because its state is currently " + currentState + "; it must be fully stopped before the configuration can be changed.");
+            throw new IllegalStateException("Cannot update the configuration of " + this + " because its state is currently " + currentState + "; it must be fully stopped before the configuration " +
+                                            "can be changed.");
         }
 
         // Desired State must also be STOPPED or DISABLED to ensure that the Connector is not transitioning to a new state during the configuration change
         final ConnectorState desiredState = getDesiredState();
         if (desiredState != ConnectorState.STOPPED && desiredState != ConnectorState.DISABLED) {
-            throw new IllegalStateException("Cannot update the configuration of " + this + " because its desired state is currently " + desiredState + "; it must be fully stopped before the configuration can be changed.");
+            throw new IllegalStateException("Cannot update the configuration of " + this + " because its desired state is currently " + desiredState + "; it must be fully stopped before the " +
+                                            "configuration can be changed.");
         }
 
         // Determine which property groups will change as a result of applying this new configuration
@@ -256,7 +257,7 @@ public class StandardConnectorNode implements ConnectorNode {
                 }
             }
         }
-        
+
         // Check for newly added groups
         for (final String newGroupName : newSubGroupsByGroup.keySet()) {
             if (!oldSubGroupsByGroup.containsKey(newGroupName)) {
@@ -345,11 +346,11 @@ public class StandardConnectorNode implements ConnectorNode {
             try {
                 final List<CompletableFuture<Void>> futuresToComplete = new ArrayList<>(pendingStartFutures);
                 pendingStartFutures.clear();
-                
+
                 for (final CompletableFuture<Void> future : futuresToComplete) {
                     future.complete(null);
                 }
-                
+
                 if (!futuresToComplete.isEmpty()) {
                     logger.debug("Completed {} pending start futures for {}", futuresToComplete.size(), this);
                 }
@@ -357,18 +358,18 @@ public class StandardConnectorNode implements ConnectorNode {
                 writeLock.unlock();
             }
         }
-        
+
         // Complete stop futures when transitioning to STOPPED or DISABLED
         if (newState == ConnectorState.STOPPED) {
             writeLock.lock();
             try {
                 final List<CompletableFuture<Void>> futuresToComplete = new ArrayList<>(pendingStopFutures);
                 pendingStopFutures.clear();
-                
+
                 for (final CompletableFuture<Void> future : futuresToComplete) {
                     future.complete(null);
                 }
-                
+
                 if (!futuresToComplete.isEmpty()) {
                     logger.debug("Completed {} pending stop futures for {}", futuresToComplete.size(), this);
                 }
@@ -431,7 +432,7 @@ public class StandardConnectorNode implements ConnectorNode {
     @Override
     public Future<Void> stop(final ScheduledExecutorService scheduler) {
         final CompletableFuture<Void> stopCompleteFuture = new CompletableFuture<>();
-        
+
         // Ensure that we're in the proper state to stop and update the desired and current states
         writeLock.lock();
         try {
@@ -445,7 +446,7 @@ public class StandardConnectorNode implements ConnectorNode {
                     stopCompleteFuture.complete(null);
                     return stopCompleteFuture;
                 }
-                
+
                 if (currentState == ConnectorState.STOPPING) {
                     logger.debug("{} is already stopping; adding future to pending stop futures", this);
                     pendingStopFutures.add(stopCompleteFuture);
@@ -582,16 +583,6 @@ public class StandardConnectorNode implements ConnectorNode {
     @Override
     public ComponentLog getComponentLog() {
         return connectorDetails.getComponentLog();
-    }
-
-    @Override
-    public ConnectorParameterContext getParameterContext() {
-        return parameterContext;
-    }
-
-    @Override
-    public void setParameterContext(final ConnectorParameterContext parameterContext) {
-        this.parameterContext = parameterContext;
     }
 
     @Override

@@ -113,7 +113,7 @@ public final class StandardProcessScheduler implements ProcessScheduler {
 
     public StandardProcessScheduler(final FlowEngine componentLifecycleThreadPool, final FlowController flowController,
         final StateManagerProvider stateManagerProvider, final NiFiProperties nifiProperties, final LifecycleStateManager lifecycleStateManager) {
-        
+
         this(componentLifecycleThreadPool, flowController.getExtensionManager(), flowController, flowController.getControllerServiceProvider(),
             flowController.getReloadComponent(), stateManagerProvider, nifiProperties, lifecycleStateManager);
     }
@@ -122,7 +122,7 @@ public final class StandardProcessScheduler implements ProcessScheduler {
                                     final ControllerServiceProvider controllerServiceProvider, final ReloadComponent reloadComponent,
                                     final StateManagerProvider stateManagerProvider, final NiFiProperties nifiProperties,
                                     final LifecycleStateManager lifecycleStateManager) {
-        
+
         this.componentLifeCycleThreadPool = componentLifecycleThreadPool;
         this.stateManagerProvider = stateManagerProvider;
         this.lifecycleStateManager = lifecycleStateManager;

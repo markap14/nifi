@@ -84,7 +84,7 @@ public class DuplicateFlowFile extends AbstractProcessor {
             final int numDuplicates = Integer.parseInt(numDuplicatesValue);
             final Set<Relationship> relationships = new HashSet<>();
             final List<Relationship> sortedRelationships = new ArrayList<>();
-            
+
             for (int i = 1; i <= numDuplicates; i++) {
                 final Relationship relationship = new Relationship.Builder()
                     .name(String.valueOf(i))
@@ -93,7 +93,7 @@ public class DuplicateFlowFile extends AbstractProcessor {
                 relationships.add(relationship);
                 sortedRelationships.add(relationship);
             }
-            
+
             relationshipsRef.set(relationships);
             sortedRelationshipsRef.set(sortedRelationships);
         } catch (final NumberFormatException e) {
@@ -110,7 +110,7 @@ public class DuplicateFlowFile extends AbstractProcessor {
         }
 
         final List<Relationship> sortedRelationships = sortedRelationshipsRef.get();
-        
+
         if (sortedRelationships == null || sortedRelationships.isEmpty()) {
             session.rollback();
             return;

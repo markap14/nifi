@@ -60,9 +60,6 @@ import org.apache.nifi.controller.service.ControllerServiceProvider;
 import org.apache.nifi.controller.service.StandardConfigurationContext;
 import org.apache.nifi.deprecation.log.DeprecationLogger;
 import org.apache.nifi.deprecation.log.DeprecationLoggerFactory;
-import org.apache.nifi.flow.ExecutionEngine;
-import org.apache.nifi.flow.Position;
-import org.apache.nifi.flow.ScheduledState;
 import org.apache.nifi.flow.VersionedProcessGroup;
 import org.apache.nifi.flowanalysis.FlowAnalysisRule;
 import org.apache.nifi.flowfile.FlowFilePrioritizer;
@@ -89,7 +86,6 @@ import org.apache.nifi.processor.Processor;
 import org.apache.nifi.registry.flow.FlowRegistryClientNode;
 import org.apache.nifi.registry.flow.mapping.ComponentIdLookup;
 import org.apache.nifi.registry.flow.mapping.FlowMappingOptions;
-import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedProcessGroup;
 import org.apache.nifi.registry.flow.mapping.VersionedComponentFlowMapper;
 import org.apache.nifi.registry.flow.mapping.VersionedComponentStateLookup;
 import org.apache.nifi.remote.PublicPort;
@@ -773,9 +769,6 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
                 flowMappingOptions);
 
             final VersionedProcessGroup versionedManagedGroup = flowMapper.mapProcessGroup(processGroup, flowController.getControllerServiceProvider(), this, true);
-//            final VersionedProcessGroup versionedManagedGroup = createVersionedProcessGroup(processGroup, managedParameterContext.getName());
-//            return new StandaloneProcessGroupFacade(processGroup, versionedManagedGroup,
-//                processScheduler, connectorNode.getParameterContext(), flowController.getControllerServiceProvider());
             return new StandaloneProcessGroupFacade(processGroup, versionedManagedGroup,
                 processScheduler, null, flowController.getControllerServiceProvider());
         };
@@ -789,8 +782,6 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
             .processGroupFacadeFactory(processGroupFacadeFactory)
             .flowController(flowController)
             .buildConnector();
-
-//        versionedManagedGroup.setParameterContextName(connectorNode.getParameterContext().getName());
 
         // Set up logging for the connector
         final LogRepository logRepository = LogRepositoryFactory.getRepository(id);
@@ -816,30 +807,6 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
         }
 
         return connectorNode;
-    }
-
-    private VersionedProcessGroup createVersionedProcessGroup(final ProcessGroup managedProcessGroup, final String parameterContextName) {
-        final String versionedGroupId = UUID.nameUUIDFromBytes(managedProcessGroup.getIdentifier().getBytes(StandardCharsets.UTF_8)).toString();
-        final InstantiatedVersionedProcessGroup versionedGroup = new InstantiatedVersionedProcessGroup(managedProcessGroup.getIdentifier(), null);
-        versionedGroup.setIdentifier(versionedGroupId);
-
-        versionedGroup.setName(managedProcessGroup.getName());
-        versionedGroup.setParameterContextName(parameterContextName);
-        versionedGroup.setComments(managedProcessGroup.getComments());
-        versionedGroup.setPosition(new Position(0, 0));
-        versionedGroup.setFlowFileConcurrency(managedProcessGroup.getFlowFileConcurrency().name());
-        versionedGroup.setFlowFileOutboundPolicy(managedProcessGroup.getFlowFileOutboundPolicy().name());
-        versionedGroup.setDefaultFlowFileExpiration(managedProcessGroup.getDefaultFlowFileExpiration());
-        versionedGroup.setDefaultBackPressureObjectThreshold(managedProcessGroup.getDefaultBackPressureObjectThreshold());
-        versionedGroup.setDefaultBackPressureDataSizeThreshold(managedProcessGroup.getDefaultBackPressureDataSizeThreshold());
-        versionedGroup.setLogFileSuffix(managedProcessGroup.getLogFileSuffix());
-
-        versionedGroup.setExecutionEngine(ExecutionEngine.valueOf(managedProcessGroup.getExecutionEngine().name()));
-        versionedGroup.setScheduledState(ScheduledState.ENABLED);
-        versionedGroup.setMaxConcurrentTasks(managedProcessGroup.getMaxConcurrentTasks());
-        versionedGroup.setStatelessFlowTimeout(managedProcessGroup.getStatelessFlowTimeout());
-
-        return versionedGroup;
     }
 
 

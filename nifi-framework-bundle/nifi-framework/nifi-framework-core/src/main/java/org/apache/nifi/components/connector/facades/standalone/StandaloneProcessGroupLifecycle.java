@@ -28,7 +28,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
 
 public class StandaloneProcessGroupLifecycle implements ProcessGroupLifecycle {
     private final ProcessGroup processGroup;

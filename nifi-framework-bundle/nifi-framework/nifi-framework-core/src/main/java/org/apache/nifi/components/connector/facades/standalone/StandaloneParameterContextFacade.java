@@ -64,7 +64,7 @@ public class StandaloneParameterContextFacade implements ParameterContextFacade 
 
         final AffectedComponentSet affectedComponentSet = new AffectedComponentSet(flowController);
         final ParameterReferenceManager parameterReferenceManager = new StandardParameterReferenceManager(() -> managedProcessGroup);
-        
+
         for (final ParameterValue parameterValue : updatedValues) {
             if (!isParameterChanged(parameterValue)) {
                 continue;

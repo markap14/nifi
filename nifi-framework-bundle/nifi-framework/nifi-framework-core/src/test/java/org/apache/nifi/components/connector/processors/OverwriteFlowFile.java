@@ -79,7 +79,7 @@ public class OverwriteFlowFile extends AbstractProcessor {
         }
 
         final String content = context.getProperty(CONTENT).evaluateAttributeExpressions(flowFile).getValue();
-        
+
         flowFile = session.write(flowFile, new OutputStreamCallback() {
             @Override
             public void process(final OutputStream out) throws IOException {

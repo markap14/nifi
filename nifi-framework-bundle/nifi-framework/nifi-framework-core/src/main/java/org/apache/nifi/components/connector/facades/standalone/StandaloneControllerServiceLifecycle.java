@@ -23,7 +23,6 @@ import org.apache.nifi.controller.ProcessScheduler;
 import org.apache.nifi.controller.service.ControllerServiceNode;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
 
 public class StandaloneControllerServiceLifecycle implements ControllerServiceLifecycle {
     private final ControllerServiceNode controllerServiceNode;

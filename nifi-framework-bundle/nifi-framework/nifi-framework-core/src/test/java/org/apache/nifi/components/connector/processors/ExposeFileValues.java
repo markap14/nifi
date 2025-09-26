@@ -56,8 +56,8 @@ public class ExposeFileValues extends AbstractProcessor {
     }
 
     @ConnectorMethod(
-        name="getFileValues",
-        description="Reads all lines from the configured file and returns them as a List of String.",
+        name = "getFileValues",
+        description = "Reads all lines from the configured file and returns them as a List of String.",
         allowedStates = ComponentState.STOPPED
     )
     public List<String> getFileValues() throws IOException {

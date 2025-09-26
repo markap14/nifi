@@ -63,7 +63,7 @@ public class StandaloneProcessorFacade implements ProcessorFacade {
         final ValidationContext validationContext = processorNode.createValidationContext(propertyValues, processorNode.getAnnotationData(), parameterContext, true);
         final ValidationState validationState = processorNode.performValidation(validationContext);
 
-        return switch(validationState.getStatus()) {
+        return switch (validationState.getStatus()) {
             case VALID -> Collections.emptyList();
             // If validating, return the current validation errors (if any)
             case INVALID, VALIDATING -> List.copyOf(validationState.getValidationErrors());

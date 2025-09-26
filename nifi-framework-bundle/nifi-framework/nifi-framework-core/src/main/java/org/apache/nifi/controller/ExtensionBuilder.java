@@ -29,16 +29,13 @@ import org.apache.nifi.components.connector.Connector;
 import org.apache.nifi.components.connector.ConnectorDetails;
 import org.apache.nifi.components.connector.ConnectorInitializationContext;
 import org.apache.nifi.components.connector.ConnectorNode;
-import org.apache.nifi.components.connector.ConnectorParameterContext;
 import org.apache.nifi.components.connector.GhostConnector;
 import org.apache.nifi.components.connector.ProcessGroupFacadeFactory;
 import org.apache.nifi.components.connector.SecretsManager;
 import org.apache.nifi.components.connector.StandardConnectorInitializationContext;
 import org.apache.nifi.components.connector.StandardConnectorNode;
 import org.apache.nifi.components.connector.components.ParameterContextFacade;
-import org.apache.nifi.components.connector.components.ProcessGroupFacade;
 import org.apache.nifi.components.connector.facades.standalone.StandaloneParameterContextFacade;
-import org.apache.nifi.components.connector.facades.standalone.StandaloneProcessGroupFacade;
 import org.apache.nifi.components.state.StateManager;
 import org.apache.nifi.components.state.StateManagerProvider;
 import org.apache.nifi.components.validation.ValidationTrigger;
@@ -62,7 +59,6 @@ import org.apache.nifi.controller.service.GhostControllerService;
 import org.apache.nifi.controller.service.StandardControllerServiceInitializationContext;
 import org.apache.nifi.controller.service.StandardControllerServiceInvocationHandler;
 import org.apache.nifi.controller.service.StandardControllerServiceNode;
-import org.apache.nifi.flow.VersionedProcessGroup;
 import org.apache.nifi.flowanalysis.FlowAnalysisRule;
 import org.apache.nifi.flowanalysis.FlowAnalysisRuleInitializationContext;
 import org.apache.nifi.flowanalysis.GhostFlowAnalysisRule;
@@ -108,7 +104,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import javax.net.ssl.SSLContext;
 
@@ -457,7 +452,7 @@ public class ExtensionBuilder {
 
        boolean creationSuccessful = true;
        Connector connector;
-       
+
        try {
            connector = createConnector();
        } catch (final Exception e) {
@@ -485,9 +480,6 @@ public class ExtensionBuilder {
            componentType,
            bundleCoordinate
        );
-
-       final ConnectorParameterContext parameterContext = new ConnectorParameterContext(connectorNode);
-       connectorNode.setParameterContext(parameterContext);
 
        final ConnectorInitializationContext initContext = createConnectorInitializationContext(connectorNode);
 
@@ -951,7 +943,7 @@ public class ExtensionBuilder {
                throw new IllegalStateException("Unable to find bundle for coordinate " + bundleCoordinate.getCoordinate());
            }
 
-           final ClassLoader detectedClassLoader = extensionManager.createInstanceClassLoader(type, identifier, bundle, 
+           final ClassLoader detectedClassLoader = extensionManager.createInstanceClassLoader(type, identifier, bundle,
                classpathUrls == null ? Collections.emptySet() : classpathUrls, true, classloaderIsolationKey);
            final Class<?> rawClass = Class.forName(type, true, detectedClassLoader);
            Thread.currentThread().setContextClassLoader(detectedClassLoader);

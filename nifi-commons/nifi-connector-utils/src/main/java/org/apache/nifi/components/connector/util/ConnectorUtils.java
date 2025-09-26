@@ -6,7 +6,6 @@ package org.apache.nifi.components.connector.util;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.nifi.components.connector.components.ParameterValue;
 import org.apache.nifi.flow.Bundle;
 import org.apache.nifi.flow.ComponentType;
 import org.apache.nifi.flow.ConnectableComponent;
@@ -15,8 +14,6 @@ import org.apache.nifi.flow.Position;
 import org.apache.nifi.flow.ScheduledState;
 import org.apache.nifi.flow.VersionedConnection;
 import org.apache.nifi.flow.VersionedExternalFlow;
-import org.apache.nifi.flow.VersionedParameter;
-import org.apache.nifi.flow.VersionedParameterContext;
 import org.apache.nifi.flow.VersionedPort;
 import org.apache.nifi.flow.VersionedProcessGroup;
 import org.apache.nifi.flow.VersionedProcessor;
@@ -28,7 +25,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -186,15 +182,15 @@ public class ConnectorUtils {
 
     public static VersionedProcessor createProcessor(final VersionedProcessGroup group, final String processorType, final String name, final Position position, final Bundle bundle) {
         final VersionedProcessor processor = new VersionedProcessor();
-        
+
         // Generate deterministic UUID based on group and component type
         processor.setIdentifier(generateDeterministicUuid(group, ComponentType.PROCESSOR));
-        
+
         processor.setName(name);
         processor.setType(processorType);
         processor.setPosition(position);
         processor.setBundle(bundle);
-        
+
         // Set default processor configuration
         processor.setProperties(new HashMap<>());
         processor.setPropertyDescriptors(new HashMap<>());
@@ -215,7 +211,7 @@ public class ConnectorUtils {
         processor.setMaxBackoffPeriod("10 mins");
         processor.setComponentType(ComponentType.PROCESSOR);
         processor.setGroupIdentifier(group.getIdentifier());
-        
+
         return processor;
     }
 }

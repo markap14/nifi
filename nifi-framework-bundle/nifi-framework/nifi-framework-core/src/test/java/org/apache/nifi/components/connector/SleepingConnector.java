@@ -25,11 +25,11 @@ import java.util.Map;
 
 public class SleepingConnector implements Connector {
     private final Duration sleepDuration;
-    
+
     public SleepingConnector() {
         this(Duration.ofMillis(100));
     }
-    
+
     public SleepingConnector(Duration sleepDuration) {
         this.sleepDuration = sleepDuration;
     }

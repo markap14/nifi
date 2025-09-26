@@ -95,7 +95,6 @@ import org.apache.nifi.util.ThreadUtils;
 import org.apache.nifi.util.file.classloader.ClassLoaderUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.MethodInvocationException;
 import org.springframework.scheduling.support.CronExpression;
 
 import java.lang.annotation.Annotation;
@@ -104,7 +103,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;

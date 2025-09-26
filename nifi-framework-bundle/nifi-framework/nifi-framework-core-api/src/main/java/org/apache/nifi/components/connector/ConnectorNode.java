@@ -99,11 +99,6 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
 
     ComponentLog getComponentLog();
 
-    ConnectorParameterContext getParameterContext();
-
-    // TODO: Is this necessary? I think it is not...
-    void setParameterContext(ConnectorParameterContext parameterContext);
-
     ConnectorConfigurationContext getConfigurationContext();
 
 

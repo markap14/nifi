@@ -32,7 +32,7 @@ import java.util.Map;
  * required for testing StandardFlowManager's connector creation functionality.
  */
 public class NopConnector implements Connector {
-    
+
     private ConnectorInitializationContext context;
     private boolean initialized = false;
     private boolean started = false;
@@ -66,7 +66,7 @@ public class NopConnector implements Connector {
                 .explanation("Connector has not been initialized")
                 .build());
         }
-        
+
         return List.of(new ValidationResult.Builder()
             .subject("Test Connector")
             .valid(true)

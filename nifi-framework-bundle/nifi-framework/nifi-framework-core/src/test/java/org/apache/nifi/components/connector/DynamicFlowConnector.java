@@ -46,7 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class DynamicFlowConnector extends AbstractConnector{
+public class DynamicFlowConnector extends AbstractConnector {
     private volatile boolean initialized = false;
 
     static final ConnectorPropertyDescriptor SOURCE_TEXT = new ConnectorPropertyDescriptor.Builder()
@@ -131,7 +131,7 @@ public class DynamicFlowConnector extends AbstractConnector{
         // Load the base flow without property-based customizations
         final VersionedExternalFlow externalFlow = ConnectorUtils.loadFlowFromResource("flows/generate-duplicate-log-flow.json");
         final VersionedProcessGroup versionedProcessGroup = externalFlow.getFlowContents();
-        
+
         getInitializationContext().updateFlow(versionedProcessGroup, this::drainFlowFiles);
         initialized = true;
     }
@@ -273,7 +273,7 @@ public class DynamicFlowConnector extends AbstractConnector{
     }
 
     private void addConnectionsForDuplicates(final VersionedProcessGroup duplicatesGroup, final VersionedProcessor duplicateProcessor,
-                                             final List<VersionedConnection> existingConnections, final int targetNumCopies) {
+        final List<VersionedConnection> existingConnections, final int targetNumCopies) {
         if (existingConnections.isEmpty()) {
             return;
         }
@@ -291,7 +291,7 @@ public class DynamicFlowConnector extends AbstractConnector{
     }
 
     private void removeExcessConnections(final VersionedProcessGroup duplicatesGroup, final List<VersionedConnection> outboundConnections,
-                                         final int targetNumCopies) {
+        final int targetNumCopies) {
         final Set<VersionedConnection> connectionsToRemove = new HashSet<>();
 
         // Sort connections by relationship name (which should be numeric) and remove the highest numbered ones
@@ -321,7 +321,7 @@ public class DynamicFlowConnector extends AbstractConnector{
     }
 
     private void updateDestinationConnections(final VersionedProcessGroup destinationGroup, final VersionedPort inputPort,
-                                              final VersionedProcessor logProcessor, final VersionedProcessor terminateProcessor) {
+        final VersionedProcessor logProcessor, final VersionedProcessor terminateProcessor) {
         // Find and remove the existing connection from input port to terminate processor
         final Set<VersionedConnection> connections = destinationGroup.getConnections();
         if (connections != null) {

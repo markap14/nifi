@@ -25,7 +25,6 @@ import org.apache.nifi.controller.ScheduledState;
 import org.apache.nifi.lifecycle.ProcessorStopLifecycleMethods;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
 
 public class StandaloneProcessorLifecycle implements ProcessorLifecycle {
     private final ProcessorNode processorNode;

@@ -160,5 +160,4 @@ public class TestStandardFlowManager {
         assertEquals(NopConnector.class.getSimpleName(), initializationContext.getName());
     }
 
-    
 }

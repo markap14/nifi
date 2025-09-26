@@ -39,7 +39,7 @@ myObject.doSomething(arg1, arg2, arg3, arg4, arg5);
 
 11. When possible, prefer importing a class, rather than using fully qualified classname inline in the code.
 12. Avoid statically importing methods unless they are used frequently such as methods in the `Assertions` and `Mockito` classes.
-
+13. Avoid trailing whitespace at the end of lines, especially in blank lines.
 
 Unit / Automated Testing
 ------------------------
