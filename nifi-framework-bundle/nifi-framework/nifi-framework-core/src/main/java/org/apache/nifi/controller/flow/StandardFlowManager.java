@@ -29,6 +29,8 @@ import org.apache.nifi.components.ConfigurableComponent;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.connector.Connector;
 import org.apache.nifi.components.connector.ConnectorNode;
+import org.apache.nifi.components.connector.ProcessGroupFacadeFactory;
+import org.apache.nifi.components.connector.facades.standalone.StandaloneProcessGroupFacade;
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.connectable.ConnectableType;
 import org.apache.nifi.connectable.Connection;
@@ -80,11 +82,16 @@ import org.apache.nifi.logging.ProcessorLogObserver;
 import org.apache.nifi.logging.ReportingTaskLogObserver;
 import org.apache.nifi.nar.ExtensionManager;
 import org.apache.nifi.nar.NarCloseable;
+import org.apache.nifi.parameter.ParameterContext;
 import org.apache.nifi.parameter.ParameterContextManager;
 import org.apache.nifi.parameter.ParameterProvider;
 import org.apache.nifi.processor.Processor;
 import org.apache.nifi.registry.flow.FlowRegistryClientNode;
+import org.apache.nifi.registry.flow.mapping.ComponentIdLookup;
+import org.apache.nifi.registry.flow.mapping.FlowMappingOptions;
 import org.apache.nifi.registry.flow.mapping.InstantiatedVersionedProcessGroup;
+import org.apache.nifi.registry.flow.mapping.VersionedComponentFlowMapper;
+import org.apache.nifi.registry.flow.mapping.VersionedComponentStateLookup;
 import org.apache.nifi.remote.PublicPort;
 import org.apache.nifi.remote.StandardPublicPort;
 import org.apache.nifi.remote.StandardRemoteProcessGroup;
@@ -742,17 +749,48 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
         final String managedGroupId = UUID.nameUUIDFromBytes((id + "-root").getBytes(StandardCharsets.UTF_8)).toString();
         final ProcessGroup managedRootGroup = createProcessGroup(managedGroupId);
 
-        final VersionedProcessGroup versionedManagedGroup = createVersionedProcessGroup(managedRootGroup);
+        final String paramContextId = UUID.nameUUIDFromBytes((id + "-parameter-context").getBytes(StandardCharsets.UTF_8)).toString();
+        final String paramContextName = "Connector " + id + " Parameter Context";
+        final ParameterContext managedParameterContext = createParameterContext(paramContextId, paramContextName,
+            "Implement Parameter Context for Connector " + id,
+            Collections.emptyMap(), Collections.emptyList(), null);
+        managedRootGroup.setParameterContext(managedParameterContext);
+
+        final ProcessGroupFacadeFactory processGroupFacadeFactory = (processGroup) -> {
+            final FlowMappingOptions flowMappingOptions = new FlowMappingOptions.Builder()
+                .mapSensitiveConfiguration(true)
+                .mapPropertyDescriptors(true)
+                .stateLookup(VersionedComponentStateLookup.IDENTITY_LOOKUP)
+                .sensitiveValueEncryptor(value -> value)
+                .componentIdLookup(ComponentIdLookup.VERSIONED_OR_GENERATE)
+                .mapInstanceIdentifiers(true)
+                .mapControllerServiceReferencesToVersionedId(true)
+                .mapFlowRegistryClientId(true)
+                .mapAssetReferences(true)
+                .build();
+
+            final VersionedComponentFlowMapper flowMapper = new VersionedComponentFlowMapper(flowController.getExtensionManager(),
+                flowMappingOptions);
+
+            final VersionedProcessGroup versionedManagedGroup = flowMapper.mapProcessGroup(processGroup, flowController.getControllerServiceProvider(), this, true);
+//            final VersionedProcessGroup versionedManagedGroup = createVersionedProcessGroup(processGroup, managedParameterContext.getName());
+//            return new StandaloneProcessGroupFacade(processGroup, versionedManagedGroup,
+//                processScheduler, connectorNode.getParameterContext(), flowController.getControllerServiceProvider());
+            return new StandaloneProcessGroupFacade(processGroup, versionedManagedGroup,
+                processScheduler, null, flowController.getControllerServiceProvider());
+        };
 
         final ConnectorNode connectorNode = new ExtensionBuilder()
             .identifier(id)
             .type(type)
             .bundleCoordinate(coordinate)
             .extensionManager(extensionManager)
-            .managedProcessGroup(managedRootGroup, versionedManagedGroup)
+            .managedProcessGroup(managedRootGroup)
+            .processGroupFacadeFactory(processGroupFacadeFactory)
+            .flowController(flowController)
             .buildConnector();
 
-        versionedManagedGroup.setParameterContextName(connectorNode.getParameterContext().getName());
+//        versionedManagedGroup.setParameterContextName(connectorNode.getParameterContext().getName());
 
         // Set up logging for the connector
         final LogRepository logRepository = LogRepositoryFactory.getRepository(id);
@@ -780,12 +818,13 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
         return connectorNode;
     }
 
-    private VersionedProcessGroup createVersionedProcessGroup(final ProcessGroup managedProcessGroup) {
+    private VersionedProcessGroup createVersionedProcessGroup(final ProcessGroup managedProcessGroup, final String parameterContextName) {
         final String versionedGroupId = UUID.nameUUIDFromBytes(managedProcessGroup.getIdentifier().getBytes(StandardCharsets.UTF_8)).toString();
         final InstantiatedVersionedProcessGroup versionedGroup = new InstantiatedVersionedProcessGroup(managedProcessGroup.getIdentifier(), null);
         versionedGroup.setIdentifier(versionedGroupId);
 
         versionedGroup.setName(managedProcessGroup.getName());
+        versionedGroup.setParameterContextName(parameterContextName);
         versionedGroup.setComments(managedProcessGroup.getComments());
         versionedGroup.setPosition(new Position(0, 0));
         versionedGroup.setFlowFileConcurrency(managedProcessGroup.getFlowFileConcurrency().name());

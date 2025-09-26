@@ -41,6 +41,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -113,7 +114,7 @@ public class StandaloneProcessGroupFacade implements ProcessGroupFacade {
 
     @Override
     public ProcessorFacade getProcessor(final String id) {
-        final ProcessorNode processorNode = processGroup.getProcessor(id);
+        final ProcessorNode processorNode = lookupProcessorNode(id);
         if (processorNode == null) {
             return null;
         }
@@ -126,6 +127,17 @@ public class StandaloneProcessGroupFacade implements ProcessGroupFacade {
         return new StandaloneProcessorFacade(processorNode, processor, processScheduler, parameterContext);
     }
 
+    private ProcessorNode lookupProcessorNode(final String versionedComponentId) {
+        for (final ProcessorNode processorNode : processGroup.getProcessors()) {
+            final Optional<String> versionedId = processorNode.getVersionedComponentId();
+            if (versionedId.isPresent() && versionedId.get().equals(versionedComponentId)) {
+                return processorNode;
+            }
+        }
+
+        return null;
+    }
+
     @Override
     public Set<ProcessorFacade> getProcessors() {
         if (processorMap.isEmpty()) {
@@ -134,7 +146,7 @@ public class StandaloneProcessGroupFacade implements ProcessGroupFacade {
 
         final Set<ProcessorFacade> processors = new HashSet<>();
         for (final VersionedProcessor versionedProcessor : processorMap.values()) {
-            final ProcessorNode processorNode = processGroup.getProcessor(versionedProcessor.getIdentifier());
+            final ProcessorNode processorNode = processGroup.getProcessor(versionedProcessor.getInstanceIdentifier());
             if (processorNode != null) {
                 processors.add(new StandaloneProcessorFacade(processorNode, versionedProcessor, processScheduler, parameterContext));
             }
@@ -145,7 +157,7 @@ public class StandaloneProcessGroupFacade implements ProcessGroupFacade {
 
     @Override
     public ControllerServiceFacade getControllerService(final String id) {
-        final ControllerServiceNode controllerServiceNode = processGroup.getControllerService(id);
+        final ControllerServiceNode controllerServiceNode = lookupControllerServiceNode(id);
         if (controllerServiceNode == null) {
             return null;
         }
@@ -158,6 +170,17 @@ public class StandaloneProcessGroupFacade implements ProcessGroupFacade {
         return new StandaloneControllerServiceFacade(controllerServiceNode, controllerService, parameterContext, processScheduler);
     }
 
+    private ControllerServiceNode lookupControllerServiceNode(final String versionedComponentId) {
+        for (final ControllerServiceNode controllerServiceNode : processGroup.getControllerServices(false)) {
+            final Optional<String> versionedId = controllerServiceNode.getVersionedComponentId();
+            if (versionedId.isPresent() && versionedId.get().equals(versionedComponentId)) {
+                return controllerServiceNode;
+            }
+        }
+
+        return null;
+    }
+
     @Override
     public Set<ControllerServiceFacade> getControllerServices() {
         if (controllerServiceMap.isEmpty()) {
@@ -166,7 +189,7 @@ public class StandaloneProcessGroupFacade implements ProcessGroupFacade {
 
         final Set<ControllerServiceFacade> controllerServices = new HashSet<>();
         for (final VersionedControllerService versionedControllerService : controllerServiceMap.values()) {
-            final ControllerServiceNode controllerServiceNode = processGroup.getControllerService(versionedControllerService.getIdentifier());
+            final ControllerServiceNode controllerServiceNode = processGroup.getControllerService(versionedControllerService.getInstanceIdentifier());
             if (controllerServiceNode != null) {
                 controllerServices.add(new StandaloneControllerServiceFacade(controllerServiceNode, versionedControllerService, parameterContext, processScheduler));
             }
@@ -177,7 +200,7 @@ public class StandaloneProcessGroupFacade implements ProcessGroupFacade {
 
     @Override
     public ConnectionFacade getConnection(final String id) {
-        final Connection connection = processGroup.getConnection(id);
+        final Connection connection = lookupConnection(id);
         if (connection == null) {
             return null;
         }
@@ -190,6 +213,17 @@ public class StandaloneProcessGroupFacade implements ProcessGroupFacade {
         return new StandaloneConnectionFacade(connection, versionedConnection);
     }
 
+    private Connection lookupConnection(final String versionedComponentId) {
+        for (final Connection connection : processGroup.getConnections()) {
+            final Optional<String> versionedId = connection.getVersionedComponentId();
+            if (versionedId.isPresent() && versionedId.get().equals(versionedComponentId)) {
+                return connection;
+            }
+        }
+
+        return null;
+    }
+
     @Override
     public Set<ConnectionFacade> getConnections() {
         if (connectionMap.isEmpty()) {
@@ -198,7 +232,7 @@ public class StandaloneProcessGroupFacade implements ProcessGroupFacade {
 
         final Set<ConnectionFacade> connections = new HashSet<>();
         for (final VersionedConnection versionedConnection : connectionMap.values()) {
-            final Connection connection = processGroup.getConnection(versionedConnection.getIdentifier());
+            final Connection connection = processGroup.getConnection(versionedConnection.getInstanceIdentifier());
             if (connection != null) {
                 connections.add(new StandaloneConnectionFacade(connection, versionedConnection));
             }
@@ -209,7 +243,7 @@ public class StandaloneProcessGroupFacade implements ProcessGroupFacade {
 
     @Override
     public ProcessGroupFacade getProcessGroup(final String id) {
-        final ProcessGroup childProcessGroup = processGroup.findProcessGroup(id);
+        final ProcessGroup childProcessGroup = lookupProcessGroup(processGroup, id);
         if (childProcessGroup == null) {
             return null;
         }
@@ -222,6 +256,24 @@ public class StandaloneProcessGroupFacade implements ProcessGroupFacade {
         return new StandaloneProcessGroupFacade(childProcessGroup, versionedProcessGroup, processScheduler, parameterContext, controllerServiceProvider);
     }
 
+    private ProcessGroup lookupProcessGroup(final ProcessGroup start, final String versionedComponentId) {
+        for (final ProcessGroup childProcessGroup : start.getProcessGroups()) {
+            final Optional<String> versionedId = childProcessGroup.getVersionedComponentId();
+            if (versionedId.isPresent() && versionedId.get().equals(versionedComponentId)) {
+                return childProcessGroup;
+            }
+        }
+
+        for (final ProcessGroup childProcessGroup : start.getProcessGroups()) {
+            final ProcessGroup found = lookupProcessGroup(childProcessGroup, versionedComponentId);
+            if (found != null) {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
     @Override
     public Set<ProcessGroupFacade> getProcessGroups() {
         if (processGroupMap.isEmpty()) {
@@ -230,7 +282,7 @@ public class StandaloneProcessGroupFacade implements ProcessGroupFacade {
 
         final Set<ProcessGroupFacade> processGroups = new HashSet<>();
         for (final VersionedProcessGroup versionedProcessGroup : processGroupMap.values()) {
-            final ProcessGroup childProcessGroup = processGroup.findProcessGroup(versionedProcessGroup.getIdentifier());
+            final ProcessGroup childProcessGroup = processGroup.findProcessGroup(versionedProcessGroup.getInstanceIdentifier());
             if (childProcessGroup != null) {
                 processGroups.add(new StandaloneProcessGroupFacade(childProcessGroup, versionedProcessGroup, processScheduler, parameterContext, controllerServiceProvider));
             }

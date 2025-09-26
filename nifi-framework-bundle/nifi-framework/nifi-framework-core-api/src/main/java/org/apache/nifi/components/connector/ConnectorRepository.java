@@ -5,6 +5,7 @@
 package org.apache.nifi.components.connector;
 
 import java.util.List;
+import java.util.concurrent.Future;
 
 public interface ConnectorRepository {
 
@@ -44,4 +45,17 @@ public interface ConnectorRepository {
      */
     List<ConnectorNode> getConnectors();
 
+    /**
+     * Starts the given Connector, managing any appropriate lifecycle events.
+     * @param connector the Connector to start
+     * @return a CompletableFuture that will be completed when the Connector has started
+     */
+    Future<Void> startConnector(ConnectorNode connector);
+
+    /**
+     * Stops the given Connector, managing any appropriate lifecycle events.
+     * @param connector the Connector to stop
+     * @return a CompletableFuture that will be completed when the Connector has stopped
+     */
+    Future<Void> stopConnector(ConnectorNode connector);
 }

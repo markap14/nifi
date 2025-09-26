@@ -26,12 +26,12 @@ import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.ConfigurableComponent;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.connector.Connector;
-import org.apache.nifi.components.connector.ConnectorConfigurationContext;
 import org.apache.nifi.components.connector.ConnectorDetails;
 import org.apache.nifi.components.connector.ConnectorInitializationContext;
 import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.components.connector.ConnectorParameterContext;
 import org.apache.nifi.components.connector.GhostConnector;
+import org.apache.nifi.components.connector.ProcessGroupFacadeFactory;
 import org.apache.nifi.components.connector.SecretsManager;
 import org.apache.nifi.components.connector.StandardConnectorInitializationContext;
 import org.apache.nifi.components.connector.StandardConnectorNode;
@@ -74,7 +74,6 @@ import org.apache.nifi.nar.ExtensionManager;
 import org.apache.nifi.nar.NarCloseable;
 import org.apache.nifi.nar.PythonBundle;
 import org.apache.nifi.parameter.GhostParameterProvider;
-import org.apache.nifi.parameter.ParameterContext;
 import org.apache.nifi.parameter.ParameterProvider;
 import org.apache.nifi.parameter.ParameterProviderInitializationContext;
 import org.apache.nifi.parameter.StandardParameterProviderInitializationContext;
@@ -109,6 +108,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import javax.net.ssl.SSLContext;
 
@@ -135,7 +135,7 @@ public class ExtensionBuilder {
    private SSLContext systemSslContext;
    private PythonBridge pythonBridge;
    private ProcessGroup managedProcessGroup;
-   private VersionedProcessGroup versionedProcessGroup;
+   private ProcessGroupFacadeFactory processGroupFacadeFactory;
 
    public ExtensionBuilder type(final String type) {
        this.type = type;
@@ -240,9 +240,13 @@ public class ExtensionBuilder {
        return this;
    }
 
-   public ExtensionBuilder managedProcessGroup(final ProcessGroup managedProcessGroup, final VersionedProcessGroup versionedProcessGroup) {
+   public ExtensionBuilder managedProcessGroup(final ProcessGroup managedProcessGroup) {
        this.managedProcessGroup = managedProcessGroup;
-       this.versionedProcessGroup = versionedProcessGroup;
+       return this;
+   }
+
+   public ExtensionBuilder processGroupFacadeFactory(final ProcessGroupFacadeFactory processGroupFacadeFactory) {
+       this.processGroupFacadeFactory = processGroupFacadeFactory;
        return this;
    }
 
@@ -457,11 +461,7 @@ public class ExtensionBuilder {
        try {
            connector = createConnector();
        } catch (final Exception e) {
-           logger.error("Could not create Connector of type {} from {} for ID {} due to: {}; creating \"Ghost\" implementation", type, bundleCoordinate, identifier, e.getMessage());
-           if (logger.isDebugEnabled()) {
-               logger.debug(e.getMessage(), e);
-           }
-
+           logger.error("Could not create Connector of type {} from {} for ID {} due to: {}; creating \"Ghost\" implementation", type, bundleCoordinate, identifier, e.getMessage(), e);
            connector = new GhostConnector(identifier, type);
            creationSuccessful = false;
        }
@@ -490,6 +490,8 @@ public class ExtensionBuilder {
        connectorNode.setParameterContext(parameterContext);
 
        final ConnectorInitializationContext initContext = createConnectorInitializationContext(connectorNode);
+
+       // TODO: If an Exception is thrown in the call to #initialize, we should create a Ghosted Connector
        try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(connectorDetails.getConnector().getClass().getClassLoader())) {
            connectorDetails.getConnector().initialize(initContext);
        }
@@ -500,11 +502,8 @@ public class ExtensionBuilder {
    private ConnectorInitializationContext createConnectorInitializationContext(final ConnectorNode connectorNode) {
        final org.apache.nifi.flow.Bundle bundle = new org.apache.nifi.flow.Bundle(bundleCoordinate.getGroup(), bundleCoordinate.getId(), bundleCoordinate.getVersion());
        final String name = type.contains(".") ? StringUtils.substringAfterLast(type, ".") : type;
-       final ParameterContextFacade parameterContextFacade = new StandaloneParameterContextFacade();
+       final ParameterContextFacade parameterContextFacade = new StandaloneParameterContextFacade(flowController, connectorNode.getManagedProcessGroup());
        final SecretsManager secretsManager = null;
-
-       final ProcessGroupFacade processGroupFacade = new StandaloneProcessGroupFacade(managedProcessGroup, versionedProcessGroup,
-           processScheduler, connectorNode.getParameterContext(), serviceProvider);
 
        return new StandardConnectorInitializationContext.Builder()
            .identifier(identifier)
@@ -513,7 +512,7 @@ public class ExtensionBuilder {
            .configurationContext(connectorNode.getConfigurationContext())
            .parameterContextFacade(parameterContextFacade)
            .managedProcessGroup(managedProcessGroup)
-           .processGroupFacade(processGroupFacade)
+           .processGroupFacadeFactory(processGroupFacadeFactory)
            .secretsManager(secretsManager)
            .configuredBundle(bundle)
            .activeBundle(bundle)

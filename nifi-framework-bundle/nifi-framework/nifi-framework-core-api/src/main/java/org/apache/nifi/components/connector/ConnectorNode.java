@@ -31,27 +31,13 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
 
     String getName();
 
-    void setName(String name);
-
     String getDescription();
 
-    void setDescription(String description);
-
-    ConnectorConfiguration getConfiguration();
-
-    void setConfiguration(ConnectorConfiguration configuration);
+    ConnectorConfiguration getConfiguration() throws FlowUpdateException;
 
     ConnectorState getCurrentState();
 
     ConnectorState getDesiredState();
-
-    void enable();
-
-    void disable();
-
-    Future<Void> start(ScheduledExecutorService scheduler);
-
-    Future<Void> stop(ScheduledExecutorService scheduler);
 
     /**
      * Verifies that the Connector is in a state that allows it to be deleted. If the Connector is not in a state
@@ -115,7 +101,57 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
 
     ConnectorParameterContext getParameterContext();
 
+    // TODO: Is this necessary? I think it is not...
     void setParameterContext(ConnectorParameterContext parameterContext);
 
     ConnectorConfigurationContext getConfigurationContext();
+
+
+    // -------------------
+    // The following methods should always be called via the ConnectorRepository in order to maintain proper
+    // lifecycle management of the Connector.
+
+    /**
+     * Sets the name of the Connector. This method should only be invoked via the ConnectorRepository.
+     * @param name the Connector's name
+     */
+    void setName(String name);
+
+    /**
+     * Sets the description of the Connector. This method should only be invoked via the ConnectorRepository.
+     * @param description the Connector's description
+     */
+    void setDescription(String description);
+
+    /**
+     * Enables the Connector. This method should only be invoked via the ConnectorRepository.
+     */
+    void enable();
+
+    /**
+     * Disables the Connector. This method should only be invoked via the ConnectorRepository.
+     */
+    void disable();
+
+    /**
+     * Starts the Connector. This method should only be invoked via the ConnectorRepository.
+     * @param scheduler the ScheduledExecutorService to use for scheduling any tasks that the Connector needs to perform
+     * @return a Future that will be completed when the Connector has started
+     */
+    Future<Void> start(ScheduledExecutorService scheduler);
+
+    /**
+     * Stops the Connector. This method should only be invoked via the ConnectorRepository.
+     * @param scheduler the ScheduledExecutorService to use for scheduling any tasks that the Connector needs to perform
+     * @return a Future that will be completed when the Connector has stopped
+     */
+    Future<Void> stop(ScheduledExecutorService scheduler);
+
+    /**
+     * Sets the configuration of the Connector. This method should only be invoked via the ConnectorRepository.
+     * @param configuration the ConnectorConfiguration
+     * @throws FlowUpdateException if unable to set the configuration
+     */
+    void setConfiguration(ConnectorConfiguration configuration) throws FlowUpdateException;
+
 }

@@ -290,7 +290,7 @@ public class TestStandardConnectorNode {
     }
 
     @Test
-    public void testSetConfigurationWhenStopped() {
+    public void testSetConfigurationWhenStopped() throws FlowUpdateException {
         final StandardConnectorNode connectorNode = createConnectorNode();
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
         assertEquals(ConnectorState.STOPPED, connectorNode.getDesiredState());
@@ -302,7 +302,7 @@ public class TestStandardConnectorNode {
     }
 
     @Test
-    public void testSetConfigurationWhenDisabled() {
+    public void testSetConfigurationWhenDisabled() throws FlowUpdateException {
         final StandardConnectorNode connectorNode = createConnectorNode();
         connectorNode.disable();
         assertEquals(ConnectorState.DISABLED, connectorNode.getCurrentState());
@@ -377,7 +377,7 @@ public class TestStandardConnectorNode {
     }
 
     @Test
-    public void testSetConfigurationWithNullOldConfiguration() {
+    public void testSetConfigurationWithNullOldConfiguration() throws FlowUpdateException {
         final StandardConnectorNode connectorNode = createConnectorNode();
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
         
@@ -390,7 +390,7 @@ public class TestStandardConnectorNode {
     }
 
     @Test
-    public void testSetConfigurationWithPropertyChanges() {
+    public void testSetConfigurationWithPropertyChanges() throws FlowUpdateException {
         final StandardConnectorNode connectorNode = createConnectorNode();
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
         
@@ -404,7 +404,7 @@ public class TestStandardConnectorNode {
     }
 
     @Test
-    public void testSetConfigurationWithNewPropertyGroup() {
+    public void testSetConfigurationWithNewPropertyGroup() throws FlowUpdateException {
         final StandardConnectorNode connectorNode = createConnectorNode();
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
         
@@ -418,7 +418,7 @@ public class TestStandardConnectorNode {
     }
 
     @Test
-    public void testSetConfigurationWithRemovedPropertyGroup() {
+    public void testSetConfigurationWithRemovedPropertyGroup() throws FlowUpdateException {
         final StandardConnectorNode connectorNode = createConnectorNode();
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
         
@@ -432,7 +432,7 @@ public class TestStandardConnectorNode {
     }
 
     @Test
-    public void testSetConfigurationCallsOnConfigured() {
+    public void testSetConfigurationCallsOnConfigured() throws FlowUpdateException {
         final TrackingConnector trackingConnector = new TrackingConnector();
         final StandardConnectorNode connectorNode = createConnectorNode(trackingConnector);
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
@@ -445,7 +445,7 @@ public class TestStandardConnectorNode {
     }
 
     @Test
-    public void testSetConfigurationCallsOnPropertyGroupConfiguredForChangedGroups() {
+    public void testSetConfigurationCallsOnPropertyGroupConfiguredForChangedGroups() throws FlowUpdateException {
         final TrackingConnector trackingConnector = new TrackingConnector();
         final StandardConnectorNode connectorNode = createConnectorNode(trackingConnector);
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());

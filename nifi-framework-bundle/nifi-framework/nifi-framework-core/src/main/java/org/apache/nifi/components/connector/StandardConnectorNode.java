@@ -90,6 +90,11 @@ public class StandardConnectorNode implements ConnectorNode {
         return new ConnectorConfigurationContext() {
             @Override
             public String getProperty(final String groupName, final String propertyName) {
+                if (configuration == null) {
+                    final ConnectorPropertyDescriptor descriptor = getPropertyDescriptor(groupName, propertyName);
+                    return descriptor == null ? null : descriptor.getDefaultValue();
+                }
+
                 for (final PropertyGroupConfiguration groupConfiguration : configuration.getPropertyGroupConfigurations()) {
                     if (groupConfiguration.getPropertyGroupName().equals(groupName)) {
                         for (final PropertySubGroupConfiguration subGroupConfig : groupConfiguration.getSubGroupConfigurations()) {
@@ -109,6 +114,23 @@ public class StandardConnectorNode implements ConnectorNode {
                 return getProperty(connectorPropertyGroup.getName(), connectorPropertyDescriptor.getName());
             }
         };
+    }
+
+    private ConnectorPropertyDescriptor getPropertyDescriptor(final String groupName, final String propertyName) {
+        final ConnectorPropertyGroup propertyGroup = getConnector().getPropertyGroup(groupName);
+        if (propertyGroup == null) {
+            return null;
+        }
+
+        for (final ConnectorPropertySubGroup subgroup : propertyGroup.getSubGroups()) {
+            for (final ConnectorPropertyDescriptor descriptor : subgroup.getProperties()) {
+                if (descriptor.getName().equals(propertyName)) {
+                    return descriptor;
+                }
+            }
+        }
+
+        return null;
     }
 
     @Override
@@ -137,7 +159,7 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
-    public void setConfiguration(final ConnectorConfiguration configuration) {
+    public void setConfiguration(final ConnectorConfiguration configuration) throws FlowUpdateException {
         // Ensure that the Connector is fully stopped before allowing configuration to be updated
         final ConnectorState currentState = getCurrentState();
         if (currentState != ConnectorState.STOPPED && currentState != ConnectorState.DISABLED) {
@@ -169,6 +191,8 @@ public class StandardConnectorNode implements ConnectorNode {
             }
 
             connectorDetails.getConnector().onConfigured();
+        } catch (final FlowUpdateException flowUpdateException) {
+            throw flowUpdateException;
         } catch (final Exception e) {
             logger.error("Failed to invoke onConfigured for {}", this, e);
             throw new RuntimeException("Failed to invoke onConfigured for " + this, e);
