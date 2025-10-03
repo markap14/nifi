@@ -18,9 +18,9 @@ package org.apache.nifi.nar;
 
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.components.ValidationResult;
+import org.apache.nifi.components.connector.ConfigurationStep;
 import org.apache.nifi.components.connector.Connector;
 import org.apache.nifi.components.connector.ConnectorInitializationContext;
-import org.apache.nifi.components.connector.ConnectorPropertyGroup;
 import org.apache.nifi.components.connector.FlowUpdateException;
 
 import java.util.List;
@@ -51,12 +51,12 @@ public class DummyConnector implements Connector {
     }
 
     @Override
-    public List<String> getPropertyGroupNames() {
+    public List<String> getConfigurationStepNames() {
         return List.of();
     }
 
     @Override
-    public ConnectorPropertyGroup getPropertyGroup(final String groupName) {
+    public ConfigurationStep getConfigurationStep(final String stepName) {
         return null;
     }
 
@@ -66,12 +66,12 @@ public class DummyConnector implements Connector {
     }
 
     @Override
-    public void onPropertyGroupConfigured(final String groupName) {
+    public void onConfigurationStepConfigured(final String stepName) {
         // no-op
     }
 
     @Override
-    public List<ValidationResult> validatePropertyGroup(final String groupName, final Map<String, String> propertyValues) {
+    public List<ValidationResult> validateConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
         return List.of();
     }
 

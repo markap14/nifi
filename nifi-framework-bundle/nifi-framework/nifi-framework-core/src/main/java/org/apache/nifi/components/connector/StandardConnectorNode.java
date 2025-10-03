@@ -49,6 +49,7 @@ public class StandardConnectorNode implements ConnectorNode {
 
     private final String identifier;
     private final ExtensionManager extensionManager;
+    private final Authorizable parentAuthorizable;
     private final ProcessGroup managedProcessGroup;
     private final ConnectorDetails connectorDetails;
     private final String componentType;
@@ -61,7 +62,6 @@ public class StandardConnectorNode implements ConnectorNode {
     private volatile String name;
     private volatile String description;
     private volatile ConnectorConfiguration configuration;
-    private volatile ProcessGroup parentProcessGroup;
     private volatile boolean performValidation = true;
 
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
@@ -73,11 +73,12 @@ public class StandardConnectorNode implements ConnectorNode {
     private final List<CompletableFuture<Void>> pendingStopFutures = new ArrayList<>();
 
 
-    public StandardConnectorNode(final String identifier, final ExtensionManager extensionManager, final ProcessGroup managedProcessGroup,
+    public StandardConnectorNode(final String identifier, final ExtensionManager extensionManager, final Authorizable parentAuthorizable, final ProcessGroup managedProcessGroup,
         final ConnectorDetails connectorDetails, final String componentType, final BundleCoordinate bundleCoordinate) {
 
         this.identifier = identifier;
         this.extensionManager = extensionManager;
+        this.parentAuthorizable = parentAuthorizable;
         this.managedProcessGroup = managedProcessGroup;
         this.connectorDetails = connectorDetails;
         this.componentType = componentType;
@@ -94,10 +95,10 @@ public class StandardConnectorNode implements ConnectorNode {
                     return descriptor == null ? null : descriptor.getDefaultValue();
                 }
 
-                for (final PropertyGroupConfiguration groupConfiguration : configuration.getPropertyGroupConfigurations()) {
-                    if (groupConfiguration.getPropertyGroupName().equals(groupName)) {
-                        for (final PropertySubGroupConfiguration subGroupConfig : groupConfiguration.getSubGroupConfigurations()) {
-                            final Map<String, String> propertyValues = subGroupConfig.getPropertyValues();
+                for (final ConfigurationStepConfiguration configurationStepConfiguration : configuration.getConfigurationStepConfigurations()) {
+                    if (configurationStepConfiguration.getConfigurationStepName().equals(groupName)) {
+                        for (final PropertyGroupConfiguration propertyGroupConfiguration : configurationStepConfiguration.getPropertyGroupConfigurations()) {
+                            final Map<String, String> propertyValues = propertyGroupConfiguration.getPropertyValues();
                             if (propertyValues.containsKey(propertyName)) {
                                 return propertyValues.get(propertyName);
                             }
@@ -109,20 +110,20 @@ public class StandardConnectorNode implements ConnectorNode {
             }
 
             @Override
-            public String getProperty(final ConnectorPropertyGroup connectorPropertyGroup, final ConnectorPropertyDescriptor connectorPropertyDescriptor) {
-                return getProperty(connectorPropertyGroup.getName(), connectorPropertyDescriptor.getName());
+            public String getProperty(final ConfigurationStep configurationStep, final ConnectorPropertyDescriptor connectorPropertyDescriptor) {
+                return getProperty(configurationStep.getName(), connectorPropertyDescriptor.getName());
             }
         };
     }
 
-    private ConnectorPropertyDescriptor getPropertyDescriptor(final String groupName, final String propertyName) {
-        final ConnectorPropertyGroup propertyGroup = getConnector().getPropertyGroup(groupName);
-        if (propertyGroup == null) {
+    private ConnectorPropertyDescriptor getPropertyDescriptor(final String configurationStepName, final String propertyName) {
+        final ConfigurationStep configurationStep = getConnector().getConfigurationStep(configurationStepName);
+        if (configurationStep == null) {
             return null;
         }
 
-        for (final ConnectorPropertySubGroup subgroup : propertyGroup.getSubGroups()) {
-            for (final ConnectorPropertyDescriptor descriptor : subgroup.getProperties()) {
+        for (final ConnectorPropertyGroup propertyGroup : configurationStep.getPropertyGroups()) {
+            for (final ConnectorPropertyDescriptor descriptor : propertyGroup.getProperties()) {
                 if (descriptor.getName().equals(propertyName)) {
                     return descriptor;
                 }
@@ -173,21 +174,21 @@ public class StandardConnectorNode implements ConnectorNode {
                                             "configuration can be changed.");
         }
 
-        // Determine which property groups will change as a result of applying this new configuration
-        final List<String> changedPropertyGroups = determineChangedPropertyGroups(this.configuration, configuration);
+        // Determine which configuration steps will change as a result of applying this new configuration
+        final List<String> changedConfigurationSteps = determineChangedConfigurationSteps(this.configuration, configuration);
 
         this.configuration = configuration;
 
         final Connector connector = connectorDetails.getConnector();
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, connector.getClass(), getIdentifier())) {
 
-            for (final String changedGroup : changedPropertyGroups) {
-                logger.debug("Notifying {} of configuration change for property group {}", this, changedGroup);
+            for (final String changedStep : changedConfigurationSteps) {
+                logger.debug("Notifying {} of configuration change for configuration step {}", this, changedStep);
 
                 try {
-                    connector.onPropertyGroupConfigured(changedGroup);
+                    connector.onConfigurationStepConfigured(changedStep);
                 } catch (final Throwable t) {
-                    logger.error("{} Failed to notify Connector that property group {} was configured", this, changedGroup, t);
+                    logger.error("{} Failed to notify Connector that configuration step {} was configured", this, changedStep, t);
                 }
             }
 
@@ -200,49 +201,49 @@ public class StandardConnectorNode implements ConnectorNode {
         }
     }
 
-    private List<String> determineChangedPropertyGroups(final ConnectorConfiguration oldConfig, final ConnectorConfiguration newConfig) {
-        final List<String> changedPropertyGroups = new ArrayList<>();
+    private List<String> determineChangedConfigurationSteps(final ConnectorConfiguration oldConfig, final ConnectorConfiguration newConfig) {
+        final List<String> changedConfigurationSteps = new ArrayList<>();
 
         if (oldConfig == null) {
-            // If there was no previous configuration, all property groups are considered changed
-            for (final PropertyGroupConfiguration groupConfiguration : newConfig.getPropertyGroupConfigurations()) {
-                changedPropertyGroups.add(groupConfiguration.getPropertyGroupName());
+            // If there was no previous configuration, all configuration steps are considered changed
+            for (final ConfigurationStepConfiguration configurationStepConfiguration : newConfig.getConfigurationStepConfigurations()) {
+                changedConfigurationSteps.add(configurationStepConfiguration.getConfigurationStepName());
             }
 
-            return changedPropertyGroups;
+            return changedConfigurationSteps;
         }
 
-        final Map<String, List<PropertySubGroupConfiguration>> oldSubGroupsByGroup = mapPropertyGroups(oldConfig);
-        final Map<String, List<PropertySubGroupConfiguration>> newSubGroupsByGroup = mapPropertyGroups(newConfig);
+        final Map<String, List<PropertyGroupConfiguration>> oldPropertyGroupsByConfigurationStep = mapConfigurationSteps(oldConfig);
+        final Map<String, List<PropertyGroupConfiguration>> newPropertyGroupsByConfigurationStep = mapConfigurationSteps(newConfig);
 
-        // Check for changes in existing groups and removed groups
-        for (final Map.Entry<String, List<PropertySubGroupConfiguration>> entry : oldSubGroupsByGroup.entrySet()) {
-            final String groupName = entry.getKey();
-            final List<PropertySubGroupConfiguration> oldSubGroups = entry.getValue();
-            final List<PropertySubGroupConfiguration> newSubGroups = newSubGroupsByGroup.get(groupName);
-            if (newSubGroups == null) {
-                // Entire group has been removed
-                changedPropertyGroups.add(groupName);
+        // Check for changes in existing configuration steps and removed configuration steps
+        for (final Map.Entry<String, List<PropertyGroupConfiguration>> entry : oldPropertyGroupsByConfigurationStep.entrySet()) {
+            final String configurationStepName = entry.getKey();
+            final List<PropertyGroupConfiguration> oldPropertyGroups = entry.getValue();
+            final List<PropertyGroupConfiguration> newPropertyGroups = newPropertyGroupsByConfigurationStep.get(configurationStepName);
+            if (newPropertyGroups == null) {
+                // Entire configuration step has been removed
+                changedConfigurationSteps.add(configurationStepName);
                 continue;
             }
 
-            final Map<String, Map<String, String>> oldPropertiesBySubGroup = new HashMap<>();
-            for (final PropertySubGroupConfiguration subGroupConfig : oldSubGroups) {
-                oldPropertiesBySubGroup.putAll(mapPropertySubGroups(subGroupConfig));
+            final Map<String, Map<String, String>> oldPropertiesByPropertyGroup = new HashMap<>();
+            for (final PropertyGroupConfiguration propertyGroupConfiguration : oldPropertyGroups) {
+                oldPropertiesByPropertyGroup.putAll(mapPropertyGroups(propertyGroupConfiguration));
             }
 
-            final Map<String, Map<String, String>> newPropertiesBySubGroup = new HashMap<>();
-            for (final PropertySubGroupConfiguration subGroupConfig : newSubGroups) {
-                newPropertiesBySubGroup.putAll(mapPropertySubGroups(subGroupConfig));
+            final Map<String, Map<String, String>> newPropertiesByPropertyGroup = new HashMap<>();
+            for (final PropertyGroupConfiguration propertyGroupConfiguration : newPropertyGroups) {
+                newPropertiesByPropertyGroup.putAll(mapPropertyGroups(propertyGroupConfiguration));
             }
 
-            for (final Map.Entry<String, Map<String, String>> subGroupEntry : oldPropertiesBySubGroup.entrySet()) {
-                final String subGroupName = subGroupEntry.getKey();
-                final Map<String, String> oldProperties = subGroupEntry.getValue();
-                final Map<String, String> newProperties = newPropertiesBySubGroup.get(subGroupName);
+            for (final Map.Entry<String, Map<String, String>> propertyGroupEntry : oldPropertiesByPropertyGroup.entrySet()) {
+                final String propertyGroupName = propertyGroupEntry.getKey();
+                final Map<String, String> oldProperties = propertyGroupEntry.getValue();
+                final Map<String, String> newProperties = newPropertiesByPropertyGroup.get(propertyGroupName);
                 if (newProperties == null) {
-                    // Entire sub-group has been removed
-                    changedPropertyGroups.add(groupName);
+                    // Entire property group has been removed
+                    changedConfigurationSteps.add(configurationStepName);
                     break;
                 }
 
@@ -251,35 +252,35 @@ public class StandardConnectorNode implements ConnectorNode {
                     final String oldValue = propertyEntry.getValue();
                     final String newValue = newProperties.get(propertyName);
                     if (!Objects.equals(oldValue, newValue)) {
-                        changedPropertyGroups.add(groupName);
+                        changedConfigurationSteps.add(configurationStepName);
                         break;
                     }
                 }
             }
         }
 
-        // Check for newly added groups
-        for (final String newGroupName : newSubGroupsByGroup.keySet()) {
-            if (!oldSubGroupsByGroup.containsKey(newGroupName)) {
-                changedPropertyGroups.add(newGroupName);
+        // Check for newly added configuration steps
+        for (final String newConfigurationStepName : newPropertyGroupsByConfigurationStep.keySet()) {
+            if (!oldPropertyGroupsByConfigurationStep.containsKey(newConfigurationStepName)) {
+                changedConfigurationSteps.add(newConfigurationStepName);
             }
         }
 
-        return changedPropertyGroups;
+        return changedConfigurationSteps;
     }
 
-    private Map<String, List<PropertySubGroupConfiguration>> mapPropertyGroups(final ConnectorConfiguration config) {
-        final Map<String, List<PropertySubGroupConfiguration>> groups = new HashMap<>();
-        for (final PropertyGroupConfiguration groupConfig : config.getPropertyGroupConfigurations()) {
-            groups.put(groupConfig.getPropertyGroupName(), groupConfig.getSubGroupConfigurations());
+    private Map<String, List<PropertyGroupConfiguration>> mapConfigurationSteps(final ConnectorConfiguration config) {
+        final Map<String, List<PropertyGroupConfiguration>> configurationSteps = new HashMap<>();
+        for (final ConfigurationStepConfiguration configurationStepConfiguration : config.getConfigurationStepConfigurations()) {
+            configurationSteps.put(configurationStepConfiguration.getConfigurationStepName(), configurationStepConfiguration.getPropertyGroupConfigurations());
         }
 
-        return groups;
+        return configurationSteps;
     }
 
-    private Map<String, Map<String, String>> mapPropertySubGroups(final PropertySubGroupConfiguration subGroupConfiguration) {
+    private Map<String, Map<String, String>> mapPropertyGroups(final PropertyGroupConfiguration propertyGroupConfiguration) {
         final Map<String, Map<String, String>> propertyMap = new HashMap<>();
-        propertyMap.put(subGroupConfiguration.getSubGroupName(), subGroupConfiguration.getPropertyValues());
+        propertyMap.put(propertyGroupConfiguration.getPropertyGroupName(), propertyGroupConfiguration.getPropertyValues());
         return propertyMap;
     }
 
@@ -538,16 +539,6 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
-    public void setParentProcessGroup(final ProcessGroup processGroup) {
-        this.parentProcessGroup = processGroup;
-    }
-
-    @Override
-    public ProcessGroup getParentProcessGroup() {
-        return parentProcessGroup;
-    }
-
-    @Override
     public ProcessGroup getManagedProcessGroup() {
         return managedProcessGroup;
     }
@@ -577,7 +568,7 @@ public class StandardConnectorNode implements ConnectorNode {
 
     @Override
     public String getProcessGroupIdentifier() {
-        return parentProcessGroup == null ? null : parentProcessGroup.getIdentifier();
+        return null;
     }
 
     @Override
@@ -592,7 +583,7 @@ public class StandardConnectorNode implements ConnectorNode {
 
     @Override
     public Authorizable getParentAuthorizable() {
-        return parentProcessGroup;
+        return parentAuthorizable;
     }
 
     @Override

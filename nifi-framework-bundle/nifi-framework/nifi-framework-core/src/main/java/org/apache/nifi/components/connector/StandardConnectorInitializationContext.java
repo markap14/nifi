@@ -104,7 +104,7 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
     }
 
     @Override
-    public void updateFlow(final VersionedProcessGroup versionedProcessGroup, final FlowDrain flowDrain) throws FlowUpdateException {
+    public void updateFlow(final VersionedProcessGroup versionedProcessGroup) throws FlowUpdateException {
         final VersionedExternalFlow versionedExternalFlow = createVersionedExternalFlow(versionedProcessGroup);
 
         try {
@@ -119,7 +119,7 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
     }
 
     @Override
-    public void updateFlow(final VersionedExternalFlow versionedExternalFlow, final FlowDrain flowDrain) throws FlowUpdateException {
+    public void updateFlow(final VersionedExternalFlow versionedExternalFlow) throws FlowUpdateException {
         final String parameterContextName = managedProcessGroup.getParameterContext().getName();
         versionedExternalFlow.getFlowContents().setParameterContextName(parameterContextName);
 

@@ -236,6 +236,7 @@ public class TestStandardConnectorNode {
         final StandardConnectorNode slowNode = new StandardConnectorNode(
             "slow-connector-id",
             extensionManager,
+            null,
             managedProcessGroup,
             createConnectorDetails(slowConnector),
             "SlowConnector",
@@ -270,6 +271,7 @@ public class TestStandardConnectorNode {
         final StandardConnectorNode slowNode = new StandardConnectorNode(
             "slow-starting-connector-id",
             extensionManager,
+            null,
             managedProcessGroup,
             createConnectorDetails(slowConnector),
             "SlowStartingConnector",
@@ -333,6 +335,7 @@ public class TestStandardConnectorNode {
         final StandardConnectorNode slowNode = new StandardConnectorNode(
             "slow-starting-connector-id",
             extensionManager,
+            null,
             managedProcessGroup,
             createConnectorDetails(slowConnector),
             "SlowStartingConnector",
@@ -357,6 +360,7 @@ public class TestStandardConnectorNode {
         final StandardConnectorNode slowNode = new StandardConnectorNode(
             "slow-stopping-connector-id",
             extensionManager,
+            null,
             managedProcessGroup,
             createConnectorDetails(slowConnector),
             "SlowStoppingConnector",
@@ -404,11 +408,11 @@ public class TestStandardConnectorNode {
     }
 
     @Test
-    public void testSetConfigurationWithNewPropertyGroup() throws FlowUpdateException {
+    public void testSetConfigurationWithNewConfigurationStep() throws FlowUpdateException {
         final StandardConnectorNode connectorNode = createConnectorNode();
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
 
-        final ConnectorConfiguration initialConfiguration = createTestConfiguration("group1", "prop1", "value1");
+        final ConnectorConfiguration initialConfiguration = createTestConfiguration("configurationStep1", "prop1", "value1");
         connectorNode.setConfiguration(initialConfiguration);
 
         final ConnectorConfiguration newConfiguration = createTestConfigurationWithMultipleGroups();
@@ -418,14 +422,14 @@ public class TestStandardConnectorNode {
     }
 
     @Test
-    public void testSetConfigurationWithRemovedPropertyGroup() throws FlowUpdateException {
+    public void testSetConfigurationWithRemovedConfigurationStep() throws FlowUpdateException {
         final StandardConnectorNode connectorNode = createConnectorNode();
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
 
         final ConnectorConfiguration initialConfiguration = createTestConfigurationWithMultipleGroups();
         connectorNode.setConfiguration(initialConfiguration);
 
-        final ConnectorConfiguration newConfiguration = createTestConfiguration("group1", "prop1", "value1");
+        final ConnectorConfiguration newConfiguration = createTestConfiguration("configurationStep1", "prop1", "value1");
 
         connectorNode.setConfiguration(newConfiguration);
         assertEquals(newConfiguration, connectorNode.getConfiguration());
@@ -445,29 +449,29 @@ public class TestStandardConnectorNode {
     }
 
     @Test
-    public void testSetConfigurationCallsOnPropertyGroupConfiguredForChangedGroups() throws FlowUpdateException {
+    public void testSetConfigurationCallsOnPropertyGroupConfiguredForChangedConfigurationSteps() throws FlowUpdateException {
         final TrackingConnector trackingConnector = new TrackingConnector();
         final StandardConnectorNode connectorNode = createConnectorNode(trackingConnector);
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
 
-        final ConnectorConfiguration initialConfiguration = createTestConfiguration("group1", "prop1", "value1");
+        final ConnectorConfiguration initialConfiguration = createTestConfiguration("configurationStep1", "prop1", "value1");
         connectorNode.setConfiguration(initialConfiguration);
         trackingConnector.reset();
 
-        final ConnectorConfiguration newConfiguration = createTestConfiguration("group1", "prop1", "value2");
+        final ConnectorConfiguration newConfiguration = createTestConfiguration("configurationStep1", "prop1", "value2");
         connectorNode.setConfiguration(newConfiguration);
 
-        assertTrue(trackingConnector.wasOnPropertyGroupConfiguredCalled("group1"));
+        assertTrue(trackingConnector.wasOnPropertyGroupConfiguredCalled("configurationStep1"));
         assertTrue(trackingConnector.wasOnConfiguredCalled());
     }
 
     private StandardConnectorNode createConnectorNode() {
         final SleepingConnector sleepingConnector = new SleepingConnector();
-        return new StandardConnectorNode("test-connector-id", extensionManager, managedProcessGroup, createConnectorDetails(sleepingConnector), "TestConnector", null);
+        return new StandardConnectorNode("test-connector-id", extensionManager, null, managedProcessGroup, createConnectorDetails(sleepingConnector), "TestConnector", null);
     }
 
     private StandardConnectorNode createConnectorNode(final Connector connector) {
-        return new StandardConnectorNode("test-connector-id", extensionManager, managedProcessGroup, createConnectorDetails(connector), "TestConnector", null);
+        return new StandardConnectorNode("test-connector-id", extensionManager, null, managedProcessGroup, createConnectorDetails(connector), "TestConnector", null);
     }
 
     private ConnectorDetails createConnectorDetails(final Connector connector) {
@@ -479,23 +483,23 @@ public class TestStandardConnectorNode {
         return createTestConfiguration("testGroup", "testProperty", "testValue");
     }
 
-    private ConnectorConfiguration createTestConfiguration(final String groupName, final String propertyName, final String propertyValue) {
+    private ConnectorConfiguration createTestConfiguration(final String configurationStepName, final String propertyName, final String propertyValue) {
         final Map<String, String> properties = Map.of(propertyName, propertyValue);
-        final PropertySubGroupConfiguration subGroupConfiguration = new PropertySubGroupConfiguration("subGroup1", properties);
-        final PropertyGroupConfiguration groupConfiguration = new PropertyGroupConfiguration(groupName, List.of(subGroupConfiguration));
-        return new ConnectorConfiguration(List.of(groupConfiguration));
+        final PropertyGroupConfiguration propertyGroupConfiguration = new PropertyGroupConfiguration("propertyGroup1", properties);
+        final ConfigurationStepConfiguration configurationStepConfiguration = new ConfigurationStepConfiguration(configurationStepName, List.of(propertyGroupConfiguration));
+        return new ConnectorConfiguration(List.of(configurationStepConfiguration));
     }
 
     private ConnectorConfiguration createTestConfigurationWithMultipleGroups() {
-        final Map<String, String> firstGroupProperties = Map.of("prop1", "value1");
-        final PropertySubGroupConfiguration firstSubGroupConfiguration = new PropertySubGroupConfiguration("subGroup1", firstGroupProperties);
-        final PropertyGroupConfiguration firstGroupConfiguration = new PropertyGroupConfiguration("group1", List.of(firstSubGroupConfiguration));
+        final Map<String, String> firstConfigurationStepProperties = Map.of("prop1", "value1");
+        final PropertyGroupConfiguration firstPropertyGroupConfiguration = new PropertyGroupConfiguration("propertyGroup1", firstConfigurationStepProperties);
+        final ConfigurationStepConfiguration firstConfigurationStepConfiguration = new ConfigurationStepConfiguration("configurationStep1", List.of(firstPropertyGroupConfiguration));
 
-        final Map<String, String> secondGroupProperties = Map.of("prop2", "value2");
-        final PropertySubGroupConfiguration secondSubGroupConfiguration = new PropertySubGroupConfiguration("subGroup2", secondGroupProperties);
-        final PropertyGroupConfiguration secondGroupConfiguration = new PropertyGroupConfiguration("group2", List.of(secondSubGroupConfiguration));
+        final Map<String, String> secondConfigurationStepProperties = Map.of("prop2", "value2");
+        final PropertyGroupConfiguration secondPropertyGroupConfiguration = new PropertyGroupConfiguration("propertyGroup2", secondConfigurationStepProperties);
+        final ConfigurationStepConfiguration secondConfigurationStepConfiguration = new ConfigurationStepConfiguration("configurationStep2", List.of(secondPropertyGroupConfiguration));
 
-        return new ConnectorConfiguration(List.of(firstGroupConfiguration, secondGroupConfiguration));
+        return new ConnectorConfiguration(List.of(firstConfigurationStepConfiguration, secondConfigurationStepConfiguration));
     }
 
     /**
@@ -503,7 +507,7 @@ public class TestStandardConnectorNode {
      */
     private static class TrackingConnector implements Connector {
         private boolean onConfiguredCalled = false;
-        private final Set<String> onPropertyGroupConfiguredCalls = new HashSet<>();
+        private final Set<String> onConfigurationStepConfiguredCalls = new HashSet<>();
 
         @Override
         public void initialize(final ConnectorInitializationContext connectorInitializationContext) {
@@ -523,12 +527,12 @@ public class TestStandardConnectorNode {
         }
 
         @Override
-        public List<String> getPropertyGroupNames() {
+        public List<String> getConfigurationStepNames() {
             return List.of();
         }
 
         @Override
-        public ConnectorPropertyGroup getPropertyGroup(final String s) {
+        public ConfigurationStep getConfigurationStep(final String stepName) {
             return null;
         }
 
@@ -538,12 +542,12 @@ public class TestStandardConnectorNode {
         }
 
         @Override
-        public void onPropertyGroupConfigured(final String groupName) {
-            onPropertyGroupConfiguredCalls.add(groupName);
+        public void onConfigurationStepConfigured(final String stepName) {
+            onConfigurationStepConfiguredCalls.add(stepName);
         }
 
         @Override
-        public List<ValidationResult> validatePropertyGroup(final String groupName, final Map<String, String> propertyValues) {
+        public List<ValidationResult> validateConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
             return List.of();
         }
 
@@ -551,13 +555,13 @@ public class TestStandardConnectorNode {
             return onConfiguredCalled;
         }
 
-        public boolean wasOnPropertyGroupConfiguredCalled(final String groupName) {
-            return onPropertyGroupConfiguredCalls.contains(groupName);
+        public boolean wasOnPropertyGroupConfiguredCalled(final String stepName) {
+            return onConfigurationStepConfiguredCalls.contains(stepName);
         }
 
         public void reset() {
             onConfiguredCalled = false;
-            onPropertyGroupConfiguredCalls.clear();
+            onConfigurationStepConfiguredCalls.clear();
         }
     }
 

@@ -282,9 +282,9 @@ public class StandardConnectorNodeIT {
 
         // Set the value of the 'Text' property to Hi. This should result in the parameter context being updated.
         final Map<String, String> sourceProperties = Map.of("Text", "Hi.");
-        final PropertySubGroupConfiguration sourceSubGroupConfig = new PropertySubGroupConfiguration("", sourceProperties);
-        final PropertyGroupConfiguration sourceGroupConfig = new PropertyGroupConfiguration("Text Configuration", List.of(sourceSubGroupConfig));
-        final ConnectorConfiguration connectorConfiguration = new ConnectorConfiguration(List.of(sourceGroupConfig));
+        final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration("", sourceProperties);
+        final ConfigurationStepConfiguration sourceConfigurationStepConfiguration = new ConfigurationStepConfiguration("Text Configuration", List.of(sourcePropertyGroupConfiguration));
+        final ConnectorConfiguration connectorConfiguration = new ConnectorConfiguration(List.of(sourceConfigurationStepConfiguration));
         connectorNode.setConfiguration(connectorConfiguration);
 
         assertEquals("Hi.", parameterContext.getParameter("Text").orElseThrow().getValue());
@@ -373,7 +373,7 @@ public class StandardConnectorNodeIT {
             SystemBundle.SYSTEM_BUNDLE_COORDINATE, true, true);
         assertNotNull(connectorNode);
 
-        assertEquals(List.of("File"), connectorNode.getConnector().getPropertyGroupNames());
+        assertEquals(List.of("File"), connectorNode.getConnector().getConfigurationStepNames());
 
         final Path tempFile = Files.createTempFile("StandardConnectorNodeIT", ".txt");
         Files.writeString(tempFile, String.join("\n", "red", "blue", "yellow"));
@@ -381,13 +381,13 @@ public class StandardConnectorNodeIT {
         final ConnectorConfiguration configuration = createFileConfiguration(tempFile.toFile().getAbsolutePath());
         connectorNode.setConfiguration(configuration);
 
-        assertEquals(List.of("File", "Colors"), connectorNode.getConnector().getPropertyGroupNames());
-        final ConnectorPropertyGroup colorGroup = connectorNode.getConnector().getPropertyGroup("Colors");
-        assertNotNull(colorGroup);
-        assertEquals(1, colorGroup.getSubGroups().size());
-        final ConnectorPropertySubGroup primaryColors = colorGroup.getSubGroups().getFirst();
+        assertEquals(List.of("File", "Colors"), connectorNode.getConnector().getConfigurationStepNames());
+        final ConfigurationStep colorConfigurationStep = connectorNode.getConnector().getConfigurationStep("Colors");
+        assertNotNull(colorConfigurationStep);
+        assertEquals(1, colorConfigurationStep.getPropertyGroups().size());
+        final ConnectorPropertyGroup primaryColorsPropertyGroup = colorConfigurationStep.getPropertyGroups().getFirst();
 
-        final List<String> allowableValues = primaryColors.getProperties().getFirst().getAllowableValues().stream()
+        final List<String> allowableValues = primaryColorsPropertyGroup.getProperties().getFirst().getAllowableValues().stream()
             .map(DescribedValue::getValue)
             .toList();
         assertEquals(List.of("red", "blue", "yellow"), allowableValues);
@@ -448,30 +448,30 @@ public class StandardConnectorNodeIT {
     }
 
     private ConnectorConfiguration createConnectorConfiguration(final String sourceText, final int numberOfCopies, final boolean logContents, final boolean countFlowFiles) {
-        // Source group configuration
+        // Source configuration step
         final Map<String, String> sourceProperties = Map.of("Source Text", sourceText, "Count FlowFiles", Boolean.toString(countFlowFiles));
-        final PropertySubGroupConfiguration sourceSubGroupConfig = new PropertySubGroupConfiguration("", sourceProperties);
-        final PropertyGroupConfiguration sourceGroupConfig = new PropertyGroupConfiguration("Source", List.of(sourceSubGroupConfig));
+        final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration("", sourceProperties);
+        final ConfigurationStepConfiguration sourceConfigurationStepConfiguration = new ConfigurationStepConfiguration("Source", List.of(sourcePropertyGroupConfiguration));
 
-        // Duplication group configuration
+        // Duplication configuration step
         final Map<String, String> duplicationProperties = Map.of("Number of Copies", Integer.toString(numberOfCopies));
-        final PropertySubGroupConfiguration duplicationSubGroupConfig = new PropertySubGroupConfiguration("", duplicationProperties);
-        final PropertyGroupConfiguration duplicationGroupConfig = new PropertyGroupConfiguration("Duplication", List.of(duplicationSubGroupConfig));
+        final PropertyGroupConfiguration duplicationPropertyGroupConfiguration = new PropertyGroupConfiguration("", duplicationProperties);
+        final ConfigurationStepConfiguration duplicationConfigurationStepConfiguration = new ConfigurationStepConfiguration("Duplication", List.of(duplicationPropertyGroupConfiguration));
 
-        // Destination group configuration
+        // Destination configuration step
         final Map<String, String> destinationProperties = Map.of("Log FlowFile Contents", Boolean.toString(logContents));
-        final PropertySubGroupConfiguration destinationSubGroupConfig = new PropertySubGroupConfiguration("", destinationProperties);
-        final PropertyGroupConfiguration destinationGroupConfig = new PropertyGroupConfiguration("Destination", List.of(destinationSubGroupConfig));
+        final PropertyGroupConfiguration destinationPropertyGroupConfiguration = new PropertyGroupConfiguration("", destinationProperties);
+        final ConfigurationStepConfiguration destinationConfigurationStepConfiguration = new ConfigurationStepConfiguration("Destination", List.of(destinationPropertyGroupConfiguration));
 
-        return new ConnectorConfiguration(List.of(sourceGroupConfig, duplicationGroupConfig, destinationGroupConfig));
+        return new ConnectorConfiguration(List.of(sourceConfigurationStepConfiguration, duplicationConfigurationStepConfiguration, destinationConfigurationStepConfiguration));
     }
 
     private ConnectorConfiguration createFileConfiguration(final String filename) {
-        // File group configuration
+        // File configuration step
         final Map<String, String> fileProperties = Map.of("File Path", filename);
-        final PropertySubGroupConfiguration fileSubGroupConfig = new PropertySubGroupConfiguration("", fileProperties);
-        final PropertyGroupConfiguration fileGroupConfig = new PropertyGroupConfiguration("File", List.of(fileSubGroupConfig));
+        final PropertyGroupConfiguration filePropertyGroupConfiguration = new PropertyGroupConfiguration("", fileProperties);
+        final ConfigurationStepConfiguration fileConfigurationStepConfiguration = new ConfigurationStepConfiguration("File", List.of(filePropertyGroupConfiguration));
 
-        return new ConnectorConfiguration(List.of(fileGroupConfig));
+        return new ConnectorConfiguration(List.of(fileConfigurationStepConfiguration));
     }
 }

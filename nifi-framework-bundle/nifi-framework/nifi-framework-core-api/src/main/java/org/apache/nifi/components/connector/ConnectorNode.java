@@ -56,10 +56,6 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
      */
     String getComponentType();
 
-    void setParentProcessGroup(ProcessGroup processGroup);
-
-    ProcessGroup getParentProcessGroup();
-
     ProcessGroup getManagedProcessGroup();
 
     BundleCoordinate getBundleCoordinate();

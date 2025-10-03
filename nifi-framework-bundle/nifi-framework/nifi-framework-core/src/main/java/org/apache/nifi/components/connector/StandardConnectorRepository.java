@@ -66,4 +66,9 @@ public class StandardConnectorRepository implements ConnectorRepository {
     public Future<Void> stopConnector(final ConnectorNode connector) {
         return connector.stop(lifecycleExecutor);
     }
+
+    @Override
+    public void configureConnector(final ConnectorNode connector, final ConnectorConfiguration configuration) throws FlowUpdateException {
+        connector.setConfiguration(configuration);
+    }
 }

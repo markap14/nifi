@@ -20,13 +20,13 @@ import java.util.List;
 
 public class ConnectorConfiguration {
 
-    private final List<PropertyGroupConfiguration> propertyGroupConfigurations;
+    private final List<ConfigurationStepConfiguration> configurationStepConfigurations;
 
-    public ConnectorConfiguration(final List<PropertyGroupConfiguration> propertyGroupConfigurations) {
-        this.propertyGroupConfigurations = List.copyOf(propertyGroupConfigurations);
+    public ConnectorConfiguration(final List<ConfigurationStepConfiguration> configurationStepConfigurations) {
+        this.configurationStepConfigurations = List.copyOf(configurationStepConfigurations);
     }
 
-    public List<PropertyGroupConfiguration> getPropertyGroupConfigurations() {
-        return propertyGroupConfigurations;
+    public List<ConfigurationStepConfiguration> getConfigurationStepConfigurations() {
+        return configurationStepConfigurations;
     }
 }

@@ -13,6 +13,7 @@ import org.apache.nifi.flow.ConnectableComponentType;
 import org.apache.nifi.flow.Position;
 import org.apache.nifi.flow.ScheduledState;
 import org.apache.nifi.flow.VersionedConnection;
+import org.apache.nifi.flow.VersionedControllerService;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.flow.VersionedPort;
 import org.apache.nifi.flow.VersionedProcessGroup;
@@ -114,8 +115,7 @@ public class ConnectorUtils {
         }
         connections.add(connection);
 
-        final String uuidSeed = "%s-%s-%s-%s".formatted(group.getIdentifier(), source.getId(), destination.getId(), connections.size());
-        final String uuid = UUID.nameUUIDFromBytes(uuidSeed.getBytes(StandardCharsets.UTF_8)).toString();
+        final String uuid = generateDeterministicUuid(group, ComponentType.CONNECTION);
         connection.setIdentifier(uuid);
     }
 
@@ -163,24 +163,22 @@ public class ConnectorUtils {
     }
 
     private static int getComponentCount(final VersionedProcessGroup group, final ComponentType componentType) {
-        return switch (componentType) {
-            case PROCESSOR -> sizeOf(group.getProcessors());
-            case INPUT_PORT -> sizeOf(group.getInputPorts());
-            case OUTPUT_PORT -> sizeOf(group.getOutputPorts());
-            case CONNECTION -> sizeOf(group.getConnections());
-            case FUNNEL -> sizeOf(group.getFunnels());
-            case LABEL -> sizeOf(group.getLabels());
-            case PROCESS_GROUP -> sizeOf(group.getProcessGroups());
-            case CONTROLLER_SERVICE -> sizeOf(group.getControllerServices());
-            default -> 0;
+        final Collection<?> components = switch (componentType) {
+            case PROCESSOR -> group.getProcessors();
+            case INPUT_PORT -> group.getInputPorts();
+            case OUTPUT_PORT -> group.getOutputPorts();
+            case CONNECTION -> group.getConnections();
+            case FUNNEL -> group.getFunnels();
+            case LABEL -> group.getLabels();
+            case PROCESS_GROUP -> group.getProcessGroups();
+            case CONTROLLER_SERVICE -> group.getControllerServices();
+            default -> List.of();
         };
+
+        return components == null ? 0 : components.size();
     }
 
-    private static int sizeOf(final Collection<?> collection) {
-        return collection != null ? collection.size() : 0;
-    }
-
-    public static VersionedProcessor createProcessor(final VersionedProcessGroup group, final String processorType, final String name, final Position position, final Bundle bundle) {
+    public static VersionedProcessor addProcessor(final VersionedProcessGroup group, final String processorType, final Bundle bundle, final String name, final Position position) {
         final VersionedProcessor processor = new VersionedProcessor();
 
         // Generate deterministic UUID based on group and component type
@@ -212,6 +210,41 @@ public class ConnectorUtils {
         processor.setComponentType(ComponentType.PROCESSOR);
         processor.setGroupIdentifier(group.getIdentifier());
 
+        group.getProcessors().add(processor);
         return processor;
     }
+
+    public static VersionedControllerService addControllerService(final VersionedProcessGroup group, final String serviceType, final Bundle bundle, final String name) {
+        final VersionedControllerService controllerService = new VersionedControllerService();
+
+        // Generate deterministic UUID based on group and component type
+        controllerService.setIdentifier(generateDeterministicUuid(group, ComponentType.CONTROLLER_SERVICE));
+
+        controllerService.setName(name);
+        controllerService.setType(serviceType);
+        controllerService.setBundle(bundle);
+        controllerService.setComponentType(ComponentType.CONTROLLER_SERVICE);
+
+        // Set default controller service configuration
+        controllerService.setProperties(new HashMap<>());
+        controllerService.setPropertyDescriptors(new HashMap<>());
+        controllerService.setControllerServiceApis(new ArrayList<>());
+        controllerService.setAnnotationData(null);
+        controllerService.setScheduledState(ScheduledState.DISABLED);
+        controllerService.setBulletinLevel("WARN");
+        controllerService.setComments(null);
+        controllerService.setGroupIdentifier(group.getIdentifier());
+
+        // Initialize controller services collection if it doesn't exist
+        Set<VersionedControllerService> controllerServices = group.getControllerServices();
+        if (controllerServices == null) {
+            controllerServices = new HashSet<>();
+            group.setControllerServices(controllerServices);
+        }
+        controllerServices.add(controllerService);
+
+        return controllerService;
+    }
+
+
 }

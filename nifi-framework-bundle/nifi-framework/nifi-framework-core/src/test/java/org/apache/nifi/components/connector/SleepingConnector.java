@@ -62,12 +62,12 @@ public class SleepingConnector implements Connector {
     }
 
     @Override
-    public List<String> getPropertyGroupNames() {
+    public List<String> getConfigurationStepNames() {
         return List.of();
     }
 
     @Override
-    public ConnectorPropertyGroup getPropertyGroup(final String s) {
+    public ConfigurationStep getConfigurationStep(final String stepName) {
         return null;
     }
 
@@ -81,12 +81,12 @@ public class SleepingConnector implements Connector {
     }
 
     @Override
-    public void onPropertyGroupConfigured(final String groupName) {
+    public void onConfigurationStepConfigured(final String stepName) {
 
     }
 
     @Override
-    public List<ValidationResult> validatePropertyGroup(final String groupName, final Map<String, String> propertyValues) {
+    public List<ValidationResult> validateConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
         return List.of();
     }
 }

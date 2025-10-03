@@ -18,9 +18,9 @@
 package org.apache.nifi.controller.flow;
 
 import org.apache.nifi.components.ValidationResult;
+import org.apache.nifi.components.connector.ConfigurationStep;
 import org.apache.nifi.components.connector.Connector;
 import org.apache.nifi.components.connector.ConnectorInitializationContext;
-import org.apache.nifi.components.connector.ConnectorPropertyGroup;
 import org.apache.nifi.components.connector.FlowUpdateException;
 
 import java.util.List;
@@ -75,19 +75,19 @@ public class NopConnector implements Connector {
     }
 
     @Override
-    public List<String> getPropertyGroupNames() {
+    public List<String> getConfigurationStepNames() {
         return List.of("Test Group");
     }
 
     @Override
-    public ConnectorPropertyGroup getPropertyGroup(final String groupName) {
-        if ("Test Group".equals(groupName)) {
-            return new ConnectorPropertyGroup.Builder()
+    public ConfigurationStep getConfigurationStep(final String stepName) {
+        if ("Test Group".equals(stepName)) {
+            return new ConfigurationStep.Builder()
                 .name("Test Group")
-                .description("A test property group")
+                .description("A test configuration step")
                 .build();
         }
-        throw new IllegalArgumentException("Unknown property group: " + groupName);
+        throw new IllegalArgumentException("Unknown configuration step: " + stepName);
     }
 
     @Override
@@ -99,12 +99,12 @@ public class NopConnector implements Connector {
     }
 
     @Override
-    public void onPropertyGroupConfigured(final String groupName) {
+    public void onConfigurationStepConfigured(final String stepName) {
 
     }
 
     @Override
-    public List<ValidationResult> validatePropertyGroup(final String groupName, final Map<String, String> propertyValues) {
+    public List<ValidationResult> validateConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
         return List.of();
     }
 

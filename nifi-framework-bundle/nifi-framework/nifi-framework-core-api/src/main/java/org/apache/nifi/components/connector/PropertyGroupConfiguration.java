@@ -17,22 +17,22 @@
 
 package org.apache.nifi.components.connector;
 
-import java.util.List;
+import java.util.Map;
 
 public class PropertyGroupConfiguration {
     private final String propertyGroupName;
-    private final List<PropertySubGroupConfiguration> subGroupConfigurations;
+    private final Map<String, String> propertyValues;
 
-    public PropertyGroupConfiguration(final String propertyGroupName, final List<PropertySubGroupConfiguration> subGroupConfigurations) {
+    public PropertyGroupConfiguration(final String propertyGroupName, final Map<String, String> propertyValues) {
         this.propertyGroupName = propertyGroupName;
-        this.subGroupConfigurations = List.copyOf(subGroupConfigurations);
+        this.propertyValues = Map.copyOf(propertyValues);
     }
 
     public String getPropertyGroupName() {
         return propertyGroupName;
     }
 
-    public List<PropertySubGroupConfiguration> getSubGroupConfigurations() {
-        return subGroupConfigurations;
+    public Map<String, String> getPropertyValues() {
+        return propertyValues;
     }
 }

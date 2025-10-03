@@ -58,4 +58,6 @@ public interface ConnectorRepository {
      * @return a CompletableFuture that will be completed when the Connector has stopped
      */
     Future<Void> stopConnector(ConnectorNode connector);
+
+    void configureConnector(ConnectorNode connector, ConnectorConfiguration configuration) throws FlowUpdateException;
 }

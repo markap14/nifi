@@ -38,10 +38,10 @@ public class ParameterConnector extends AbstractConnector {
         .defaultValue("Hello World")
         .build();
 
-    private static final ConnectorPropertyGroup TEXT_GROUP = new ConnectorPropertyGroup.Builder()
+    private static final ConfigurationStep TEXT_STEP = new ConfigurationStep.Builder()
         .name("Text Configuration")
         .description("Configure the text to be written to FlowFiles")
-        .subGroups(List.of(new ConnectorPropertySubGroup.Builder()
+        .subGroups(List.of(new ConnectorPropertyGroup.Builder()
             .addProperty(TEXT_PROPERTY)
             .build()))
         .build();
@@ -50,7 +50,7 @@ public class ParameterConnector extends AbstractConnector {
     protected void init() throws FlowUpdateException {
         // Load the base flow from the generate-and-log-with-parameter.json flow
         final VersionedExternalFlow externalFlow = ConnectorUtils.loadFlowFromResource("flows/generate-and-log-with-parameter.json");
-        getInitializationContext().updateFlow(externalFlow, this::drainFlowFiles);
+        getInitializationContext().updateFlow(externalFlow);
         initialized = true;
     }
 
@@ -59,14 +59,14 @@ public class ParameterConnector extends AbstractConnector {
     }
 
     @Override
-    public List<String> getPropertyGroupNames() {
-        return List.of(TEXT_GROUP.getName());
+    public List<String> getConfigurationStepNames() {
+        return List.of(TEXT_STEP.getName());
     }
 
     @Override
-    public ConnectorPropertyGroup getPropertyGroup(final String groupName) {
-        if (TEXT_GROUP.getName().equals(groupName)) {
-            return TEXT_GROUP;
+    public ConfigurationStep getConfigurationStep(final String stepName) {
+        if (TEXT_STEP.getName().equals(stepName)) {
+            return TEXT_STEP;
         }
         return null;
     }
@@ -82,16 +82,16 @@ public class ParameterConnector extends AbstractConnector {
     }
 
     @Override
-    public void onPropertyGroupConfigured(final String groupName) {
+    public void onConfigurationStepConfigured(final String stepName) {
     }
 
     @Override
-    public List<ValidationResult> validatePropertyGroup(final String groupName, final Map<String, String> propertyValues) {
+    public List<ValidationResult> validateConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
         return List.of();
     }
 
     private void updateTextParameter() throws FlowUpdateException {
-        final String textValue = getProperty(TEXT_GROUP, TEXT_PROPERTY);
+        final String textValue = getProperty(TEXT_STEP, TEXT_PROPERTY);
 
         // Update the "Text" parameter with the configured property value
         final ParameterValue textParameter = new ParameterValue.Builder()

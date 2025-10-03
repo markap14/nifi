@@ -30,7 +30,7 @@ import java.util.Map;
 import java.util.Set;
 
 public class DynamicAllowableValuesConnector extends AbstractConnector {
-    static final String COLORS_GROUP_NAME = "Colors";
+    static final String COLORS_STEP_NAME = "Colors";
 
     static final ConnectorPropertyDescriptor FILE_PATH = new ConnectorPropertyDescriptor.Builder()
         .name("File Path")
@@ -38,30 +38,30 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
         .required(true)
         .build();
 
-    static final ConnectorPropertySubGroup FILE = new ConnectorPropertySubGroup.Builder()
+    static final ConnectorPropertyGroup FILE_PROPERTY_GROUP = new ConnectorPropertyGroup.Builder()
         .name("")
         .addProperty(FILE_PATH)
         .build();
 
-    static final ConnectorPropertyGroup FILE_GROUP = new ConnectorPropertyGroup.Builder()
+    static final ConfigurationStep FILE_STEP = new ConfigurationStep.Builder()
         .name("File")
-        .subGroups(List.of(FILE))
+        .subGroups(List.of(FILE_PROPERTY_GROUP))
         .build();
 
 
     @Override
-    public List<String> getPropertyGroupNames() {
-        final List<String> groupNames = new ArrayList<>();
-        groupNames.add(FILE_GROUP.getName());
-        if (getProperty(FILE_GROUP, FILE_PATH) != null) {
-            groupNames.add(COLORS_GROUP_NAME);
+    public List<String> getConfigurationStepNames() {
+        final List<String> stepNames = new ArrayList<>();
+        stepNames.add(FILE_STEP.getName());
+        if (getProperty(FILE_STEP, FILE_PATH) != null) {
+            stepNames.add(COLORS_STEP_NAME);
         }
-        return groupNames;
+        return stepNames;
     }
 
     @Override
-    public ConnectorPropertyGroup getPropertyGroup(final String groupName) {
-        if (groupName.equals(COLORS_GROUP_NAME)) {
+    public ConfigurationStep getConfigurationStep(final String stepName) {
+        if (stepName.equals(COLORS_STEP_NAME)) {
             final Set<ProcessorFacade> processorsFacades = getInitializationContext().getRootGroup().getProcessors();
             if (processorsFacades.isEmpty()) {
                 return null;
@@ -70,18 +70,18 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
             final ProcessorFacade processorFacade = processorsFacades.iterator().next();
             try {
                 final List<String> fileValues = (List<String>) processorFacade.invokeConnectorMethod("getFileValues", Map.of());
-                return createColorGroup(fileValues);
+                return createColorConfigurationStep(fileValues);
             } catch (final InvocationFailedException e) {
                 throw new RuntimeException(e);
             }
-        } else if (groupName.equals(FILE_GROUP.getName())) {
-            return FILE_GROUP;
+        } else if (stepName.equals(FILE_STEP.getName())) {
+            return FILE_STEP;
         }
 
         return null;
     }
 
-    private ConnectorPropertyGroup createColorGroup(final List<String> values) {
+    private ConfigurationStep createColorConfigurationStep(final List<String> values) {
         final ConnectorPropertyDescriptor FIRST_PRIMARY_COLOR = new ConnectorPropertyDescriptor.Builder()
             .name("First Primary Color")
             .description("The first primary color")
@@ -90,14 +90,14 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
             .required(true)
             .build();
 
-        final ConnectorPropertySubGroup PRIMARY = new ConnectorPropertySubGroup.Builder()
+        final ConnectorPropertyGroup PRIMARY_COLORS_PROPERTY_GROUP = new ConnectorPropertyGroup.Builder()
             .name("Primary Colors")
             .addProperty(FIRST_PRIMARY_COLOR)
             .build();
 
-        return new ConnectorPropertyGroup.Builder()
+        return new ConfigurationStep.Builder()
             .name("Colors")
-            .subGroups(List.of(PRIMARY))
+            .subGroups(List.of(PRIMARY_COLORS_PROPERTY_GROUP))
             .build();
     }
 
@@ -106,17 +106,17 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
         final VersionedExternalFlow externalFlow = ConnectorUtils.loadFlowFromResource("flows/choose-color.json");
         final VersionedProcessGroup rootGroup = externalFlow.getFlowContents();
         final VersionedProcessor processor = rootGroup.getProcessors().iterator().next();
-        processor.setProperties(Map.of("File", getProperty(FILE_GROUP, FILE_PATH)));
+        processor.setProperties(Map.of("File", getProperty(FILE_STEP, FILE_PATH)));
 
-        getInitializationContext().updateFlow(externalFlow, this::drainFlowFiles);
+        getInitializationContext().updateFlow(externalFlow);
     }
 
     @Override
-    public void onPropertyGroupConfigured(final String groupName) {
+    public void onConfigurationStepConfigured(final String stepName) {
     }
 
     @Override
-    public List<ValidationResult> validatePropertyGroup(final String groupName, final Map<String, String> propertyValues) {
+    public List<ValidationResult> validateConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
         return List.of();
     }
 }

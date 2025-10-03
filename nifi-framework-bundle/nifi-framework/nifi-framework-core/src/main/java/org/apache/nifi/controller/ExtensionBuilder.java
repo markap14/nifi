@@ -475,6 +475,7 @@ public class ExtensionBuilder {
        final ConnectorNode connectorNode = new StandardConnectorNode(
            identifier,
            extensionManager,
+           flowController,
            managedProcessGroup,
            connectorDetails,
            componentType,

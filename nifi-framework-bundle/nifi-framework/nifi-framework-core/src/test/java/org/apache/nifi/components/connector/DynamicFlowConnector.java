@@ -23,15 +23,11 @@ import org.apache.nifi.components.connector.processors.CreateDummyFlowFile;
 import org.apache.nifi.components.connector.processors.DuplicateFlowFile;
 import org.apache.nifi.components.connector.processors.LogFlowFileContents;
 import org.apache.nifi.components.connector.processors.OverwriteFlowFile;
-import org.apache.nifi.components.connector.services.CounterService;
 import org.apache.nifi.components.connector.services.impl.StandardCounterService;
 import org.apache.nifi.components.connector.util.ConnectorUtils;
 import org.apache.nifi.flow.Bundle;
-import org.apache.nifi.flow.ComponentType;
 import org.apache.nifi.flow.ConnectableComponent;
-import org.apache.nifi.flow.ControllerServiceAPI;
 import org.apache.nifi.flow.Position;
-import org.apache.nifi.flow.ScheduledState;
 import org.apache.nifi.flow.VersionedConnection;
 import org.apache.nifi.flow.VersionedControllerService;
 import org.apache.nifi.flow.VersionedExternalFlow;
@@ -82,45 +78,45 @@ public class DynamicFlowConnector extends AbstractConnector {
         .defaultValue("false")
         .build();
 
-    private static final ConnectorPropertyGroup SOURCE_GROUP = new ConnectorPropertyGroup.Builder()
+    private static final ConfigurationStep SOURCE_STEP = new ConfigurationStep.Builder()
         .name("Source")
-        .subGroups(List.of(new ConnectorPropertySubGroup.Builder()
+        .subGroups(List.of(new ConnectorPropertyGroup.Builder()
             .addProperty(SOURCE_TEXT)
             .addProperty(COUNT_FLOWFILES)
             .build()))
         .build();
 
-    private static final ConnectorPropertyGroup DUPLICATION_GROUP = new ConnectorPropertyGroup.Builder()
+    private static final ConfigurationStep DUPLICATION_STEP = new ConfigurationStep.Builder()
         .name("Duplication")
-        .subGroups(List.of(new ConnectorPropertySubGroup.Builder()
+        .subGroups(List.of(new ConnectorPropertyGroup.Builder()
             .addProperty(NUM_COPIES)
             .build()))
         .build();
 
-    private static final ConnectorPropertyGroup DESTINATION_GROUP = new ConnectorPropertyGroup.Builder()
+    private static final ConfigurationStep DESTINATION_STEP = new ConfigurationStep.Builder()
         .name("Destination")
-        .subGroups(List.of(new ConnectorPropertySubGroup.Builder()
+        .subGroups(List.of(new ConnectorPropertyGroup.Builder()
             .addProperty(LOG_FLOWFILE_CONTENTS)
             .build()))
         .build();
 
 
     @Override
-    public List<String> getPropertyGroupNames() {
+    public List<String> getConfigurationStepNames() {
         return List.of(
-            SOURCE_GROUP.getName(),
-            DUPLICATION_GROUP.getName(),
-            DESTINATION_GROUP.getName());
+            SOURCE_STEP.getName(),
+            DUPLICATION_STEP.getName(),
+            DESTINATION_STEP.getName());
     }
 
     @Override
-    public ConnectorPropertyGroup getPropertyGroup(final String groupName) {
-        if (SOURCE_GROUP.getName().equals(groupName)) {
-            return SOURCE_GROUP;
-        } else if (DUPLICATION_GROUP.getName().equals(groupName)) {
-            return DUPLICATION_GROUP;
-        } else if (DESTINATION_GROUP.getName().equals(groupName)) {
-            return DESTINATION_GROUP;
+    public ConfigurationStep getConfigurationStep(final String stepName) {
+        if (SOURCE_STEP.getName().equals(stepName)) {
+            return SOURCE_STEP;
+        } else if (DUPLICATION_STEP.getName().equals(stepName)) {
+            return DUPLICATION_STEP;
+        } else if (DESTINATION_STEP.getName().equals(stepName)) {
+            return DESTINATION_STEP;
         }
 
         return null;
@@ -132,7 +128,7 @@ public class DynamicFlowConnector extends AbstractConnector {
         final VersionedExternalFlow externalFlow = ConnectorUtils.loadFlowFromResource("flows/generate-duplicate-log-flow.json");
         final VersionedProcessGroup versionedProcessGroup = externalFlow.getFlowContents();
 
-        getInitializationContext().updateFlow(versionedProcessGroup, this::drainFlowFiles);
+        getInitializationContext().updateFlow(versionedProcessGroup);
         initialized = true;
     }
 
@@ -144,15 +140,15 @@ public class DynamicFlowConnector extends AbstractConnector {
     public void onConfigured() throws FlowUpdateException {
         // Now that configuration is available, update the flow based on configured properties
         final VersionedProcessGroup versionedProcessGroup = getFlow();
-        getInitializationContext().updateFlow(versionedProcessGroup, this::drainFlowFiles);
+        getInitializationContext().updateFlow(versionedProcessGroup);
     }
 
     @Override
-    public void onPropertyGroupConfigured(final String groupName) {
+    public void onConfigurationStepConfigured(final String stepName) {
     }
 
     @Override
-    public List<ValidationResult> validatePropertyGroup(final String groupName, final Map<String, String> propertyValues) {
+    public List<ValidationResult> validateConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
         return List.of();
     }
 
@@ -161,23 +157,28 @@ public class DynamicFlowConnector extends AbstractConnector {
         final VersionedProcessGroup versionedProcessGroup = externalFlow.getFlowContents();
 
         // Update the flow based on configured properties
-        updateSourceGroup(versionedProcessGroup);
-        updateDuplicationGroup(versionedProcessGroup);
-        updateDestinationGroup(versionedProcessGroup);
+        updateSourceStep(versionedProcessGroup);
+        updateDuplicationStep(versionedProcessGroup);
+        updateDestinationStep(versionedProcessGroup);
 
         return versionedProcessGroup;
     }
 
-    private void updateSourceGroup(final VersionedProcessGroup rootGroup) {
-        final String sourceText = getProperty(SOURCE_GROUP, SOURCE_TEXT);
+    private void updateSourceStep(final VersionedProcessGroup rootGroup) {
+        final String sourceText = getProperty(SOURCE_STEP, SOURCE_TEXT);
 
         final VersionedProcessor sourceTextProcessor = ConnectorUtils.findProcessor(rootGroup,
             p -> p.getType().equals(OverwriteFlowFile.class.getName())).orElseThrow();
         sourceTextProcessor.getProperties().put(OverwriteFlowFile.CONTENT.getName(), sourceText);
 
-        final boolean count = Boolean.parseBoolean(getProperty(SOURCE_GROUP, COUNT_FLOWFILES));
+        final boolean count = Boolean.parseBoolean(getProperty(SOURCE_STEP, COUNT_FLOWFILES));
         if (count) {
-            final VersionedControllerService controllerService = createControllerService(rootGroup);
+            final Bundle systemBundle = new Bundle();
+            systemBundle.setArtifact("system");
+            systemBundle.setGroup("default");
+            systemBundle.setVersion("unversioned");
+
+            final VersionedControllerService controllerService = ConnectorUtils.addControllerService(rootGroup, StandardCounterService.class.getName(), systemBundle, "Count");
             rootGroup.getControllerServices().add(controllerService);
 
             final VersionedProcessor generateProcessor = ConnectorUtils.findProcessor(rootGroup,
@@ -186,36 +187,9 @@ public class DynamicFlowConnector extends AbstractConnector {
         }
     }
 
-    private VersionedControllerService createControllerService(final VersionedProcessGroup group) {
-        final Bundle systemBundle = new Bundle();
-        systemBundle.setArtifact("system");
-        systemBundle.setGroup("default");
-        systemBundle.setVersion("unversioned");
-
-        final ControllerServiceAPI serviceApi = new ControllerServiceAPI();
-        serviceApi.setType(CounterService.class.getName());
-        serviceApi.setBundle(systemBundle);
-
-        final List<ControllerServiceAPI> serviceApis = List.of(serviceApi);
-
-        final VersionedControllerService controllerService = new VersionedControllerService();
-        controllerService.setIdentifier(ConnectorUtils.generateDeterministicUuid(group, ComponentType.CONTROLLER_SERVICE));
-        controllerService.setGroupIdentifier(group.getIdentifier());
-        controllerService.setType(StandardCounterService.class.getName());
-        controllerService.setComponentType(ComponentType.CONTROLLER_SERVICE);
-        controllerService.setBundle(systemBundle);
-        controllerService.setControllerServiceApis(serviceApis);
-        controllerService.setProperties(Map.of());
-        controllerService.setPropertyDescriptors(Map.of());
-        controllerService.setScheduledState(ScheduledState.DISABLED);
-        controllerService.setName("Count");
-
-        return controllerService;
-    }
-
-    private void updateDuplicationGroup(final VersionedProcessGroup rootGroup) {
+    private void updateDuplicationStep(final VersionedProcessGroup rootGroup) {
         // TODO - getProperty should return a PropertyValue type of object, not a String.
-        final int numCopies = Integer.parseInt(getProperty(DUPLICATION_GROUP, NUM_COPIES));
+        final int numCopies = Integer.parseInt(getProperty(DUPLICATION_STEP, NUM_COPIES));
         final VersionedProcessor duplicateProcessor = ConnectorUtils.findProcessor(rootGroup,
             p -> p.getType().equals(DuplicateFlowFile.class.getName())).orElseThrow();
         duplicateProcessor.getProperties().put(DuplicateFlowFile.NUM_DUPLICATES.getName(), String.valueOf(numCopies));
@@ -239,8 +213,8 @@ public class DynamicFlowConnector extends AbstractConnector {
         }
     }
 
-    private void updateDestinationGroup(final VersionedProcessGroup rootGroup) {
-        final boolean logContents = Boolean.parseBoolean(getProperty(DESTINATION_GROUP, LOG_FLOWFILE_CONTENTS));
+    private void updateDestinationStep(final VersionedProcessGroup rootGroup) {
+        final boolean logContents = Boolean.parseBoolean(getProperty(DESTINATION_STEP, LOG_FLOWFILE_CONTENTS));
         if (!logContents) {
             return;
         }
@@ -262,7 +236,6 @@ public class DynamicFlowConnector extends AbstractConnector {
 
         // Create LogFlowFileContents processor
         final VersionedProcessor logProcessor = createLogFlowFileContentsProcessor(destinationGroup, terminateProcessor);
-        destinationGroup.getProcessors().add(logProcessor);
 
         // Move TerminateFlowFile processor down by 250 pixels
         final Position terminatePosition = terminateProcessor.getPosition();
@@ -347,12 +320,12 @@ public class DynamicFlowConnector extends AbstractConnector {
         final Position terminatePosition = terminateProcessor.getPosition();
         final Position logProcessorPosition = new Position(terminatePosition.getX(), terminatePosition.getY());
 
-        return ConnectorUtils.createProcessor(
+        return ConnectorUtils.addProcessor(
             destinationGroup,
             LogFlowFileContents.class.getName(),
+            terminateProcessor.getBundle(),
             "Log FlowFile Contents",
-            logProcessorPosition,
-            terminateProcessor.getBundle()
+            logProcessorPosition
         );
     }
 }
