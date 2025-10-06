@@ -100,26 +100,15 @@ public class DynamicFlowConnector extends AbstractConnector {
             .build()))
         .build();
 
+    private static final List<ConfigurationStep> configurationSteps = List.of(
+        SOURCE_STEP,
+        DUPLICATION_STEP,
+        DESTINATION_STEP
+    );
 
     @Override
-    public List<String> getConfigurationStepNames() {
-        return List.of(
-            SOURCE_STEP.getName(),
-            DUPLICATION_STEP.getName(),
-            DESTINATION_STEP.getName());
-    }
-
-    @Override
-    public ConfigurationStep getConfigurationStep(final String stepName) {
-        if (SOURCE_STEP.getName().equals(stepName)) {
-            return SOURCE_STEP;
-        } else if (DUPLICATION_STEP.getName().equals(stepName)) {
-            return DUPLICATION_STEP;
-        } else if (DESTINATION_STEP.getName().equals(stepName)) {
-            return DESTINATION_STEP;
-        }
-
-        return null;
+    public List<ConfigurationStep> getConfigurationSteps() {
+        return configurationSteps;
     }
 
     @Override
@@ -137,14 +126,22 @@ public class DynamicFlowConnector extends AbstractConnector {
     }
 
     @Override
-    public void onConfigured() throws FlowUpdateException {
+    public void finishUpdate() throws FlowUpdateException {
+    }
+
+    @Override
+    public void onConfigurationStepConfigured(final String stepName) throws FlowUpdateException {
         // Now that configuration is available, update the flow based on configured properties
         final VersionedProcessGroup versionedProcessGroup = getFlow();
         getInitializationContext().updateFlow(versionedProcessGroup);
     }
 
     @Override
-    public void onConfigurationStepConfigured(final String stepName) {
+    public void prepareUpdate() {
+    }
+
+    @Override
+    public void abortUpdatePreparation(final Throwable throwable) {
     }
 
     @Override

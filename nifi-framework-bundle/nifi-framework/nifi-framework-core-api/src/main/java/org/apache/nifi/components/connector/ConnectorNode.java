@@ -138,11 +138,19 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
      */
     Future<Void> stop(ScheduledExecutorService scheduler);
 
+    // TODO: Should this return a Future<Void>?
+    void prepareUpdate(ScheduledExecutorService scheduler) throws FlowUpdateException;
+
     /**
      * Sets the configuration of the Connector. This method should only be invoked via the ConnectorRepository.
      * @param configuration the ConnectorConfiguration
-     * @throws FlowUpdateException if unable to set the configuration
      */
     void setConfiguration(ConnectorConfiguration configuration) throws FlowUpdateException;
+
+    // TODO: Should this return a Future<Void>?
+    void abortUpdatePreparation(Throwable cause);
+
+    // TODO: Should this return a Future<Void>?
+    void finishUpdate(ScheduledExecutorService scheduler) throws FlowUpdateException;
 
 }

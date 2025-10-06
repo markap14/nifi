@@ -103,15 +103,15 @@ import static org.mockito.Mockito.when;
 
 public class StandardConnectorNodeIT {
 
+    private final ScheduledExecutorService threadPool = Executors.newScheduledThreadPool(1);
     private StandardProcessScheduler processScheduler;
     private StandardFlowManager flowManager;
-    private ControllerServiceProvider controllerServiceProvider;
     private FlowEngine componentLifeycleThreadPool;
     private ConnectorRepository connectorRepository;
 
     @BeforeEach
     public void setup() {
-        controllerServiceProvider = mock(ControllerServiceProvider.class);
+        final ControllerServiceProvider controllerServiceProvider = mock(ControllerServiceProvider.class);
         connectorRepository = new StandardConnectorRepository();
 
         final ExtensionDiscoveringManager extensionManager = new StandardExtensionDiscoveringManager();
@@ -184,7 +184,9 @@ public class StandardConnectorNodeIT {
 
         // Configure the connector to log FlowFile contents, make 5 copies, and set text to "Second Iteration."
         final ConnectorConfiguration configuration = createConnectorConfiguration("Second Iteration.", 5, true, false);
+        connectorNode.prepareUpdate(threadPool);
         connectorNode.setConfiguration(configuration);
+        connectorNode.finishUpdate(threadPool);
 
         final List<ProcessorNode> processorsAfterUpdate = rootGroup.findAllProcessors();
         assertEquals(5, processorsAfterUpdate.size());
@@ -285,7 +287,9 @@ public class StandardConnectorNodeIT {
         final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration("", sourceProperties);
         final ConfigurationStepConfiguration sourceConfigurationStepConfiguration = new ConfigurationStepConfiguration("Text Configuration", List.of(sourcePropertyGroupConfiguration));
         final ConnectorConfiguration connectorConfiguration = new ConnectorConfiguration(List.of(sourceConfigurationStepConfiguration));
+        connectorNode.prepareUpdate(threadPool);
         connectorNode.setConfiguration(connectorConfiguration);
+        connectorNode.finishUpdate(threadPool);
 
         assertEquals("Hi.", parameterContext.getParameter("Text").orElseThrow().getValue());
     }
@@ -295,7 +299,9 @@ public class StandardConnectorNodeIT {
         final ConnectorNode connectorNode = initializeDynamicFlowConnector();
 
         final ConnectorConfiguration configuration = createConnectorConfiguration("Second Iteration", 5, true, true);
+        connectorNode.prepareUpdate(threadPool);
         connectorNode.setConfiguration(configuration);
+        connectorNode.finishUpdate(threadPool);
 
         final ProcessGroup managedGroup = connectorNode.getManagedProcessGroup();
         final Set<ControllerServiceNode> serviceNodes = managedGroup.getControllerServices(true);
@@ -312,7 +318,10 @@ public class StandardConnectorNodeIT {
 
         // Update Connector Property to ensure that the change is allowed with data queued
         final ConnectorConfiguration configuration = createConnectorConfiguration("Second Iteration", 5, true, false);
+        connectorNode.prepareUpdate(threadPool);
         connectorNode.setConfiguration(configuration);
+        connectorNode.finishUpdate(threadPool);
+
         assertEquals(1, connection.getFlowFileQueue().size().getObjectCount());
     }
 
@@ -324,7 +333,9 @@ public class StandardConnectorNodeIT {
         // Create a configuration that will result in the LogFlowFileContents processor being removed.
         // Because the component is being removed, it should drain the queues before doing so.
         final ConnectorConfiguration addLogConfiguration = createConnectorConfiguration("Second Iteration", 5, true, false);
+        connectorNode.prepareUpdate(threadPool);
         connectorNode.setConfiguration(addLogConfiguration);
+        connectorNode.finishUpdate(threadPool);
 
         // Queue data between LogFlowFileContents and TerminateFlowFile
         final Connection connection = queueDataByDestination(rootGroup, "Terminate FlowFile");
@@ -333,7 +344,10 @@ public class StandardConnectorNodeIT {
         // Because the component is being removed, it should drain the queues before doing so.
         final ConnectorConfiguration removeLogConfiguration = createConnectorConfiguration("Second Iteration", 5, false, false);
 
-        assertThrows(FlowUpdateException.class, () -> connectorNode.setConfiguration(removeLogConfiguration));
+        connectorNode.prepareUpdate(threadPool);
+        final Throwable cause = assertThrows(FlowUpdateException.class, () -> connectorNode.setConfiguration(removeLogConfiguration));
+        connectorNode.abortUpdatePreparation(cause);
+
         rootGroup.findAllConnections().contains(connection);
         assertFalse(connection.getFlowFileQueue().isEmpty());
     }
@@ -373,16 +387,23 @@ public class StandardConnectorNodeIT {
             SystemBundle.SYSTEM_BUNDLE_COORDINATE, true, true);
         assertNotNull(connectorNode);
 
-        assertEquals(List.of("File"), connectorNode.getConnector().getConfigurationStepNames());
+        assertEquals(List.of("File"), getConfigurationStepNames(connectorNode));
 
         final Path tempFile = Files.createTempFile("StandardConnectorNodeIT", ".txt");
         Files.writeString(tempFile, String.join("\n", "red", "blue", "yellow"));
 
         final ConnectorConfiguration configuration = createFileConfiguration(tempFile.toFile().getAbsolutePath());
+        connectorNode.prepareUpdate(threadPool);
         connectorNode.setConfiguration(configuration);
+        connectorNode.finishUpdate(threadPool);
 
-        assertEquals(List.of("File", "Colors"), connectorNode.getConnector().getConfigurationStepNames());
-        final ConfigurationStep colorConfigurationStep = connectorNode.getConnector().getConfigurationStep("Colors");
+        assertEquals(List.of("File", "Colors"), getConfigurationStepNames(connectorNode));
+
+        final ConfigurationStep colorConfigurationStep = connectorNode.getConnector().getConfigurationSteps().stream()
+            .filter(step -> step.getName().equals("Colors"))
+            .findFirst()
+            .orElseThrow();
+
         assertNotNull(colorConfigurationStep);
         assertEquals(1, colorConfigurationStep.getPropertyGroups().size());
         final ConnectorPropertyGroup primaryColorsPropertyGroup = colorConfigurationStep.getPropertyGroups().getFirst();
@@ -391,6 +412,12 @@ public class StandardConnectorNodeIT {
             .map(DescribedValue::getValue)
             .toList();
         assertEquals(List.of("red", "blue", "yellow"), allowableValues);
+    }
+
+    private List<String> getConfigurationStepNames(final ConnectorNode connectorNode) {
+        return connectorNode.getConnector().getConfigurationSteps().stream()
+            .map(ConfigurationStep::getName)
+            .toList();
     }
 
     private Connection queueDataBySource(final ProcessGroup group, final String sourceComponentName) {

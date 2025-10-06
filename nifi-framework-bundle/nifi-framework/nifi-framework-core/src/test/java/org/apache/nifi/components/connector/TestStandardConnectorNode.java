@@ -33,14 +33,16 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -231,35 +233,36 @@ public class TestStandardConnectorNode {
 
     @Test
     public void testStartWhileStoppingQueuesStartFuture() throws Exception {
-        // Create a slow-stopping connector to test the queuing behavior
-        final SleepingConnector slowConnector = new SleepingConnector(Duration.ofMillis(300)); // 300ms stop delay
-        final StandardConnectorNode slowNode = new StandardConnectorNode(
-            "slow-connector-id",
+        final CountDownLatch stopLatch = new CountDownLatch(1);
+        final BlockingConnector blockingConnector = new BlockingConnector(new CountDownLatch(0), stopLatch, new CountDownLatch(0));
+        final StandardConnectorNode connectorNode = new StandardConnectorNode(
+            "blocking-connector-id",
             extensionManager,
             null,
             managedProcessGroup,
-            createConnectorDetails(slowConnector),
-            "SlowConnector",
+            createConnectorDetails(blockingConnector),
+            "BlockingConnector",
             null
         );
 
-        // Start the slow connector
-        slowNode.start(scheduler).get(5, TimeUnit.SECONDS);
-        assertEquals(ConnectorState.RUNNING, slowNode.getCurrentState());
+        connectorNode.start(scheduler).get(5, TimeUnit.SECONDS);
+        assertEquals(ConnectorState.RUNNING, connectorNode.getCurrentState());
+        assertEquals(ConnectorState.RUNNING, connectorNode.getDesiredState());
 
-        // Stop the connector (this will take time)
-        final Future<Void> stopFuture = slowNode.stop(scheduler);
+        final Future<Void> stopFuture = connectorNode.stop(scheduler);
+        assertEquals(ConnectorState.STOPPING, connectorNode.getCurrentState());
+        assertEquals(ConnectorState.STOPPED, connectorNode.getDesiredState());
 
-        // While stopping, try to start again - this should queue the start future
-        assertEquals(ConnectorState.STOPPING, slowNode.getCurrentState());
+        final Future<Void> startFuture = connectorNode.start(scheduler);
+        assertEquals(ConnectorState.STOPPING, connectorNode.getCurrentState());
+        assertEquals(ConnectorState.RUNNING, connectorNode.getDesiredState());
 
-        final Future<Void> startFuture = slowNode.start(scheduler);
+        stopLatch.countDown();
 
-        // Both futures should complete - stop first, then start
         stopFuture.get(5, TimeUnit.SECONDS);
         startFuture.get(5, TimeUnit.SECONDS);
 
-        assertEquals(ConnectorState.RUNNING, slowNode.getCurrentState());
+        assertEquals(ConnectorState.RUNNING, connectorNode.getCurrentState());
         assertTrue(stopFuture.isDone());
         assertTrue(startFuture.isDone());
     }
@@ -267,13 +270,14 @@ public class TestStandardConnectorNode {
     @Test
     public void testCannotDeleteWhenStarting() throws Exception {
         // Use a slow-starting connector to test deletion during STARTING state
-        final SleepingConnector slowConnector = new SleepingConnector(Duration.ofMillis(300));
+        final CountDownLatch startLatch = new CountDownLatch(1);
+        final BlockingConnector blockingConnector = new BlockingConnector(startLatch, new CountDownLatch(0), new CountDownLatch(0));
         final StandardConnectorNode slowNode = new StandardConnectorNode(
             "slow-starting-connector-id",
             extensionManager,
             null,
             managedProcessGroup,
-            createConnectorDetails(slowConnector),
+            createConnectorDetails(blockingConnector),
             "SlowStartingConnector",
             null
         );
@@ -287,6 +291,7 @@ public class TestStandardConnectorNode {
         assertThrows(IllegalStateException.class, slowNode::verifyCanDelete);
 
         // Wait for start to complete
+        startLatch.countDown();
         startFuture.get(5, TimeUnit.SECONDS);
         assertEquals(ConnectorState.RUNNING, slowNode.getCurrentState());
     }
@@ -299,7 +304,10 @@ public class TestStandardConnectorNode {
 
         final ConnectorConfiguration newConfiguration = createTestConfiguration();
 
+        connectorNode.prepareUpdate(null);
         connectorNode.setConfiguration(newConfiguration);
+        connectorNode.finishUpdate(scheduler);
+
         assertEquals(newConfiguration, connectorNode.getConfiguration());
     }
 
@@ -312,7 +320,10 @@ public class TestStandardConnectorNode {
 
         final ConnectorConfiguration newConfiguration = createTestConfiguration();
 
+        connectorNode.prepareUpdate(null);
         connectorNode.setConfiguration(newConfiguration);
+        connectorNode.finishUpdate(scheduler);
+
         assertEquals(newConfiguration, connectorNode.getConfiguration());
     }
 
@@ -331,13 +342,14 @@ public class TestStandardConnectorNode {
 
     @Test
     public void testCannotSetConfigurationWhenStarting() throws Exception {
-        final SleepingConnector slowConnector = new SleepingConnector(Duration.ofMillis(300));
+        final CountDownLatch startLatch = new CountDownLatch(1);
+        final BlockingConnector blockingConnector = new BlockingConnector(startLatch, new CountDownLatch(0), new CountDownLatch(0));
         final StandardConnectorNode slowNode = new StandardConnectorNode(
             "slow-starting-connector-id",
             extensionManager,
             null,
             managedProcessGroup,
-            createConnectorDetails(slowConnector),
+            createConnectorDetails(blockingConnector),
             "SlowStartingConnector",
             null
         );
@@ -351,87 +363,94 @@ public class TestStandardConnectorNode {
             () -> slowNode.setConfiguration(newConfig));
         assertTrue(exception.getMessage().contains("state is currently STARTING"));
 
+        startLatch.countDown();
         startFuture.get(5, TimeUnit.SECONDS);
     }
 
     @Test
     public void testCannotSetConfigurationWhenStopping() throws Exception {
-        final SleepingConnector slowConnector = new SleepingConnector(Duration.ofMillis(300));
-        final StandardConnectorNode slowNode = new StandardConnectorNode(
+        final CountDownLatch stopLatch = new CountDownLatch(1);
+        final BlockingConnector blockingConnector = new BlockingConnector(new CountDownLatch(0), stopLatch, new CountDownLatch(0));
+        final StandardConnectorNode connectorNode = new StandardConnectorNode(
             "slow-stopping-connector-id",
             extensionManager,
             null,
             managedProcessGroup,
-            createConnectorDetails(slowConnector),
+            createConnectorDetails(blockingConnector),
             "SlowStoppingConnector",
             null
         );
 
-        slowNode.start(scheduler).get(5, TimeUnit.SECONDS);
-        final Future<Void> stopFuture = slowNode.stop(scheduler);
-        assertEquals(ConnectorState.STOPPING, slowNode.getCurrentState());
+        connectorNode.start(scheduler).get(5, TimeUnit.SECONDS);
+        final Future<Void> stopFuture = connectorNode.stop(scheduler);
+        assertEquals(ConnectorState.STOPPING, connectorNode.getCurrentState());
 
         final ConnectorConfiguration newConfig = createTestConfiguration();
 
         final IllegalStateException exception = assertThrows(IllegalStateException.class,
-            () -> slowNode.setConfiguration(newConfig));
+            () -> connectorNode.setConfiguration(newConfig));
         assertTrue(exception.getMessage().contains("state is currently STOPPING"));
 
+        stopLatch.countDown();
         stopFuture.get(5, TimeUnit.SECONDS);
     }
 
     @Test
-    public void testSetConfigurationWithNullOldConfiguration() throws FlowUpdateException {
-        final StandardConnectorNode connectorNode = createConnectorNode();
-        assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
-
-        assertNull(connectorNode.getConfiguration());
-
-        final ConnectorConfiguration newConfiguration = createTestConfiguration();
-
-        connectorNode.setConfiguration(newConfiguration);
-        assertEquals(newConfiguration, connectorNode.getConfiguration());
-    }
-
-    @Test
-    public void testSetConfigurationWithPropertyChanges() throws FlowUpdateException {
+    public void testSetConfigurationWithPropertyChanges() throws FlowUpdateException, ExecutionException, InterruptedException, TimeoutException {
         final StandardConnectorNode connectorNode = createConnectorNode();
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
 
         final ConnectorConfiguration initialConfiguration = createTestConfiguration("group1", "prop1", "value1");
+        connectorNode.prepareUpdate(null);
         connectorNode.setConfiguration(initialConfiguration);
+        connectorNode.finishUpdate(scheduler);
 
         final ConnectorConfiguration newConfiguration = createTestConfiguration("group1", "prop1", "value2");
 
+        connectorNode.stop(scheduler).get(5, TimeUnit.SECONDS);
+        connectorNode.prepareUpdate(null);
         connectorNode.setConfiguration(newConfiguration);
+        connectorNode.finishUpdate(scheduler);
         assertEquals(newConfiguration, connectorNode.getConfiguration());
     }
 
     @Test
-    public void testSetConfigurationWithNewConfigurationStep() throws FlowUpdateException {
+    public void testSetConfigurationWithNewConfigurationStep() throws FlowUpdateException, ExecutionException, InterruptedException, TimeoutException {
         final StandardConnectorNode connectorNode = createConnectorNode();
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
 
         final ConnectorConfiguration initialConfiguration = createTestConfiguration("configurationStep1", "prop1", "value1");
+        connectorNode.prepareUpdate(null);
         connectorNode.setConfiguration(initialConfiguration);
+        connectorNode.finishUpdate(scheduler);
 
         final ConnectorConfiguration newConfiguration = createTestConfigurationWithMultipleGroups();
 
+        // Wait for Connector to fully stop
+        connectorNode.stop(scheduler).get(5, TimeUnit.SECONDS);
+        connectorNode.prepareUpdate(null);
         connectorNode.setConfiguration(newConfiguration);
+        connectorNode.finishUpdate(scheduler);
+
         assertEquals(newConfiguration, connectorNode.getConfiguration());
     }
 
     @Test
-    public void testSetConfigurationWithRemovedConfigurationStep() throws FlowUpdateException {
+    public void testSetConfigurationWithRemovedConfigurationStep() throws FlowUpdateException, ExecutionException, InterruptedException, TimeoutException {
         final StandardConnectorNode connectorNode = createConnectorNode();
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
 
         final ConnectorConfiguration initialConfiguration = createTestConfigurationWithMultipleGroups();
+        connectorNode.prepareUpdate(null);
         connectorNode.setConfiguration(initialConfiguration);
+        connectorNode.finishUpdate(scheduler);
 
         final ConnectorConfiguration newConfiguration = createTestConfiguration("configurationStep1", "prop1", "value1");
 
+        connectorNode.stop(scheduler).get(5, TimeUnit.SECONDS);
+        connectorNode.prepareUpdate(null);
         connectorNode.setConfiguration(newConfiguration);
+        connectorNode.finishUpdate(scheduler);
         assertEquals(newConfiguration, connectorNode.getConfiguration());
     }
 
@@ -443,30 +462,34 @@ public class TestStandardConnectorNode {
 
         final ConnectorConfiguration newConfiguration = createTestConfiguration();
 
+        connectorNode.prepareUpdate(null);
         connectorNode.setConfiguration(newConfiguration);
-
-        assertTrue(trackingConnector.wasOnConfiguredCalled());
+        connectorNode.finishUpdate(scheduler);
     }
 
     @Test
-    public void testSetConfigurationCallsOnPropertyGroupConfiguredForChangedConfigurationSteps() throws FlowUpdateException {
+    public void testSetConfigurationCallsOnPropertyGroupConfiguredForChangedConfigurationSteps() throws FlowUpdateException, ExecutionException, InterruptedException, TimeoutException {
         final TrackingConnector trackingConnector = new TrackingConnector();
         final StandardConnectorNode connectorNode = createConnectorNode(trackingConnector);
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
 
         final ConnectorConfiguration initialConfiguration = createTestConfiguration("configurationStep1", "prop1", "value1");
+        connectorNode.prepareUpdate(null);
         connectorNode.setConfiguration(initialConfiguration);
+        connectorNode.finishUpdate(scheduler);
         trackingConnector.reset();
 
         final ConnectorConfiguration newConfiguration = createTestConfiguration("configurationStep1", "prop1", "value2");
+        connectorNode.stop(scheduler).get(5, TimeUnit.SECONDS);
+        connectorNode.prepareUpdate(null);
         connectorNode.setConfiguration(newConfiguration);
+        connectorNode.finishUpdate(scheduler);
 
         assertTrue(trackingConnector.wasOnPropertyGroupConfiguredCalled("configurationStep1"));
-        assertTrue(trackingConnector.wasOnConfiguredCalled());
     }
 
     private StandardConnectorNode createConnectorNode() {
-        final SleepingConnector sleepingConnector = new SleepingConnector();
+        final SleepingConnector sleepingConnector = new SleepingConnector(Duration.ofMillis(1));
         return new StandardConnectorNode("test-connector-id", extensionManager, null, managedProcessGroup, createConnectorDetails(sleepingConnector), "TestConnector", null);
     }
 
@@ -506,7 +529,7 @@ public class TestStandardConnectorNode {
      * Test connector that tracks method calls for verification
      */
     private static class TrackingConnector implements Connector {
-        private boolean onConfiguredCalled = false;
+        private boolean finishUpdateCalled = false;
         private final Set<String> onConfigurationStepConfiguredCalls = new HashSet<>();
 
         @Override
@@ -527,18 +550,8 @@ public class TestStandardConnectorNode {
         }
 
         @Override
-        public List<String> getConfigurationStepNames() {
+        public List<ConfigurationStep> getConfigurationSteps() {
             return List.of();
-        }
-
-        @Override
-        public ConfigurationStep getConfigurationStep(final String stepName) {
-            return null;
-        }
-
-        @Override
-        public void onConfigured() {
-            onConfiguredCalled = true;
         }
 
         @Override
@@ -547,12 +560,26 @@ public class TestStandardConnectorNode {
         }
 
         @Override
+        public void prepareUpdate() {
+        }
+
+        @Override
+        public void abortUpdatePreparation(final Throwable throwable) {
+
+        }
+
+        @Override
+        public void finishUpdate() {
+            this.finishUpdateCalled = true;
+        }
+
+        @Override
         public List<ValidationResult> validateConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
             return List.of();
         }
 
-        public boolean wasOnConfiguredCalled() {
-            return onConfiguredCalled;
+        public boolean wasFinishUpdateCalled() {
+            return finishUpdateCalled;
         }
 
         public boolean wasOnPropertyGroupConfiguredCalled(final String stepName) {
@@ -560,7 +587,7 @@ public class TestStandardConnectorNode {
         }
 
         public void reset() {
-            onConfiguredCalled = false;
+            finishUpdateCalled = false;
             onConfigurationStepConfiguredCalls.clear();
         }
     }

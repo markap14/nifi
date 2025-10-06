@@ -26,11 +26,7 @@ import java.util.Map;
 public class SleepingConnector implements Connector {
     private final Duration sleepDuration;
 
-    public SleepingConnector() {
-        this(Duration.ofMillis(100));
-    }
-
-    public SleepingConnector(Duration sleepDuration) {
+    public SleepingConnector(final Duration sleepDuration) {
         this.sleepDuration = sleepDuration;
     }
 
@@ -62,17 +58,12 @@ public class SleepingConnector implements Connector {
     }
 
     @Override
-    public List<String> getConfigurationStepNames() {
+    public List<ConfigurationStep> getConfigurationSteps() {
         return List.of();
     }
 
     @Override
-    public ConfigurationStep getConfigurationStep(final String stepName) {
-        return null;
-    }
-
-    @Override
-    public void onConfigured() throws FlowUpdateException {
+    public void finishUpdate() throws FlowUpdateException {
         try {
             Thread.sleep(sleepDuration);
         } catch (final InterruptedException e) {
@@ -82,7 +73,14 @@ public class SleepingConnector implements Connector {
 
     @Override
     public void onConfigurationStepConfigured(final String stepName) {
+    }
 
+    @Override
+    public void prepareUpdate() {
+    }
+
+    @Override
+    public void abortUpdatePreparation(final Throwable throwable) {
     }
 
     @Override

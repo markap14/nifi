@@ -14,35 +14,47 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.nifi.nar;
 
-import org.apache.nifi.annotation.documentation.Tags;
+package org.apache.nifi.components.connector;
+
 import org.apache.nifi.components.ValidationResult;
-import org.apache.nifi.components.connector.ConfigurationStep;
-import org.apache.nifi.components.connector.Connector;
-import org.apache.nifi.components.connector.ConnectorInitializationContext;
-import org.apache.nifi.components.connector.FlowUpdateException;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 
-@Tags({"test", "connector"})
-public class DummyConnector implements Connector {
-    private ConnectorInitializationContext context;
+public class BlockingConnector implements Connector {
+    private final CountDownLatch startLatch;
+    private final CountDownLatch stopLatch;
+    private final CountDownLatch finishUpdateLatch;
+
+    public BlockingConnector(final CountDownLatch startLatch, final CountDownLatch stopLatch, final CountDownLatch finishUpdateLatch) {
+        this.startLatch = startLatch;
+        this.stopLatch = stopLatch;
+        this.finishUpdateLatch = finishUpdateLatch;
+    }
 
     @Override
-    public void initialize(final ConnectorInitializationContext context) {
-        this.context = context;
+    public void initialize(final ConnectorInitializationContext connectorInitializationContext) {
     }
 
     @Override
     public void start() throws FlowUpdateException {
-        // no-op
+        try {
+            startLatch.await();
+        } catch (final InterruptedException e) {
+            throw new FlowUpdateException(e);
+        }
     }
 
     @Override
     public void stop() throws FlowUpdateException {
-        // no-op
+        try {
+            stopLatch.await();
+        } catch (final InterruptedException e) {
+            throw new FlowUpdateException(e);
+        }
     }
 
     @Override
@@ -56,8 +68,16 @@ public class DummyConnector implements Connector {
     }
 
     @Override
+    public void finishUpdate() throws FlowUpdateException {
+        try {
+            finishUpdateLatch.await();
+        } catch (final InterruptedException e) {
+            throw new FlowUpdateException(e);
+        }
+    }
+
+    @Override
     public void onConfigurationStepConfigured(final String stepName) {
-        // no-op
     }
 
     @Override
@@ -69,17 +89,7 @@ public class DummyConnector implements Connector {
     }
 
     @Override
-    public void finishUpdate() {
-    }
-
-    @Override
     public List<ValidationResult> validateConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
         return List.of();
     }
-
-    public ConnectorInitializationContext getContext() {
-        return context;
-    }
 }
-
-

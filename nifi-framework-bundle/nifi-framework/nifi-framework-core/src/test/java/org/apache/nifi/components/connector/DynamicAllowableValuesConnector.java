@@ -30,8 +30,6 @@ import java.util.Map;
 import java.util.Set;
 
 public class DynamicAllowableValuesConnector extends AbstractConnector {
-    static final String COLORS_STEP_NAME = "Colors";
-
     static final ConnectorPropertyDescriptor FILE_PATH = new ConnectorPropertyDescriptor.Builder()
         .name("File Path")
         .description("The path to the file")
@@ -50,35 +48,26 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
 
 
     @Override
-    public List<String> getConfigurationStepNames() {
-        final List<String> stepNames = new ArrayList<>();
-        stepNames.add(FILE_STEP.getName());
-        if (getProperty(FILE_STEP, FILE_PATH) != null) {
-            stepNames.add(COLORS_STEP_NAME);
-        }
-        return stepNames;
-    }
+    public List<ConfigurationStep> getConfigurationSteps() {
+        final List<ConfigurationStep> steps = new ArrayList<>();
+        steps.add(FILE_STEP);
 
-    @Override
-    public ConfigurationStep getConfigurationStep(final String stepName) {
-        if (stepName.equals(COLORS_STEP_NAME)) {
+        if (getProperty(FILE_STEP, FILE_PATH) != null) {
             final Set<ProcessorFacade> processorsFacades = getInitializationContext().getRootGroup().getProcessors();
             if (processorsFacades.isEmpty()) {
-                return null;
+                return steps;
             }
 
             final ProcessorFacade processorFacade = processorsFacades.iterator().next();
             try {
                 final List<String> fileValues = (List<String>) processorFacade.invokeConnectorMethod("getFileValues", Map.of());
-                return createColorConfigurationStep(fileValues);
+                steps.add(createColorConfigurationStep(fileValues));
             } catch (final InvocationFailedException e) {
                 throw new RuntimeException(e);
             }
-        } else if (stepName.equals(FILE_STEP.getName())) {
-            return FILE_STEP;
         }
 
-        return null;
+        return steps;
     }
 
     private ConfigurationStep createColorConfigurationStep(final List<String> values) {
@@ -102,7 +91,7 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
     }
 
     @Override
-    public void onConfigured() throws FlowUpdateException {
+    public void finishUpdate() throws FlowUpdateException {
         final VersionedExternalFlow externalFlow = ConnectorUtils.loadFlowFromResource("flows/choose-color.json");
         final VersionedProcessGroup rootGroup = externalFlow.getFlowContents();
         final VersionedProcessor processor = rootGroup.getProcessors().iterator().next();
@@ -113,6 +102,14 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
 
     @Override
     public void onConfigurationStepConfigured(final String stepName) {
+    }
+
+    @Override
+    public void prepareUpdate() {
+    }
+
+    @Override
+    public void abortUpdatePreparation(final Throwable throwable) {
     }
 
     @Override

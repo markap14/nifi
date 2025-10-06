@@ -59,20 +59,12 @@ public class ParameterConnector extends AbstractConnector {
     }
 
     @Override
-    public List<String> getConfigurationStepNames() {
-        return List.of(TEXT_STEP.getName());
+    public List<ConfigurationStep> getConfigurationSteps() {
+        return List.of(TEXT_STEP);
     }
 
     @Override
-    public ConfigurationStep getConfigurationStep(final String stepName) {
-        if (TEXT_STEP.getName().equals(stepName)) {
-            return TEXT_STEP;
-        }
-        return null;
-    }
-
-    @Override
-    public void onConfigured() {
+    public void finishUpdate() {
         try {
             updateTextParameter();
         } catch (final FlowUpdateException e) {
@@ -83,6 +75,14 @@ public class ParameterConnector extends AbstractConnector {
 
     @Override
     public void onConfigurationStepConfigured(final String stepName) {
+    }
+
+    @Override
+    public void prepareUpdate() {
+    }
+
+    @Override
+    public void abortUpdatePreparation(final Throwable throwable) {
     }
 
     @Override

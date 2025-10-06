@@ -75,23 +75,15 @@ public class NopConnector implements Connector {
     }
 
     @Override
-    public List<String> getConfigurationStepNames() {
-        return List.of("Test Group");
+    public List<ConfigurationStep> getConfigurationSteps() {
+        return List.of(new ConfigurationStep.Builder()
+            .name("Test Group")
+            .description("A test configuration step")
+            .build());
     }
 
     @Override
-    public ConfigurationStep getConfigurationStep(final String stepName) {
-        if ("Test Group".equals(stepName)) {
-            return new ConfigurationStep.Builder()
-                .name("Test Group")
-                .description("A test configuration step")
-                .build();
-        }
-        throw new IllegalArgumentException("Unknown configuration step: " + stepName);
-    }
-
-    @Override
-    public void onConfigured() throws FlowUpdateException {
+    public void finishUpdate() throws FlowUpdateException {
         if (!initialized) {
             throw new FlowUpdateException("Connector must be initialized before configuration");
         }
@@ -101,6 +93,14 @@ public class NopConnector implements Connector {
     @Override
     public void onConfigurationStepConfigured(final String stepName) {
 
+    }
+
+    @Override
+    public void prepareUpdate() {
+    }
+
+    @Override
+    public void abortUpdatePreparation(final Throwable throwable) {
     }
 
     @Override

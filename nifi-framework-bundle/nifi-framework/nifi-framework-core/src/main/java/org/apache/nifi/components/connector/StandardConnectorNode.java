@@ -89,14 +89,13 @@ public class StandardConnectorNode implements ConnectorNode {
     private ConnectorConfigurationContext createConfigurationContext() {
         return new ConnectorConfigurationContext() {
             @Override
-            public String getProperty(final String groupName, final String propertyName) {
+            public String getProperty(final String stepName, final String propertyName) {
                 if (configuration == null) {
-                    final ConnectorPropertyDescriptor descriptor = getPropertyDescriptor(groupName, propertyName);
-                    return descriptor == null ? null : descriptor.getDefaultValue();
+                    return null;
                 }
 
                 for (final ConfigurationStepConfiguration configurationStepConfiguration : configuration.getConfigurationStepConfigurations()) {
-                    if (configurationStepConfiguration.getConfigurationStepName().equals(groupName)) {
+                    if (configurationStepConfiguration.getConfigurationStepName().equals(stepName)) {
                         for (final PropertyGroupConfiguration propertyGroupConfiguration : configurationStepConfiguration.getPropertyGroupConfigurations()) {
                             final Map<String, String> propertyValues = propertyGroupConfiguration.getPropertyValues();
                             if (propertyValues.containsKey(propertyName)) {
@@ -114,23 +113,6 @@ public class StandardConnectorNode implements ConnectorNode {
                 return getProperty(configurationStep.getName(), connectorPropertyDescriptor.getName());
             }
         };
-    }
-
-    private ConnectorPropertyDescriptor getPropertyDescriptor(final String configurationStepName, final String propertyName) {
-        final ConfigurationStep configurationStep = getConnector().getConfigurationStep(configurationStepName);
-        if (configurationStep == null) {
-            return null;
-        }
-
-        for (final ConnectorPropertyGroup propertyGroup : configurationStep.getPropertyGroups()) {
-            for (final ConnectorPropertyDescriptor descriptor : propertyGroup.getProperties()) {
-                if (descriptor.getName().equals(propertyName)) {
-                    return descriptor;
-                }
-            }
-        }
-
-        return null;
     }
 
     @Override
@@ -159,19 +141,84 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
+    public void prepareUpdate(final ScheduledExecutorService scheduler) throws FlowUpdateException {
+        final ConnectorState initialState = getCurrentState();
+        if (initialState != ConnectorState.RUNNING && initialState != ConnectorState.STOPPED && initialState != ConnectorState.DISABLED) {
+            throw new IllegalStateException("Cannot prepare " + this + " for update because its state is currently " + initialState
+                                            + "; it must be either RUNNING, STOPPED, or DISABLED.");
+        }
+
+        setCurrentState(ConnectorState.PREPARING_FOR_UPDATE);
+
+        try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
+            getConnector().prepareUpdate();
+            setCurrentState(ConnectorState.READY_FOR_UPDATES);
+        } catch (final Throwable t) {
+            logger.error("Failed to prepare update for {}", this, t);
+            setCurrentState(ConnectorState.UPDATE_FAILED);
+
+            try {
+                getConnector().abortUpdatePreparation(t);
+            } catch (final Throwable abortFailure) {
+                logger.error("Failed to abort update preparation for {}", this, abortFailure);
+            }
+
+            throw t;
+        }
+    }
+
+    @Override
+    public void finishUpdate(final ScheduledExecutorService scheduler) throws FlowUpdateException {
+        final ConnectorState currentState = getCurrentState();
+        if (currentState != ConnectorState.UPDATING && currentState != ConnectorState.READY_FOR_UPDATES) {
+            throw new IllegalStateException("Cannot finish update for " + this + " because its state is currently " + currentState
+                                            + "; it must be PREPARING_FOR_UPDATE or UPDATING.");
+        }
+
+        try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
+            getConnector().finishUpdate();
+        } catch (final Throwable t) {
+            logger.error("Failed to finish update for {}", this, t);
+            setCurrentState(ConnectorState.UPDATE_FAILED);
+            setDesiredState(ConnectorState.UPDATE_FAILED);
+
+            throw new FlowUpdateException("Failed to finish update for " + this, t);
+        }
+
+        final ConnectorState desiredState = getDesiredState();
+        if (desiredState == ConnectorState.DISABLED) {
+            disable();
+        } else if (desiredState == ConnectorState.STOPPED) {
+            stop(scheduler);
+        } else if (desiredState == ConnectorState.RUNNING) {
+            start(scheduler);
+        }
+    }
+
+    @Override
+    public void abortUpdatePreparation(final Throwable cause) {
+        setCurrentState(ConnectorState.UPDATE_FAILED);
+        setDesiredState(ConnectorState.UPDATE_FAILED);
+
+        try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
+            getConnector().abortUpdatePreparation(cause);
+        }
+    }
+
+    @Override
     public void setConfiguration(final ConnectorConfiguration configuration) throws FlowUpdateException {
         // Ensure that the Connector is fully stopped before allowing configuration to be updated
         final ConnectorState currentState = getCurrentState();
-        if (currentState != ConnectorState.STOPPED && currentState != ConnectorState.DISABLED) {
-            throw new IllegalStateException("Cannot update the configuration of " + this + " because its state is currently " + currentState + "; it must be fully stopped before the configuration " +
-                                            "can be changed.");
+        if (currentState != ConnectorState.READY_FOR_UPDATES && currentState != ConnectorState.UPDATING) {
+            throw new IllegalStateException("Cannot update the configuration of " + this + " because its state is currently " + currentState
+                                            + "; it must be fully stopped before the configuration can be changed.");
         }
 
         // Desired State must also be STOPPED or DISABLED to ensure that the Connector is not transitioning to a new state during the configuration change
         final ConnectorState desiredState = getDesiredState();
         if (desiredState != ConnectorState.STOPPED && desiredState != ConnectorState.DISABLED) {
-            throw new IllegalStateException("Cannot update the configuration of " + this + " because its desired state is currently " + desiredState + "; it must be fully stopped before the " +
-                                            "configuration can be changed.");
+            throw new IllegalStateException("Cannot update the configuration of " + this + " because its desired state is currently " + desiredState
+                                            + "; it must be fully stopped before the configuration can be changed.");
         }
 
         // Determine which configuration steps will change as a result of applying this new configuration
@@ -181,20 +228,12 @@ public class StandardConnectorNode implements ConnectorNode {
 
         final Connector connector = connectorDetails.getConnector();
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, connector.getClass(), getIdentifier())) {
-
             for (final String changedStep : changedConfigurationSteps) {
                 logger.debug("Notifying {} of configuration change for configuration step {}", this, changedStep);
-
-                try {
-                    connector.onConfigurationStepConfigured(changedStep);
-                } catch (final Throwable t) {
-                    logger.error("{} Failed to notify Connector that configuration step {} was configured", this, changedStep, t);
-                }
+                connector.onConfigurationStepConfigured(changedStep);
             }
-
-            connectorDetails.getConnector().onConfigured();
-        } catch (final FlowUpdateException flowUpdateException) {
-            throw flowUpdateException;
+        } catch (final FlowUpdateException e) {
+            throw e;
         } catch (final Exception e) {
             logger.error("Failed to invoke onConfigured for {}", this, e);
             throw new RuntimeException("Failed to invoke onConfigured for " + this, e);
@@ -308,12 +347,16 @@ public class StandardConnectorNode implements ConnectorNode {
     @Override
     public void disable() {
         setDesiredState(ConnectorState.DISABLED);
-        if (trySetCurrentState(ConnectorState.STOPPED, ConnectorState.DISABLED)) {
-            logger.info("Transitioned current state for {} to {}", this, ConnectorState.DISABLED);
-            return;
+
+        final ConnectorState currentState = getCurrentState();
+        if (currentState == ConnectorState.DISABLED || currentState == ConnectorState.STOPPED || currentState == ConnectorState.UPDATE_FAILED) {
+            if (trySetCurrentState(currentState, ConnectorState.DISABLED)) {
+                logger.info("Transitioned current state for {} to {}", this, ConnectorState.DISABLED);
+                return;
+            }
         }
 
-        logger.info("{} disabled but not currently STOPPED so set desired state to DISABLED; current state is {}", this, currentState.get());
+        logger.info("{} disabled but not in a state that can immediately transition to DISABLED so set desired state to DISABLED; current state is {}", this, currentState);
     }
 
     private void setDesiredState(final ConnectorState desiredState) {
@@ -414,9 +457,10 @@ public class StandardConnectorNode implements ConnectorNode {
                         logger.info("{} is currently stopping so will not trigger Connector to start until it has fully stopped", this);
                         return;
                     }
-                    case STOPPED -> {
+                    case STOPPED, PREPARING_FOR_UPDATE -> {
                         stateUpdated = trySetCurrentState(currentState, ConnectorState.STARTING);
                         scheduler.schedule(() -> startComponent(scheduler, startCompleteFuture), 0, TimeUnit.SECONDS);
+                        return;
                     }
                 }
             }
