@@ -770,7 +770,7 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
 
             final VersionedProcessGroup versionedManagedGroup = flowMapper.mapProcessGroup(processGroup, flowController.getControllerServiceProvider(), this, true);
             return new StandaloneProcessGroupFacade(processGroup, versionedManagedGroup,
-                processScheduler, null, flowController.getControllerServiceProvider());
+                processScheduler, managedParameterContext, flowController.getControllerServiceProvider());
         };
 
         final ConnectorNode connectorNode = new ExtensionBuilder()

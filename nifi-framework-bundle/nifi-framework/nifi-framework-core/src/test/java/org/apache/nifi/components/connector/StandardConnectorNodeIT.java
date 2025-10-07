@@ -19,6 +19,7 @@ package org.apache.nifi.components.connector;
 
 import org.apache.nifi.bundle.Bundle;
 import org.apache.nifi.components.DescribedValue;
+import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.processors.CreateDummyFlowFile;
 import org.apache.nifi.components.connector.processors.DuplicateFlowFile;
 import org.apache.nifi.components.connector.processors.LogFlowFileContents;
@@ -26,6 +27,8 @@ import org.apache.nifi.components.connector.processors.OverwriteFlowFile;
 import org.apache.nifi.components.connector.processors.TerminateFlowFile;
 import org.apache.nifi.components.connector.services.CounterService;
 import org.apache.nifi.components.state.StateManagerProvider;
+import org.apache.nifi.components.validation.ValidationState;
+import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.components.validation.ValidationTrigger;
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.connectable.Connection;
@@ -275,7 +278,7 @@ public class StandardConnectorNodeIT {
         final ProcessGroup rootGroup = connectorNode.getManagedProcessGroup();
         final ParameterContext parameterContext = rootGroup.getParameterContext();
         assertNotNull(parameterContext);
-        assertEquals(1, parameterContext.getParameters().size());
+        assertEquals(2, parameterContext.getParameters().size());
         final Optional<Parameter> optionalParameter = parameterContext.getParameter("Text");
         assertTrue(optionalParameter.isPresent());
 
@@ -412,6 +415,60 @@ public class StandardConnectorNodeIT {
             .map(DescribedValue::getValue)
             .toList();
         assertEquals(List.of("red", "blue", "yellow"), allowableValues);
+    }
+
+    @Test
+    public void testSimpleValidation() throws FlowUpdateException {
+        final ConnectorNode connectorNode = flowManager.createConnector(DynamicAllowableValuesConnector.class.getName(), "dynamic-allowable-values-connector",
+            SystemBundle.SYSTEM_BUNDLE_COORDINATE, true, true);
+        assertNotNull(connectorNode);
+
+        assertEquals(List.of("File"), getConfigurationStepNames(connectorNode));
+
+        final ConnectorConfiguration configuration = createFileConfiguration("/non/existent/file");
+        connectorNode.prepareUpdate(threadPool);
+        connectorNode.setConfiguration(configuration);
+        connectorNode.finishUpdate(threadPool);
+
+        final ValidationState validationState = connectorNode.performValidation();
+        assertNotNull(validationState);
+        assertEquals(ValidationStatus.INVALID, validationState.getStatus());
+        assertEquals(1, validationState.getValidationErrors().size());
+
+        final ValidationResult result = validationState.getValidationErrors().iterator().next();
+        result.getExplanation().contains("/non/existent/file");
+
+        final ConnectorConfiguration validConfig = createFileConfiguration(".");
+        connectorNode.prepareUpdate(threadPool);
+        connectorNode.setConfiguration(validConfig);
+        connectorNode.finishUpdate(threadPool);
+
+        final ValidationState updatedValidationState = connectorNode.performValidation();
+        assertEquals(ValidationStatus.VALID, updatedValidationState.getStatus());
+        assertEquals(List.of(), updatedValidationState.getValidationErrors());
+    }
+
+    @Test
+    public void testValidationWithParameterContext() throws FlowUpdateException {
+        final ConnectorNode connectorNode = initializeParameterConnector();
+
+        final ValidationState initialValidationState = connectorNode.performValidation();
+        assertNotNull(initialValidationState);
+        assertEquals(ValidationStatus.VALID, initialValidationState.getStatus());
+        assertEquals(List.of(), initialValidationState.getValidationErrors());
+
+        final Map<String, String> sourceProperties = Map.of("Sleep Duration", "Hi.");
+        final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration("", sourceProperties);
+        final ConfigurationStepConfiguration sourceConfigurationStepConfiguration = new ConfigurationStepConfiguration("Text Configuration", List.of(sourcePropertyGroupConfiguration));
+        final ConnectorConfiguration connectorConfiguration = new ConnectorConfiguration(List.of(sourceConfigurationStepConfiguration));
+        connectorNode.prepareUpdate(threadPool);
+        connectorNode.setConfiguration(connectorConfiguration);
+        connectorNode.finishUpdate(threadPool);
+
+        final ValidationState validationState = connectorNode.performValidation();
+        assertNotNull(validationState);
+        assertEquals(ValidationStatus.INVALID, validationState.getStatus());
+        assertEquals(1, validationState.getValidationErrors().size());
     }
 
     private List<String> getConfigurationStepNames(final ConnectorNode connectorNode) {

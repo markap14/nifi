@@ -22,6 +22,9 @@ import org.apache.nifi.authorization.resource.Authorizable;
 import org.apache.nifi.authorization.resource.ResourceFactory;
 import org.apache.nifi.authorization.resource.ResourceType;
 import org.apache.nifi.bundle.BundleCoordinate;
+import org.apache.nifi.components.ValidationResult;
+import org.apache.nifi.components.validation.ValidationState;
+import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.nar.ExtensionManager;
@@ -30,6 +33,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +62,7 @@ public class StandardConnectorNode implements ConnectorNode {
     private final AtomicReference<String> versionedComponentId = new AtomicReference<>();
     private final AtomicReference<ConnectorState> currentState = new AtomicReference<>(ConnectorState.STOPPED);
     private final AtomicReference<ConnectorState> desiredState = new AtomicReference<>(ConnectorState.STOPPED);
+    private final AtomicReference<ConnectorState> updateResumeState = new AtomicReference<>(null);
 
     private volatile String name;
     private volatile String description;
@@ -148,6 +153,8 @@ public class StandardConnectorNode implements ConnectorNode {
                                             + "; it must be either RUNNING, STOPPED, or DISABLED.");
         }
 
+        updateResumeState.set(initialState);
+        setDesiredState(ConnectorState.READY_FOR_UPDATES);
         setCurrentState(ConnectorState.PREPARING_FOR_UPDATE);
 
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
@@ -185,12 +192,12 @@ public class StandardConnectorNode implements ConnectorNode {
             throw new FlowUpdateException("Failed to finish update for " + this, t);
         }
 
-        final ConnectorState desiredState = getDesiredState();
-        if (desiredState == ConnectorState.DISABLED) {
+        final ConnectorState stateToResume = updateResumeState.getAndSet(null);
+        if (stateToResume == ConnectorState.DISABLED) {
             disable();
-        } else if (desiredState == ConnectorState.STOPPED) {
+        } else if (stateToResume == ConnectorState.STOPPED) {
             stop(scheduler);
-        } else if (desiredState == ConnectorState.RUNNING) {
+        } else if (stateToResume == ConnectorState.RUNNING) {
             start(scheduler);
         }
     }
@@ -211,14 +218,14 @@ public class StandardConnectorNode implements ConnectorNode {
         final ConnectorState currentState = getCurrentState();
         if (currentState != ConnectorState.READY_FOR_UPDATES && currentState != ConnectorState.UPDATING) {
             throw new IllegalStateException("Cannot update the configuration of " + this + " because its state is currently " + currentState
-                                            + "; it must be fully stopped before the configuration can be changed.");
+                                            + "; it must be ready for updates before it can be configured.");
         }
 
-        // Desired State must also be STOPPED or DISABLED to ensure that the Connector is not transitioning to a new state during the configuration change
+        // Desired State must also be READY_FOR_UPDATES or UPDATING to ensure that the Connector is not transitioning to a new state during the configuration change
         final ConnectorState desiredState = getDesiredState();
-        if (desiredState != ConnectorState.STOPPED && desiredState != ConnectorState.DISABLED) {
+        if (desiredState != ConnectorState.READY_FOR_UPDATES && desiredState != ConnectorState.UPDATING) {
             throw new IllegalStateException("Cannot update the configuration of " + this + " because its desired state is currently " + desiredState
-                                            + "; it must be fully stopped before the configuration can be changed.");
+                                            + "; it must be ready for updates before it can be configured.");
         }
 
         // Determine which configuration steps will change as a result of applying this new configuration
@@ -437,31 +444,23 @@ public class StandardConnectorNode implements ConnectorNode {
         writeLock.lock();
         try {
             setDesiredState(ConnectorState.RUNNING);
+            final ConnectorState currentState = getCurrentState();
 
-            boolean stateUpdated = false;
-            while (!stateUpdated) {
-                final ConnectorState currentState = getCurrentState();
-
-                switch (currentState) {
-                    case STARTING -> {
-                        logger.debug("{} is already starting; adding future to pending start futures", this);
-                        return;
-                    }
-                    case RUNNING -> {
-                        logger.debug("{} is already {}; will not attempt to start", this, currentState);
-                        startCompleteFuture.complete(null);
-                        return;
-                    }
-                    case STOPPING -> {
-                        // We have set the Desired State to RUNNING so when the Connector fully stops, it will be started again automatically
-                        logger.info("{} is currently stopping so will not trigger Connector to start until it has fully stopped", this);
-                        return;
-                    }
-                    case STOPPED, PREPARING_FOR_UPDATE -> {
-                        stateUpdated = trySetCurrentState(currentState, ConnectorState.STARTING);
-                        scheduler.schedule(() -> startComponent(scheduler, startCompleteFuture), 0, TimeUnit.SECONDS);
-                        return;
-                    }
+            switch (currentState) {
+                case STARTING -> {
+                    logger.debug("{} is already starting; adding future to pending start futures", this);
+                }
+                case RUNNING -> {
+                    logger.debug("{} is already {}; will not attempt to start", this, currentState);
+                    startCompleteFuture.complete(null);
+                }
+                case STOPPING -> {
+                    // We have set the Desired State to RUNNING so when the Connector fully stops, it will be started again automatically
+                    logger.info("{} is currently stopping so will not trigger Connector to start until it has fully stopped", this);
+                }
+                case STOPPED, PREPARING_FOR_UPDATE -> {
+                    setCurrentState(ConnectorState.STARTING);
+                    scheduler.schedule(() -> startComponent(scheduler, startCompleteFuture), 0, TimeUnit.SECONDS);
                 }
             }
         } finally {
@@ -660,6 +659,20 @@ public class StandardConnectorNode implements ConnectorNode {
 
     private void resetValidationState() {
         // TODO: Implement
+    }
+
+    @Override
+    public ValidationState performValidation() {
+        try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
+            final List<ValidationResult> results = getConnector().validate();
+            if (results == null || results.isEmpty()) {
+                return new ValidationState(ValidationStatus.VALID, Collections.emptyList());
+            }
+
+            final boolean allValid = results.stream().allMatch(ValidationResult::isValid);
+            final ValidationStatus status = allValid ? ValidationStatus.VALID : ValidationStatus.INVALID;
+            return new ValidationState(status, results);
+        }
     }
 
     @Override

@@ -22,6 +22,7 @@ import org.apache.nifi.components.Validator;
 import org.apache.nifi.components.connector.components.ParameterValue;
 import org.apache.nifi.components.connector.util.ConnectorUtils;
 import org.apache.nifi.flow.VersionedExternalFlow;
+import org.apache.nifi.processor.util.StandardValidators;
 
 import java.util.List;
 import java.util.Map;
@@ -38,11 +39,21 @@ public class ParameterConnector extends AbstractConnector {
         .defaultValue("Hello World")
         .build();
 
+    static final ConnectorPropertyDescriptor SLEEP_DURATION = new ConnectorPropertyDescriptor.Builder()
+        .name("Sleep Duration")
+        .description("The duration to sleep when the Sleep Processor is stopped")
+        .type(PropertyType.STRING)
+        .addValidator(StandardValidators.TIME_PERIOD_VALIDATOR)
+        .required(true)
+        .defaultValue("1 sec")
+        .build();
+
     private static final ConfigurationStep TEXT_STEP = new ConfigurationStep.Builder()
         .name("Text Configuration")
         .description("Configure the text to be written to FlowFiles")
-        .subGroups(List.of(new ConnectorPropertyGroup.Builder()
+        .propertyGroups(List.of(new ConnectorPropertyGroup.Builder()
             .addProperty(TEXT_PROPERTY)
+            .addProperty(SLEEP_DURATION)
             .build()))
         .build();
 
@@ -68,8 +79,8 @@ public class ParameterConnector extends AbstractConnector {
         try {
             updateTextParameter();
         } catch (final FlowUpdateException e) {
-            getLogger().error("Failed to update Text parameter", e);
-            throw new RuntimeException("Failed to update Text parameter", e);
+            getLogger().error("Failed to update parameters", e);
+            throw new RuntimeException("Failed to update parameters", e);
         }
     }
 
@@ -100,6 +111,13 @@ public class ParameterConnector extends AbstractConnector {
             .sensitive(false)
             .build();
 
-        getInitializationContext().getParameterContext().updateParameters(List.of(textParameter));
+        final ParameterValue sleepDurationParameter = new ParameterValue.Builder()
+            .name("Sleep Duration")
+            .value(getProperty(TEXT_STEP, SLEEP_DURATION))
+            .sensitive(false)
+            .build();
+
+        final List<ParameterValue> parameterValues = List.of(textParameter, sleepDurationParameter);
+        getInitializationContext().getParameterContext().updateParameters(parameterValues);
     }
 }

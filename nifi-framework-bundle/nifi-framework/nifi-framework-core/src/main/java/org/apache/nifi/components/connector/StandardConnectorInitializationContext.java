@@ -121,7 +121,7 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
     @Override
     public void updateFlow(final VersionedExternalFlow versionedExternalFlow) throws FlowUpdateException {
         final String parameterContextName = managedProcessGroup.getParameterContext().getName();
-        versionedExternalFlow.getFlowContents().setParameterContextName(parameterContextName);
+        updateParameterContext(versionedExternalFlow.getFlowContents(), parameterContextName);
 
         try {
             managedProcessGroup.verifyCanUpdate(versionedExternalFlow, true, false);
@@ -135,6 +135,15 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
         getParameterContext().updateParameters(parameterValues);
 
         processGroupFacade = processGroupFacadeFactory.create(managedProcessGroup);
+    }
+
+    private void updateParameterContext(final VersionedProcessGroup group, final String parameterContextName) {
+        group.setParameterContextName(parameterContextName);
+        if (group.getProcessGroups() != null) {
+            for (final VersionedProcessGroup childGroup : group.getProcessGroups()) {
+                updateParameterContext(childGroup, parameterContextName);
+            }
+        }
     }
 
     /**

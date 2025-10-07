@@ -72,7 +72,7 @@
           "version": "unversioned"
         },
         "properties": {
-          "Sleep Duration": "5 sec",
+          "Sleep Duration": "#{Sleep Duration}",
           "Sleep On Stopped": "true"
         },
         "propertyDescriptors": {
@@ -235,6 +235,12 @@
           "sensitive": false,
           "provided": false,
           "value": "Hello"
+        }, {
+          "name": "Sleep Duration",
+          "description": "",
+          "sensitive": false,
+          "provided": false,
+          "value": "5 sec"
         }
       ],
       "inheritedParameterContexts": [],

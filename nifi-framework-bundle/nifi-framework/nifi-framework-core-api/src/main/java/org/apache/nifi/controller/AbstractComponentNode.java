@@ -477,11 +477,11 @@ public abstract class AbstractComponentNode implements ComponentNode {
     public ValidationContext createValidationContext(final Map<String, String> propertyValues, final String annotationData,
                 final ParameterContext parameterContext, final boolean validateConnections) {
 
+        final PropertyConfigurationMapper configurationMapper = new PropertyConfigurationMapper();
         final Map<PropertyDescriptor, PropertyConfiguration> descriptorToRawValueMap = new LinkedHashMap<>();
         for (final Map.Entry<String, String> entry : propertyValues.entrySet()) {
             final PropertyDescriptor descriptor = getPropertyDescriptor(entry.getKey());
-            final PropertyConfiguration propertyConfiguration = new PropertyConfiguration(entry.getValue(), null, Collections.emptyList(), VariableImpact.NEVER_IMPACTED);
-
+            final PropertyConfiguration propertyConfiguration = configurationMapper.mapRawPropertyValuesToPropertyConfiguration(descriptor, entry.getValue());
             descriptorToRawValueMap.put(descriptor, propertyConfiguration);
         }
 

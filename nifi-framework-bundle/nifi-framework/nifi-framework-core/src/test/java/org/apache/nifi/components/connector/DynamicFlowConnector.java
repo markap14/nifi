@@ -80,7 +80,7 @@ public class DynamicFlowConnector extends AbstractConnector {
 
     private static final ConfigurationStep SOURCE_STEP = new ConfigurationStep.Builder()
         .name("Source")
-        .subGroups(List.of(new ConnectorPropertyGroup.Builder()
+        .propertyGroups(List.of(new ConnectorPropertyGroup.Builder()
             .addProperty(SOURCE_TEXT)
             .addProperty(COUNT_FLOWFILES)
             .build()))
@@ -88,14 +88,14 @@ public class DynamicFlowConnector extends AbstractConnector {
 
     private static final ConfigurationStep DUPLICATION_STEP = new ConfigurationStep.Builder()
         .name("Duplication")
-        .subGroups(List.of(new ConnectorPropertyGroup.Builder()
+        .propertyGroups(List.of(new ConnectorPropertyGroup.Builder()
             .addProperty(NUM_COPIES)
             .build()))
         .build();
 
     private static final ConfigurationStep DESTINATION_STEP = new ConfigurationStep.Builder()
         .name("Destination")
-        .subGroups(List.of(new ConnectorPropertyGroup.Builder()
+        .propertyGroups(List.of(new ConnectorPropertyGroup.Builder()
             .addProperty(LOG_FLOWFILE_CONTENTS)
             .build()))
         .build();

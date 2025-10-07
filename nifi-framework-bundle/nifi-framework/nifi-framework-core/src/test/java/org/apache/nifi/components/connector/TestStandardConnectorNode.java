@@ -161,18 +161,36 @@ public class TestStandardConnectorNode {
     @Test
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     public void testMultipleStartCallsReturnCompletedFutures() throws Exception {
-        final StandardConnectorNode connectorNode = createConnectorNode();
+        final CountDownLatch startLatch = new CountDownLatch(1);
+        final BlockingConnector blockingConnector = new BlockingConnector(startLatch, new CountDownLatch(0), new CountDownLatch(0));
+        final StandardConnectorNode connectorNode = new StandardConnectorNode(
+            "blocking-connector-id",
+            extensionManager,
+            null,
+            managedProcessGroup,
+            createConnectorDetails(blockingConnector),
+            "BlockingConnector",
+            null
+        );
+
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
 
         final Future<Void> startFuture1 = connectorNode.start(scheduler);
+        assertEquals(ConnectorState.STARTING, connectorNode.getCurrentState());
+        assertEquals(ConnectorState.RUNNING, connectorNode.getDesiredState());
 
-        Thread.sleep(50);
         final Future<Void> startFuture2 = connectorNode.start(scheduler);
+        assertEquals(ConnectorState.STARTING, connectorNode.getCurrentState());
+        assertEquals(ConnectorState.RUNNING, connectorNode.getDesiredState());
 
+        // Allow the connector to start
+        startLatch.countDown();
         startFuture1.get(5, TimeUnit.SECONDS);
         startFuture2.get(5, TimeUnit.SECONDS);
 
         assertEquals(ConnectorState.RUNNING, connectorNode.getCurrentState());
+        assertEquals(ConnectorState.RUNNING, connectorNode.getDesiredState());
+
         assertTrue(startFuture1.isDone());
         assertTrue(startFuture2.isDone());
     }

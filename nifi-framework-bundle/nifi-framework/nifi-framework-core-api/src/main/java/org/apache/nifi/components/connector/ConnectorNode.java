@@ -20,6 +20,7 @@ package org.apache.nifi.components.connector;
 import org.apache.nifi.authorization.resource.ComponentAuthorizable;
 import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.VersionedComponent;
+import org.apache.nifi.components.validation.ValidationState;
 import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
@@ -115,6 +116,12 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
     void setDescription(String description);
 
     /**
+     * Performs validation logic that is defined by the Connector.
+     * @return the ValidationState indicating the results of the validation
+     */
+    ValidationState performValidation();
+
+    /**
      * Enables the Connector. This method should only be invoked via the ConnectorRepository.
      */
     void enable();
@@ -138,7 +145,6 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
      */
     Future<Void> stop(ScheduledExecutorService scheduler);
 
-    // TODO: Should this return a Future<Void>?
     void prepareUpdate(ScheduledExecutorService scheduler) throws FlowUpdateException;
 
     /**
@@ -147,9 +153,19 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
      */
     void setConfiguration(ConnectorConfiguration configuration) throws FlowUpdateException;
 
+    /**
+     * Aborts the update preparation process. This method should only be invoked via the ConnectorRepository.
+     * @param cause the reason for aborting the update preparation
+     */
     // TODO: Should this return a Future<Void>?
     void abortUpdatePreparation(Throwable cause);
 
+    /**
+     * Notifies the Connector that the update process is finished and it can apply any changes that were made during the
+     * update process. This method should only be invoked via the ConnectorRepository.
+     * @param scheduler the ScheduledExecutorService to use for scheduling any tasks that the Connector needs to perform
+     * @throws FlowUpdateException if unable to apply the changes made during the update process
+     */
     // TODO: Should this return a Future<Void>?
     void finishUpdate(ScheduledExecutorService scheduler) throws FlowUpdateException;
 

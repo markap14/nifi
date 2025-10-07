@@ -43,7 +43,7 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
 
     static final ConfigurationStep FILE_STEP = new ConfigurationStep.Builder()
         .name("File")
-        .subGroups(List.of(FILE_PROPERTY_GROUP))
+        .propertyGroups(List.of(FILE_PROPERTY_GROUP))
         .build();
 
 
@@ -86,7 +86,7 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
 
         return new ConfigurationStep.Builder()
             .name("Colors")
-            .subGroups(List.of(PRIMARY_COLORS_PROPERTY_GROUP))
+            .propertyGroups(List.of(PRIMARY_COLORS_PROPERTY_GROUP))
             .build();
     }
 
@@ -114,6 +114,7 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
 
     @Override
     public List<ValidationResult> validateConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
-        return List.of();
+        return null;
     }
+
 }
