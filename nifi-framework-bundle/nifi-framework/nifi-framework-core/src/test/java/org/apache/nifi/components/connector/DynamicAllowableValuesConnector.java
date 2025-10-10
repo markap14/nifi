@@ -95,7 +95,7 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
         final VersionedExternalFlow externalFlow = ConnectorUtils.loadFlowFromResource("flows/choose-color.json");
         final VersionedProcessGroup rootGroup = externalFlow.getFlowContents();
         final VersionedProcessor processor = rootGroup.getProcessors().iterator().next();
-        processor.setProperties(Map.of("File", getProperty(FILE_STEP, FILE_PATH)));
+        processor.setProperties(Map.of("File", getProperty(FILE_STEP, FILE_PATH).getValue()));
 
         getInitializationContext().updateFlow(externalFlow);
     }

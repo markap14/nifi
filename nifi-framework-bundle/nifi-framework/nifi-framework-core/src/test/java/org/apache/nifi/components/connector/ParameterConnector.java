@@ -102,7 +102,7 @@ public class ParameterConnector extends AbstractConnector {
     }
 
     private void updateTextParameter() throws FlowUpdateException {
-        final String textValue = getProperty(TEXT_STEP, TEXT_PROPERTY);
+        final String textValue = getProperty(TEXT_STEP, TEXT_PROPERTY).getValue();
 
         // Update the "Text" parameter with the configured property value
         final ParameterValue textParameter = new ParameterValue.Builder()
@@ -113,7 +113,7 @@ public class ParameterConnector extends AbstractConnector {
 
         final ParameterValue sleepDurationParameter = new ParameterValue.Builder()
             .name("Sleep Duration")
-            .value(getProperty(TEXT_STEP, SLEEP_DURATION))
+            .value(getProperty(TEXT_STEP, SLEEP_DURATION).getValue())
             .sensitive(false)
             .build();
 

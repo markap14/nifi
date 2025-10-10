@@ -162,13 +162,13 @@ public class DynamicFlowConnector extends AbstractConnector {
     }
 
     private void updateSourceStep(final VersionedProcessGroup rootGroup) {
-        final String sourceText = getProperty(SOURCE_STEP, SOURCE_TEXT);
+        final String sourceText = getProperty(SOURCE_STEP, SOURCE_TEXT).getValue();
 
         final VersionedProcessor sourceTextProcessor = ConnectorUtils.findProcessor(rootGroup,
             p -> p.getType().equals(OverwriteFlowFile.class.getName())).orElseThrow();
         sourceTextProcessor.getProperties().put(OverwriteFlowFile.CONTENT.getName(), sourceText);
 
-        final boolean count = Boolean.parseBoolean(getProperty(SOURCE_STEP, COUNT_FLOWFILES));
+        final boolean count = getProperty(SOURCE_STEP, COUNT_FLOWFILES).asBoolean();
         if (count) {
             final Bundle systemBundle = new Bundle();
             systemBundle.setArtifact("system");
@@ -185,8 +185,7 @@ public class DynamicFlowConnector extends AbstractConnector {
     }
 
     private void updateDuplicationStep(final VersionedProcessGroup rootGroup) {
-        // TODO - getProperty should return a PropertyValue type of object, not a String.
-        final int numCopies = Integer.parseInt(getProperty(DUPLICATION_STEP, NUM_COPIES));
+        final int numCopies = getProperty(DUPLICATION_STEP, NUM_COPIES).asInteger();
         final VersionedProcessor duplicateProcessor = ConnectorUtils.findProcessor(rootGroup,
             p -> p.getType().equals(DuplicateFlowFile.class.getName())).orElseThrow();
         duplicateProcessor.getProperties().put(DuplicateFlowFile.NUM_DUPLICATES.getName(), String.valueOf(numCopies));
@@ -211,7 +210,7 @@ public class DynamicFlowConnector extends AbstractConnector {
     }
 
     private void updateDestinationStep(final VersionedProcessGroup rootGroup) {
-        final boolean logContents = Boolean.parseBoolean(getProperty(DESTINATION_STEP, LOG_FLOWFILE_CONTENTS));
+        final boolean logContents = getProperty(DESTINATION_STEP, LOG_FLOWFILE_CONTENTS).asBoolean();
         if (!logContents) {
             return;
         }

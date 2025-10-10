@@ -94,9 +94,9 @@ public class StandardConnectorNode implements ConnectorNode {
     private ConnectorConfigurationContext createConfigurationContext() {
         return new ConnectorConfigurationContext() {
             @Override
-            public String getProperty(final String stepName, final String propertyName) {
+            public ConnectorPropertyValue getProperty(final String stepName, final String propertyName) {
                 if (configuration == null) {
-                    return null;
+                    return EmptyPropertyValue.INSTANCE;
                 }
 
                 for (final ConfigurationStepConfiguration configurationStepConfiguration : configuration.getConfigurationStepConfigurations()) {
@@ -104,17 +104,17 @@ public class StandardConnectorNode implements ConnectorNode {
                         for (final PropertyGroupConfiguration propertyGroupConfiguration : configurationStepConfiguration.getPropertyGroupConfigurations()) {
                             final Map<String, String> propertyValues = propertyGroupConfiguration.getPropertyValues();
                             if (propertyValues.containsKey(propertyName)) {
-                                return propertyValues.get(propertyName);
+                                return new StandardConnectorPropertyValue(propertyValues.get(propertyName));
                             }
                         }
                     }
                 }
 
-                return null;
+                return EmptyPropertyValue.INSTANCE;
             }
 
             @Override
-            public String getProperty(final ConfigurationStep configurationStep, final ConnectorPropertyDescriptor connectorPropertyDescriptor) {
+            public ConnectorPropertyValue getProperty(final ConfigurationStep configurationStep, final ConnectorPropertyDescriptor connectorPropertyDescriptor) {
                 return getProperty(configurationStep.getName(), connectorPropertyDescriptor.getName());
             }
         };
