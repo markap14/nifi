@@ -58,15 +58,15 @@ public class StandardConnectorNode implements ConnectorNode {
     private final ConnectorDetails connectorDetails;
     private final String componentType;
     private final BundleCoordinate bundleCoordinate;
-    private final ConnectorConfigurationContext configurationContext;
+    private final StandardConnectorConfigurationContext configurationContext = new StandardConnectorConfigurationContext();
     private final AtomicReference<String> versionedComponentId = new AtomicReference<>();
     private final AtomicReference<ConnectorState> currentState = new AtomicReference<>(ConnectorState.STOPPED);
     private final AtomicReference<ConnectorState> desiredState = new AtomicReference<>(ConnectorState.STOPPED);
     private final AtomicReference<ConnectorState> updateResumeState = new AtomicReference<>(null);
+    private final Map<String, Map<String, String>> propertyGroupConfigurations = new HashMap<>();
 
     private volatile String name;
     private volatile String description;
-    private volatile ConnectorConfiguration configuration;
     private volatile boolean performValidation = true;
 
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
@@ -88,36 +88,6 @@ public class StandardConnectorNode implements ConnectorNode {
         this.connectorDetails = connectorDetails;
         this.componentType = componentType;
         this.bundleCoordinate = bundleCoordinate;
-        this.configurationContext = createConfigurationContext();
-    }
-
-    private ConnectorConfigurationContext createConfigurationContext() {
-        return new ConnectorConfigurationContext() {
-            @Override
-            public ConnectorPropertyValue getProperty(final String stepName, final String propertyName) {
-                if (configuration == null) {
-                    return EmptyPropertyValue.INSTANCE;
-                }
-
-                for (final ConfigurationStepConfiguration configurationStepConfiguration : configuration.getConfigurationStepConfigurations()) {
-                    if (configurationStepConfiguration.getConfigurationStepName().equals(stepName)) {
-                        for (final PropertyGroupConfiguration propertyGroupConfiguration : configurationStepConfiguration.getPropertyGroupConfigurations()) {
-                            final Map<String, String> propertyValues = propertyGroupConfiguration.getPropertyValues();
-                            if (propertyValues.containsKey(propertyName)) {
-                                return new StandardConnectorPropertyValue(propertyValues.get(propertyName));
-                            }
-                        }
-                    }
-                }
-
-                return EmptyPropertyValue.INSTANCE;
-            }
-
-            @Override
-            public ConnectorPropertyValue getProperty(final ConfigurationStep configurationStep, final ConnectorPropertyDescriptor connectorPropertyDescriptor) {
-                return getProperty(configurationStep.getName(), connectorPropertyDescriptor.getName());
-            }
-        };
     }
 
     @Override
@@ -142,24 +112,27 @@ public class StandardConnectorNode implements ConnectorNode {
 
     @Override
     public ConnectorConfiguration getConfiguration() {
-        return configuration;
+        return configurationContext.toConnectorConfiguration();
     }
 
     @Override
-    public void prepareUpdate(final ScheduledExecutorService scheduler) throws FlowUpdateException {
+    public void prepareForUpdate(final ScheduledExecutorService scheduler) throws FlowUpdateException {
         final ConnectorState initialState = getCurrentState();
+        if (initialState == ConnectorState.UPDATING) {
+            return;
+        }
         if (initialState != ConnectorState.RUNNING && initialState != ConnectorState.STOPPED && initialState != ConnectorState.DISABLED) {
             throw new IllegalStateException("Cannot prepare " + this + " for update because its state is currently " + initialState
                                             + "; it must be either RUNNING, STOPPED, or DISABLED.");
         }
 
         updateResumeState.set(initialState);
-        setDesiredState(ConnectorState.READY_FOR_UPDATES);
+        setDesiredState(ConnectorState.UPDATING);
         setCurrentState(ConnectorState.PREPARING_FOR_UPDATE);
 
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
             getConnector().prepareUpdate();
-            setCurrentState(ConnectorState.READY_FOR_UPDATES);
+            setCurrentState(ConnectorState.UPDATING);
         } catch (final Throwable t) {
             logger.error("Failed to prepare update for {}", this, t);
             setCurrentState(ConnectorState.UPDATE_FAILED);
@@ -177,9 +150,9 @@ public class StandardConnectorNode implements ConnectorNode {
     @Override
     public void finishUpdate(final ScheduledExecutorService scheduler) throws FlowUpdateException {
         final ConnectorState currentState = getCurrentState();
-        if (currentState != ConnectorState.UPDATING && currentState != ConnectorState.READY_FOR_UPDATES) {
+        if (currentState != ConnectorState.UPDATING) {
             throw new IllegalStateException("Cannot finish update for " + this + " because its state is currently " + currentState
-                                            + "; it must be PREPARING_FOR_UPDATE or UPDATING.");
+                                            + "; it must be UPDATING.");
         }
 
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
@@ -203,7 +176,7 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
-    public void abortUpdatePreparation(final Throwable cause) {
+    public void abortUpdate(final Throwable cause) {
         setCurrentState(ConnectorState.UPDATE_FAILED);
         setDesiredState(ConnectorState.UPDATE_FAILED);
 
@@ -213,121 +186,38 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
-    public void setConfiguration(final ConnectorConfiguration configuration) throws FlowUpdateException {
+    public void setConfiguration(final String stepName, final List<PropertyGroupConfiguration> groupConfigurations) throws FlowUpdateException {
         // Ensure that the Connector is fully stopped before allowing configuration to be updated
         final ConnectorState currentState = getCurrentState();
-        if (currentState != ConnectorState.READY_FOR_UPDATES && currentState != ConnectorState.UPDATING) {
+        if (currentState != ConnectorState.UPDATING) {
             throw new IllegalStateException("Cannot update the configuration of " + this + " because its state is currently " + currentState
-                                            + "; it must be ready for updates before it can be configured.");
+                                            + "; its state must be UPDATING in order to configure it.");
         }
 
-        // Desired State must also be READY_FOR_UPDATES or UPDATING to ensure that the Connector is not transitioning to a new state during the configuration change
+        // Desired State must also be UPDATING to ensure that the Connector is not transitioning to a new state during the configuration change
         final ConnectorState desiredState = getDesiredState();
-        if (desiredState != ConnectorState.READY_FOR_UPDATES && desiredState != ConnectorState.UPDATING) {
+        if (desiredState != ConnectorState.UPDATING) {
             throw new IllegalStateException("Cannot update the configuration of " + this + " because its desired state is currently " + desiredState
-                                            + "; it must be ready for updates before it can be configured.");
+                                            + "; its state must be UPDATING in order to configure it.");
         }
 
         // Determine which configuration steps will change as a result of applying this new configuration
-        final List<String> changedConfigurationSteps = determineChangedConfigurationSteps(this.configuration, configuration);
+        final ConfigurationUpdateResult updateResult = configurationContext.setProperties(stepName, groupConfigurations);
 
-        this.configuration = configuration;
+        if (updateResult == ConfigurationUpdateResult.NO_CHANGES) {
+            return;
+        }
 
         final Connector connector = connectorDetails.getConnector();
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, connector.getClass(), getIdentifier())) {
-            for (final String changedStep : changedConfigurationSteps) {
-                logger.debug("Notifying {} of configuration change for configuration step {}", this, changedStep);
-                connector.onConfigurationStepConfigured(changedStep);
-            }
+            logger.debug("Notifying {} of configuration change for configuration step {}", this, stepName);
+            connector.onConfigurationStepConfigured(stepName);
         } catch (final FlowUpdateException e) {
             throw e;
         } catch (final Exception e) {
             logger.error("Failed to invoke onConfigured for {}", this, e);
             throw new RuntimeException("Failed to invoke onConfigured for " + this, e);
         }
-    }
-
-    private List<String> determineChangedConfigurationSteps(final ConnectorConfiguration oldConfig, final ConnectorConfiguration newConfig) {
-        final List<String> changedConfigurationSteps = new ArrayList<>();
-
-        if (oldConfig == null) {
-            // If there was no previous configuration, all configuration steps are considered changed
-            for (final ConfigurationStepConfiguration configurationStepConfiguration : newConfig.getConfigurationStepConfigurations()) {
-                changedConfigurationSteps.add(configurationStepConfiguration.getConfigurationStepName());
-            }
-
-            return changedConfigurationSteps;
-        }
-
-        final Map<String, List<PropertyGroupConfiguration>> oldPropertyGroupsByConfigurationStep = mapConfigurationSteps(oldConfig);
-        final Map<String, List<PropertyGroupConfiguration>> newPropertyGroupsByConfigurationStep = mapConfigurationSteps(newConfig);
-
-        // Check for changes in existing configuration steps and removed configuration steps
-        for (final Map.Entry<String, List<PropertyGroupConfiguration>> entry : oldPropertyGroupsByConfigurationStep.entrySet()) {
-            final String configurationStepName = entry.getKey();
-            final List<PropertyGroupConfiguration> oldPropertyGroups = entry.getValue();
-            final List<PropertyGroupConfiguration> newPropertyGroups = newPropertyGroupsByConfigurationStep.get(configurationStepName);
-            if (newPropertyGroups == null) {
-                // Entire configuration step has been removed
-                changedConfigurationSteps.add(configurationStepName);
-                continue;
-            }
-
-            final Map<String, Map<String, String>> oldPropertiesByPropertyGroup = new HashMap<>();
-            for (final PropertyGroupConfiguration propertyGroupConfiguration : oldPropertyGroups) {
-                oldPropertiesByPropertyGroup.putAll(mapPropertyGroups(propertyGroupConfiguration));
-            }
-
-            final Map<String, Map<String, String>> newPropertiesByPropertyGroup = new HashMap<>();
-            for (final PropertyGroupConfiguration propertyGroupConfiguration : newPropertyGroups) {
-                newPropertiesByPropertyGroup.putAll(mapPropertyGroups(propertyGroupConfiguration));
-            }
-
-            for (final Map.Entry<String, Map<String, String>> propertyGroupEntry : oldPropertiesByPropertyGroup.entrySet()) {
-                final String propertyGroupName = propertyGroupEntry.getKey();
-                final Map<String, String> oldProperties = propertyGroupEntry.getValue();
-                final Map<String, String> newProperties = newPropertiesByPropertyGroup.get(propertyGroupName);
-                if (newProperties == null) {
-                    // Entire property group has been removed
-                    changedConfigurationSteps.add(configurationStepName);
-                    break;
-                }
-
-                for (final Map.Entry<String, String> propertyEntry : oldProperties.entrySet()) {
-                    final String propertyName = propertyEntry.getKey();
-                    final String oldValue = propertyEntry.getValue();
-                    final String newValue = newProperties.get(propertyName);
-                    if (!Objects.equals(oldValue, newValue)) {
-                        changedConfigurationSteps.add(configurationStepName);
-                        break;
-                    }
-                }
-            }
-        }
-
-        // Check for newly added configuration steps
-        for (final String newConfigurationStepName : newPropertyGroupsByConfigurationStep.keySet()) {
-            if (!oldPropertyGroupsByConfigurationStep.containsKey(newConfigurationStepName)) {
-                changedConfigurationSteps.add(newConfigurationStepName);
-            }
-        }
-
-        return changedConfigurationSteps;
-    }
-
-    private Map<String, List<PropertyGroupConfiguration>> mapConfigurationSteps(final ConnectorConfiguration config) {
-        final Map<String, List<PropertyGroupConfiguration>> configurationSteps = new HashMap<>();
-        for (final ConfigurationStepConfiguration configurationStepConfiguration : config.getConfigurationStepConfigurations()) {
-            configurationSteps.put(configurationStepConfiguration.getConfigurationStepName(), configurationStepConfiguration.getPropertyGroupConfigurations());
-        }
-
-        return configurationSteps;
-    }
-
-    private Map<String, Map<String, String>> mapPropertyGroups(final PropertyGroupConfiguration propertyGroupConfiguration) {
-        final Map<String, Map<String, String>> propertyMap = new HashMap<>();
-        propertyMap.put(propertyGroupConfiguration.getPropertyGroupName(), propertyGroupConfiguration.getPropertyValues());
-        return propertyMap;
     }
 
     @Override

@@ -4,6 +4,11 @@
 
 package org.apache.nifi.components.connector;
 
+import org.apache.nifi.annotation.lifecycle.OnRemoved;
+import org.apache.nifi.nar.ExtensionManager;
+import org.apache.nifi.nar.NarCloseable;
+import org.apache.nifi.util.ReflectionUtils;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,8 +33,12 @@ public class StandardConnectorRepository implements ConnectorRepository {
         }
     });
 
+    private volatile ExtensionManager extensionManager;
+
+
     @Override
     public void initialize(final ConnectorRepositoryInitializationContext context) {
+        this.extensionManager = context.getExtensionManager();
     }
 
     @Override
@@ -43,8 +52,21 @@ public class StandardConnectorRepository implements ConnectorRepository {
     }
 
     @Override
-    public void removeConnector(final ConnectorNode connector) {
-        connectors.remove(connector.getIdentifier());
+    public void removeConnector(final String connectorId) {
+        final ConnectorNode connectorNode = connectors.get(connectorId);
+        if (connectorNode == null) {
+            throw new IllegalStateException("No connector found with ID " + connectorId);
+        }
+
+        connectorNode.verifyCanDelete();
+        connectors.remove(connectorId);
+
+        final Class<?> taskClass = connectorNode.getConnector().getClass();
+        try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, taskClass, connectorId)) {
+            ReflectionUtils.quietlyInvokeMethodsWithAnnotation(OnRemoved.class, connectorNode.getConnector());
+        }
+
+        extensionManager.removeInstanceClassLoader(connectorId);
     }
 
     @Override
@@ -68,7 +90,22 @@ public class StandardConnectorRepository implements ConnectorRepository {
     }
 
     @Override
-    public void configureConnector(final ConnectorNode connector, final ConnectorConfiguration configuration) throws FlowUpdateException {
-        connector.setConfiguration(configuration);
+    public void prepareForUpdate(final ConnectorNode connector) throws FlowUpdateException {
+        connector.prepareForUpdate(lifecycleExecutor);
+    }
+
+    @Override
+    public void abortUpdatePreparation(final ConnectorNode connector, final Throwable cause) {
+        connector.abortUpdate(cause);
+    }
+
+    @Override
+    public void finishUpdate(final ConnectorNode connector) throws FlowUpdateException {
+        connector.finishUpdate(lifecycleExecutor);
+    }
+
+    @Override
+    public void configureConnector(final ConnectorNode connector, final String stepName, final List<PropertyGroupConfiguration> stepConfiguration) throws FlowUpdateException {
+        connector.setConfiguration(stepName, stepConfiguration);
     }
 }

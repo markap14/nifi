@@ -11,7 +11,6 @@ public enum ConnectorState {
     STOPPED,
     DISABLED,
     PREPARING_FOR_UPDATE,
-    READY_FOR_UPDATES,
     UPDATING,
     UPDATE_FAILED;
 }

@@ -592,7 +592,7 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
         controllerServiceResolver = new StandardControllerServiceResolver(authorizer, flowManager, new VersionedComponentFlowMapper(extensionManager),
                 controllerServiceProvider, new StandardControllerServiceApiLookup(extensionManager));
 
-        connectorRepository = createConnectorRepository(nifiProperties, extensionManager, flowManager);
+        connectorRepository = createConnectorRepository(nifiProperties, extensionManager, flowManager, this);
 
         final PythonBridge rawPythonBridge = createPythonBridge(nifiProperties, controllerServiceProvider);
         final ClassLoader pythonBridgeClassLoader = rawPythonBridge.getClass().getClassLoader();
@@ -865,7 +865,9 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
         }
     }
 
-    private static ConnectorRepository createConnectorRepository(final NiFiProperties properties, final ExtensionDiscoveringManager extensionManager, final FlowManager flowManager) {
+    private static ConnectorRepository createConnectorRepository(final NiFiProperties properties, final ExtensionDiscoveringManager extensionManager, final FlowManager flowManager,
+                final NodeTypeProvider nodeTypeProvider) {
+
         final String implementationClassName = properties.getProperty(NiFiProperties.CONNECTOR_REPOSITORY_IMPLEMENTATION, DEFAULT_CONNECTOR_REPOSITORY_IMPLEMENTATION);
 
         try {
@@ -879,6 +881,16 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
                 @Override
                 public FlowManager getFlowManager() {
                     return flowManager;
+                }
+
+                @Override
+                public ExtensionManager getExtensionManager() {
+                    return extensionManager;
+                }
+
+                @Override
+                public NodeTypeProvider getNodeTypeProvider() {
+                    return nodeTypeProvider;
                 }
             };
 

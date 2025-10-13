@@ -17,7 +17,9 @@
 
 package org.apache.nifi.components.connector;
 
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 public class PropertyGroupConfiguration {
     private final String propertyGroupName;
@@ -25,7 +27,7 @@ public class PropertyGroupConfiguration {
 
     public PropertyGroupConfiguration(final String propertyGroupName, final Map<String, String> propertyValues) {
         this.propertyGroupName = propertyGroupName;
-        this.propertyValues = Map.copyOf(propertyValues);
+        this.propertyValues = new HashMap<>(propertyValues);
     }
 
     public String getPropertyGroupName() {
@@ -34,5 +36,28 @@ public class PropertyGroupConfiguration {
 
     public Map<String, String> getPropertyValues() {
         return propertyValues;
+    }
+
+    @Override
+    public boolean equals(final Object other) {
+        if (other == null || getClass() != other.getClass()) {
+            return false;
+        }
+
+        final PropertyGroupConfiguration that = (PropertyGroupConfiguration) other;
+        return Objects.equals(propertyGroupName, that.propertyGroupName) && Objects.equals(propertyValues, that.propertyValues);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(propertyGroupName, propertyValues);
+    }
+
+    @Override
+    public String toString() {
+        return "PropertyGroupConfiguration{" +
+               "propertyGroupName='" + propertyGroupName + '\'' +
+               ", propertyValues=" + propertyValues +
+               '}';
     }
 }

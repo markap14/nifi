@@ -9,6 +9,9 @@ API
 ---
 When it is necessary to lookup the API for reference, the API can generally be found at ../nifi-api, where .. is relative to the project's root directory.
 
+Building
+--------
+NiFi is a complex Maven codebase. Never build code (testing or otherwise) using javac. Always use `mvn` instead.
 
 Code Style
 ----------

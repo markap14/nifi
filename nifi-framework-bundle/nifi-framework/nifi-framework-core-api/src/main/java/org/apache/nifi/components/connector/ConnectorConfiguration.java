@@ -16,17 +16,42 @@
  */
 package org.apache.nifi.components.connector;
 
-import java.util.List;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Objects;
+import java.util.Set;
 
 public class ConnectorConfiguration {
 
-    private final List<ConfigurationStepConfiguration> configurationStepConfigurations;
+    private final Set<ConfigurationStepConfiguration> configurationStepConfigurations;
 
-    public ConnectorConfiguration(final List<ConfigurationStepConfiguration> configurationStepConfigurations) {
-        this.configurationStepConfigurations = List.copyOf(configurationStepConfigurations);
+    public ConnectorConfiguration(final Collection<ConfigurationStepConfiguration> configurationStepConfigurations) {
+        this.configurationStepConfigurations = new HashSet<>(configurationStepConfigurations);
     }
 
-    public List<ConfigurationStepConfiguration> getConfigurationStepConfigurations() {
+    public Set<ConfigurationStepConfiguration> getConfigurationStepConfigurations() {
         return configurationStepConfigurations;
+    }
+
+    @Override
+    public boolean equals(final Object other) {
+        if (other == null || getClass() != other.getClass()) {
+            return false;
+        }
+
+        final ConnectorConfiguration that = (ConnectorConfiguration) other;
+        return Objects.equals(configurationStepConfigurations, that.configurationStepConfigurations);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(configurationStepConfigurations);
+    }
+
+    @Override
+    public String toString() {
+        return "ConnectorConfiguration{" +
+               "configurationStepConfigurations=" + configurationStepConfigurations +
+               '}';
     }
 }

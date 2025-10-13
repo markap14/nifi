@@ -25,6 +25,7 @@ import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 
+import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -145,20 +146,23 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
      */
     Future<Void> stop(ScheduledExecutorService scheduler);
 
-    void prepareUpdate(ScheduledExecutorService scheduler) throws FlowUpdateException;
+    void prepareForUpdate(ScheduledExecutorService scheduler) throws FlowUpdateException;
 
     /**
-     * Sets the configuration of the Connector. This method should only be invoked via the ConnectorRepository.
-     * @param configuration the ConnectorConfiguration
+     * Updates the configuration of one of the configuration steps. This method should only be invoked via the ConnectorRepository.
+     * @param configurationStepName the name of the configuration step being set
+     *                              (must match one of the names returned by {@link Connector#getConfigurationSteps()})
+     * @param propertyGroupConfigurations the list of PropertyGroupConfigurations for the given configuration step
+     * @throws FlowUpdateException if unable to apply the configuration changes
      */
-    void setConfiguration(ConnectorConfiguration configuration) throws FlowUpdateException;
+    void setConfiguration(String configurationStepName, List<PropertyGroupConfiguration> propertyGroupConfigurations) throws FlowUpdateException;
 
     /**
      * Aborts the update preparation process. This method should only be invoked via the ConnectorRepository.
      * @param cause the reason for aborting the update preparation
      */
     // TODO: Should this return a Future<Void>?
-    void abortUpdatePreparation(Throwable cause);
+    void abortUpdate(Throwable cause);
 
     /**
      * Notifies the Connector that the update process is finished and it can apply any changes that were made during the

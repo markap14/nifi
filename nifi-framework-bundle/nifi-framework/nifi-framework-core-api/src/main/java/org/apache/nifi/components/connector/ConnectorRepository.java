@@ -29,9 +29,9 @@ public interface ConnectorRepository {
 
     /**
      * Removes the given Connector from the Repository
-     * @param connector the Connector to remove
+     * @param connectorId the identifier of the Connector to remove
      */
-    void removeConnector(ConnectorNode connector);
+    void removeConnector(String connectorId);
 
     /**
      * Gets the Connector with the given identifier
@@ -59,5 +59,11 @@ public interface ConnectorRepository {
      */
     Future<Void> stopConnector(ConnectorNode connector);
 
-    void configureConnector(ConnectorNode connector, ConnectorConfiguration configuration) throws FlowUpdateException;
+    void prepareForUpdate(ConnectorNode connector) throws FlowUpdateException;
+
+    void abortUpdatePreparation(ConnectorNode connector, Throwable cause);
+
+    void finishUpdate(ConnectorNode connector) throws FlowUpdateException;
+
+    void configureConnector(ConnectorNode connector, String stepName, List<PropertyGroupConfiguration> stepConfiguration) throws FlowUpdateException;
 }

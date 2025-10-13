@@ -17,6 +17,7 @@
 
 package org.apache.nifi.components.connector;
 
+import org.apache.nifi.nar.ExtensionManager;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -52,11 +53,18 @@ public class TestStandardConnectorRepository {
     public void testRemoveConnector() {
         final StandardConnectorRepository repository = new StandardConnectorRepository();
 
+        final ConnectorRepositoryInitializationContext initContext = mock(ConnectorRepositoryInitializationContext.class);
+        final ExtensionManager extensionManager = mock(ExtensionManager.class);
+        when(initContext.getExtensionManager()).thenReturn(extensionManager);
+        repository.initialize(initContext);
+
+        final Connector mockConnector = mock(Connector.class);
         final ConnectorNode connector = mock(ConnectorNode.class);
         when(connector.getIdentifier()).thenReturn("connector-1");
+        when(connector.getConnector()).thenReturn(mockConnector);
 
         repository.addConnector(connector);
-        repository.removeConnector(connector);
+        repository.removeConnector("connector-1");
 
         assertEquals(0, repository.getConnectors().size());
         assertNull(repository.getConnector("connector-1"));
