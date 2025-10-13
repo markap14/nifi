@@ -20,6 +20,7 @@ package org.apache.nifi.controller.flow;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.ConfigurationStep;
 import org.apache.nifi.components.connector.Connector;
+import org.apache.nifi.components.connector.ConnectorConfigurationContext;
 import org.apache.nifi.components.connector.ConnectorInitializationContext;
 import org.apache.nifi.components.connector.FlowUpdateException;
 
@@ -96,7 +97,7 @@ public class NopConnector implements Connector {
     }
 
     @Override
-    public void prepareUpdate() {
+    public void prepareForUpdate() {
     }
 
     @Override
@@ -105,6 +106,11 @@ public class NopConnector implements Connector {
 
     @Override
     public List<ValidationResult> validateConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
+        return List.of();
+    }
+
+    @Override
+    public List<ValidationResult> validate(final ConnectorConfigurationContext connectorConfigurationContext) {
         return List.of();
     }
 

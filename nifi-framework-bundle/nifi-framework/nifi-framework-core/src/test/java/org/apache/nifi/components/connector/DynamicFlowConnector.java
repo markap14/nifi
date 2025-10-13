@@ -137,7 +137,7 @@ public class DynamicFlowConnector extends AbstractConnector {
     }
 
     @Override
-    public void prepareUpdate() {
+    public void prepareForUpdate() {
     }
 
     @Override

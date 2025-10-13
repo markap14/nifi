@@ -118,12 +118,8 @@ public class StandardConnectorNode implements ConnectorNode {
     @Override
     public void prepareForUpdate(final ScheduledExecutorService scheduler) throws FlowUpdateException {
         final ConnectorState initialState = getCurrentState();
-        if (initialState == ConnectorState.UPDATING) {
+        if (initialState == ConnectorState.UPDATING || initialState == ConnectorState.PREPARING_FOR_UPDATE) {
             return;
-        }
-        if (initialState != ConnectorState.RUNNING && initialState != ConnectorState.STOPPED && initialState != ConnectorState.DISABLED) {
-            throw new IllegalStateException("Cannot prepare " + this + " for update because its state is currently " + initialState
-                                            + "; it must be either RUNNING, STOPPED, or DISABLED.");
         }
 
         updateResumeState.set(initialState);
@@ -131,7 +127,7 @@ public class StandardConnectorNode implements ConnectorNode {
         setCurrentState(ConnectorState.PREPARING_FOR_UPDATE);
 
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
-            getConnector().prepareUpdate();
+            getConnector().prepareForUpdate();
             setCurrentState(ConnectorState.UPDATING);
         } catch (final Throwable t) {
             logger.error("Failed to prepare update for {}", this, t);

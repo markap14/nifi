@@ -20,6 +20,7 @@ import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.ConfigurationStep;
 import org.apache.nifi.components.connector.Connector;
+import org.apache.nifi.components.connector.ConnectorConfigurationContext;
 import org.apache.nifi.components.connector.ConnectorInitializationContext;
 import org.apache.nifi.components.connector.FlowUpdateException;
 
@@ -37,12 +38,10 @@ public class DummyConnector implements Connector {
 
     @Override
     public void start() throws FlowUpdateException {
-        // no-op
     }
 
     @Override
     public void stop() throws FlowUpdateException {
-        // no-op
     }
 
     @Override
@@ -57,11 +56,10 @@ public class DummyConnector implements Connector {
 
     @Override
     public void onConfigurationStepConfigured(final String stepName) {
-        // no-op
     }
 
     @Override
-    public void prepareUpdate() {
+    public void prepareForUpdate() {
     }
 
     @Override
@@ -74,6 +72,11 @@ public class DummyConnector implements Connector {
 
     @Override
     public List<ValidationResult> validateConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
+        return List.of();
+    }
+
+    @Override
+    public List<ValidationResult> validate(final ConnectorConfigurationContext connectorConfigurationContext) {
         return List.of();
     }
 

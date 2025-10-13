@@ -105,7 +105,7 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
     }
 
     @Override
-    public void prepareUpdate() {
+    public void prepareForUpdate() {
     }
 
     @Override

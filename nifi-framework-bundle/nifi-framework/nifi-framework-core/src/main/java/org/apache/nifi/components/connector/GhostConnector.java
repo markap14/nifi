@@ -12,10 +12,17 @@ import java.util.Map;
 public class GhostConnector implements Connector {
     private final String identifier;
     private final String canonicalClassName;
+    private final List<ValidationResult> validationResults;
 
     public GhostConnector(final String identifier, final String canonicalClassName) {
         this.identifier = identifier;
         this.canonicalClassName = canonicalClassName;
+
+        validationResults = List.of(new ValidationResult.Builder()
+            .subject("Missing Connector")
+            .valid(false)
+            .explanation("Could not create Connector of type " + canonicalClassName)
+            .build());
     }
 
     @Override
@@ -50,7 +57,7 @@ public class GhostConnector implements Connector {
     }
 
     @Override
-    public void prepareUpdate() {
+    public void prepareForUpdate() {
     }
 
     @Override
@@ -63,7 +70,12 @@ public class GhostConnector implements Connector {
 
     @Override
     public List<ValidationResult> validateConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
-        return List.of();
+        return validationResults;
+    }
+
+    @Override
+    public List<ValidationResult> validate(final ConnectorConfigurationContext connectorConfigurationContext) {
+        return validationResults;
     }
 
     @Override

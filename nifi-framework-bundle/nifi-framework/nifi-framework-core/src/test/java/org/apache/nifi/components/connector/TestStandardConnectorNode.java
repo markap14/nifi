@@ -584,7 +584,7 @@ public class TestStandardConnectorNode {
         }
 
         @Override
-        public void prepareUpdate() {
+        public void prepareForUpdate() {
         }
 
         @Override
@@ -599,6 +599,11 @@ public class TestStandardConnectorNode {
 
         @Override
         public List<ValidationResult> validateConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
+            return List.of();
+        }
+
+        @Override
+        public List<ValidationResult> validate(final ConnectorConfigurationContext connectorConfigurationContext) {
             return List.of();
         }
 
