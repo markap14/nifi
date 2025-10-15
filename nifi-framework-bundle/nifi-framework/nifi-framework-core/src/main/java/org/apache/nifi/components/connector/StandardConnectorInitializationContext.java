@@ -17,8 +17,8 @@
 
 package org.apache.nifi.components.connector;
 
+import org.apache.nifi.asset.AssetManager;
 import org.apache.nifi.components.connector.components.ParameterContextFacade;
-import org.apache.nifi.components.connector.components.ParameterValue;
 import org.apache.nifi.components.connector.components.ProcessGroupFacade;
 import org.apache.nifi.flow.Bundle;
 import org.apache.nifi.flow.VersionedExternalFlow;
@@ -29,10 +29,7 @@ import org.apache.nifi.flow.VersionedProcessGroup;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +46,7 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
     private final ParameterContextFacade parameterContextFacade;
     private final Bundle configuredBundle;
     private final Bundle activeBundle;
+    private final AssetManager assetManager;
 
     private volatile ProcessGroupFacade processGroupFacade;
 
@@ -64,6 +62,7 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
         this.parameterContextFacade = builder.parameterContextFacade;
         this.configuredBundle = builder.configuredBundle;
         this.activeBundle = builder.activeBundle;
+        this.assetManager = builder.assetManager;
 
         this.processGroupFacade = processGroupFacadeFactory.create(managedProcessGroup);
     }
@@ -131,8 +130,8 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
 
         managedProcessGroup.updateFlow(versionedExternalFlow, managedProcessGroup.getIdentifier(), false, true, true);
 
-        final List<ParameterValue> parameterValues = createParameterValues(versionedExternalFlow.getParameterContexts().values());
-        getParameterContext().updateParameters(parameterValues);
+        final ConnectorParameterLookup parameterLookup = new ConnectorParameterLookup(versionedExternalFlow.getParameterContexts().values(), assetManager);
+        getParameterContext().updateParameters(parameterLookup.getParameterValues());
 
         processGroupFacade = processGroupFacadeFactory.create(managedProcessGroup);
     }
@@ -142,93 +141,6 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
         if (group.getProcessGroups() != null) {
             for (final VersionedProcessGroup childGroup : group.getProcessGroups()) {
                 updateParameterContext(childGroup, parameterContextName);
-            }
-        }
-    }
-
-    /**
-     * Converts a {@code List<VersionedParameterContext>} found in a VersionedExternalFlow to a
-     * {@code List<ParameterValue>} that can be used to update a ParameterContext from a Connector,
-     * respecting parameter context inheritance and precedence.
-     *
-     * @param parameterContexts the list of parameter contexts from a VersionedExternalFlow
-     * @return the list of ParameterValues
-     */
-    static List<ParameterValue> createParameterValues(final Collection<VersionedParameterContext> parameterContexts) {
-        final List<ParameterValue> parameterValues = new ArrayList<>();
-
-        if (parameterContexts == null || parameterContexts.isEmpty()) {
-            return parameterValues;
-        }
-
-        // Create a map for easy lookup of parameter contexts by name
-        final Map<String, VersionedParameterContext> contextMap = new HashMap<>();
-        for (final VersionedParameterContext context : parameterContexts) {
-            contextMap.put(context.getName(), context);
-        }
-
-        // Process each parameter context, including inherited contexts
-        final Set<String> processedContexts = new HashSet<>();
-        for (final VersionedParameterContext context : parameterContexts) {
-            collectParameterValues(context, contextMap, processedContexts, parameterValues);
-        }
-
-        return parameterValues;
-    }
-
-    private static void collectParameterValues(final VersionedParameterContext context,
-        final Map<String, VersionedParameterContext> contextMap,
-        final Set<String> processedContexts,
-        final List<ParameterValue> parameterValues) {
-        if (context == null || processedContexts.contains(context.getName())) {
-            return;
-        }
-
-        processedContexts.add(context.getName());
-
-        // Create a map to track existing parameters for efficient lookup
-        final Map<String, ParameterValue> existingParametersByName = new HashMap<>();
-        for (final ParameterValue existing : parameterValues) {
-            existingParametersByName.put(existing.getName(), existing);
-        }
-
-        // First, process inherited parameter contexts in reverse order (lowest precedence first)
-        // This ensures that the first inherited context (highest precedence) will override later ones
-        if (context.getInheritedParameterContexts() != null && !context.getInheritedParameterContexts().isEmpty()) {
-            final List<String> inheritedContextNames = context.getInheritedParameterContexts();
-            // Process in reverse order so that the first (highest precedence) inherited context processes last
-            for (int i = inheritedContextNames.size() - 1; i >= 0; i--) {
-                final String inheritedContextName = inheritedContextNames.get(i);
-                final VersionedParameterContext inheritedContext = contextMap.get(inheritedContextName);
-                if (inheritedContext != null) {
-                    collectParameterValues(inheritedContext, contextMap, processedContexts, parameterValues);
-                }
-            }
-        }
-
-        // Then, process this context's own parameters (they have the highest precedence and override all inherited ones)
-        if (context.getParameters() != null) {
-            // Rebuild the existing parameters map since inherited contexts may have added parameters
-            existingParametersByName.clear();
-            for (final ParameterValue existing : parameterValues) {
-                existingParametersByName.put(existing.getName(), existing);
-            }
-
-            for (final VersionedParameter versionedParameter : context.getParameters()) {
-                final String parameterName = versionedParameter.getName();
-
-                // Remove existing parameter if present, then add the new one (current context overrides)
-                if (existingParametersByName.containsKey(parameterName)) {
-                    parameterValues.removeIf(param -> param.getName().equals(parameterName));
-                }
-
-                final ParameterValue paramValue = new ParameterValue.Builder()
-                    .name(parameterName)
-                    .value(versionedParameter.getValue())
-                    .sensitive(versionedParameter.isSensitive())
-                    .build();
-
-                parameterValues.add(paramValue);
             }
         }
     }
@@ -288,6 +200,7 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
         private ParameterContextFacade parameterContextFacade;
         private Bundle configuredBundle;
         private Bundle activeBundle;
+        private AssetManager assetManager;
 
         public Builder identifier(final String identifier) {
             this.identifier = identifier;
@@ -336,6 +249,11 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
 
         public Builder activeBundle(final Bundle activeBundle) {
             this.activeBundle = activeBundle;
+            return this;
+        }
+
+        public Builder assetManager(final AssetManager assetManager) {
+            this.assetManager = assetManager;
             return this;
         }
 

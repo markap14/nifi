@@ -509,6 +509,7 @@ public class ExtensionBuilder {
            .secretsManager(secretsManager)
            .configuredBundle(bundle)
            .activeBundle(bundle)
+           .assetManager(flowController.getAssetManager())
            .build();
    }
 

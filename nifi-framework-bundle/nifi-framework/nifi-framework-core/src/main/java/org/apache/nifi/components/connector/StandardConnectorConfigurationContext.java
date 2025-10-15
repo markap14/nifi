@@ -67,6 +67,37 @@ public class StandardConnectorConfigurationContext implements ConnectorConfigura
         return getProperty(configurationStep.getName(), connectorPropertyDescriptor.getName(), connectorPropertyDescriptor.getDefaultValue());
     }
 
+    @Override
+    public StandardConnectorConfigurationContext createWithOverrides(final String stepName, final Map<String, String> propertyOverrides) {
+        final StandardConnectorConfigurationContext created = new StandardConnectorConfigurationContext();
+        readLock.lock();
+        try {
+            for (final Map.Entry<String, List<PropertyGroupConfiguration>> entry : propertyGroupConfigurations.entrySet()) {
+                final String existingStepName = entry.getKey();
+                final List<PropertyGroupConfiguration> createdGroupConfigs = new ArrayList<>();
+
+                for (final PropertyGroupConfiguration groupConfig : entry.getValue()) {
+                    final Map<String, String> mergedProperties = new HashMap<>(groupConfig.getPropertyValues());
+                    if (Objects.equals(existingStepName, stepName)) {
+                        for (final Map.Entry<String, String> overrideEntry : propertyOverrides.entrySet()) {
+                            if (mergedProperties.containsKey(overrideEntry.getKey())) {
+                                mergedProperties.put(overrideEntry.getKey(), overrideEntry.getValue());
+                            }
+                        }
+                    }
+
+                    createdGroupConfigs.add(new PropertyGroupConfiguration(groupConfig.getPropertyGroupName(), new HashMap<>(groupConfig.getPropertyValues())));
+                }
+
+                created.setProperties(existingStepName, createdGroupConfigs);
+            }
+
+            return created;
+        } finally {
+            readLock.unlock();
+        }
+    }
+
     ConfigurationUpdateResult setProperties(final String stepName, final List<PropertyGroupConfiguration> propertyGroupConfigurations) {
         writeLock.lock();
         try {

@@ -1926,7 +1926,12 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
         }
     }
 
-    public Object invokeConnectorMethod(final String methodName, final Map<String, Object> arguments) throws InvocationFailedException {
+    @Override
+    public List<ConnectorMethod> getConnectorMethods() {
+        return getConnectorMethods(getProcessor().getClass());
+    }
+
+    public Object invokeConnectorMethod(final String methodName, final Map<String, Object> arguments, final ProcessContext processContext) throws InvocationFailedException {
         final ConfigurableComponent component = getComponent();
 
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(getExtensionManager(), component.getClass(), getIdentifier())) {
@@ -1940,13 +1945,23 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
                         + methodArgument.name() + "' was not provided");
                 }
 
-                if ( argumentValue != null && !(methodArgument.type().isAssignableFrom(argumentValue.getClass()))) {
+                if (argumentValue != null && !(methodArgument.type().isAssignableFrom(argumentValue.getClass()))) {
                     throw new IllegalArgumentException("Cannot invoke Connector Method '" + methodName + "' on " + this + " because the argument '"
                         + methodArgument.name() + "' is of type " + argumentValue.getClass().getName() + " defined by " + argumentValue.getClass().getClassLoader()
                         + " but the method expects type " + methodArgument.type().getName() + " defined by " + methodArgument.type().getClassLoader());
                 }
 
                 argumentValues.add(argumentValue);
+            }
+
+            // Inject ProcessContext if the method signature supports it
+            // TODO: Can we move away from Maps and instead just use reflection to get the arguments directly?
+            final Class<?>[] argumentTypes = implementationMethod.getParameterTypes();
+            if (argumentTypes.length > 0 && ProcessContext.class.isAssignableFrom(argumentTypes[0])) {
+                argumentValues.addFirst(processContext);
+            }
+            if (argumentTypes.length > 1 && ProcessContext.class.isAssignableFrom(argumentTypes[argumentTypes.length - 1])) {
+                argumentValues.add(processContext);
             }
 
             try {

@@ -15,6 +15,8 @@ import org.apache.nifi.flow.ScheduledState;
 import org.apache.nifi.flow.VersionedConnection;
 import org.apache.nifi.flow.VersionedControllerService;
 import org.apache.nifi.flow.VersionedExternalFlow;
+import org.apache.nifi.flow.VersionedParameter;
+import org.apache.nifi.flow.VersionedParameterContext;
 import org.apache.nifi.flow.VersionedPort;
 import org.apache.nifi.flow.VersionedProcessGroup;
 import org.apache.nifi.flow.VersionedProcessor;
@@ -26,6 +28,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -246,5 +249,43 @@ public class ConnectorUtils {
         return controllerService;
     }
 
+    public static void removeControllerServiceReferences(final VersionedProcessGroup processGroup, final String serviceIdentifier) {
+        for (final VersionedProcessor processor : processGroup.getProcessors()) {
+            removeValuesFromMap(processor.getProperties(), serviceIdentifier);
+        }
 
+        for (final VersionedControllerService service : processGroup.getControllerServices()) {
+            removeValuesFromMap(service.getProperties(), serviceIdentifier);
+        }
+
+        for (final VersionedProcessGroup childGroup : processGroup.getProcessGroups()) {
+            removeControllerServiceReferences(childGroup, serviceIdentifier);
+        }
+    }
+
+    private static void removeValuesFromMap(final Map<String, String> properties, final String valueToRemove) {
+        final List<String> keysToRemove = new ArrayList<>();
+        for (final Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getValue().equals(valueToRemove)) {
+                keysToRemove.add(entry.getKey());
+            }
+        }
+
+        keysToRemove.forEach(properties::remove);
+    }
+
+    public static void setParameterValue(final VersionedExternalFlow externalFlow, final String parameterName, final String parameterValue) {
+        for (final VersionedParameterContext context : externalFlow.getParameterContexts().values()) {
+            setParameterValue(context, parameterName, parameterValue);
+        }
+    }
+
+    public static void setParameterValue(final VersionedParameterContext parameterContext, final String parameterName, final String parameterValue) {
+        final Set<VersionedParameter> parameters = parameterContext.getParameters();
+        for (final VersionedParameter parameter : parameters) {
+            if (parameter.getName().equals(parameterName)) {
+                parameter.setValue(parameterValue);
+            }
+        }
+    }
 }

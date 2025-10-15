@@ -1557,6 +1557,15 @@ public abstract class AbstractComponentNode implements ComponentNode {
         }
     }
 
+    protected List<ConnectorMethod> getConnectorMethods(final Class<?> componentClass) {
+        final List<ConnectorMethod> connectorMethods = new ArrayList<>();
+        for (final Method method : componentClass.getDeclaredMethods()) {
+            final ConnectorMethod annotation = method.getAnnotation(ConnectorMethod.class);
+            connectorMethods.add(annotation);
+        }
+
+        return connectorMethods;
+    }
 
     protected Method discoverConnectorMethod(final Class<?> componentClass, final String connectorMethodName) {
         for (final Method method : componentClass.getDeclaredMethods()) {

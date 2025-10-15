@@ -21,6 +21,7 @@ import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.VersionedComponent;
 import org.apache.nifi.components.connector.InvocationFailedException;
+import org.apache.nifi.components.connector.components.ConnectorMethod;
 import org.apache.nifi.controller.ComponentNode;
 import org.apache.nifi.controller.ConfigurationContext;
 import org.apache.nifi.controller.ControllerService;
@@ -259,5 +260,7 @@ public interface ControllerServiceNode extends ComponentNode, VersionedComponent
 
     void migrateConfiguration(Map<String, String> originalPropertyValues, ControllerServiceFactory serviceFactory);
 
-    Object invokeConnectorMethod(String methodName, Map<String, Object> arguments) throws InvocationFailedException;
+    Object invokeConnectorMethod(String methodName, Map<String, Object> arguments, ConfigurationContext configurationContext) throws InvocationFailedException;
+
+    List<ConnectorMethod> getConnectorMethods();
 }

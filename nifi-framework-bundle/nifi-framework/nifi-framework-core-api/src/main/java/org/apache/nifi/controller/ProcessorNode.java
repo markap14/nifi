@@ -21,6 +21,7 @@ import org.apache.nifi.annotation.lifecycle.OnUnscheduled;
 import org.apache.nifi.annotation.notification.PrimaryNodeState;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.connector.InvocationFailedException;
+import org.apache.nifi.components.connector.components.ConnectorMethod;
 import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.components.validation.ValidationTrigger;
 import org.apache.nifi.connectable.Connectable;
@@ -309,5 +310,7 @@ public abstract class ProcessorNode extends AbstractComponentNode implements Con
 
     public abstract void migrateConfiguration(Map<String, String> originalPropertyValues, ControllerServiceFactory serviceFactory);
 
-    public abstract Object invokeConnectorMethod(String methodName, Map<String, Object> arguments) throws InvocationFailedException;
+    public abstract Object invokeConnectorMethod(String methodName, Map<String, Object> arguments, ProcessContext processContext) throws InvocationFailedException;
+
+    public abstract List<ConnectorMethod> getConnectorMethods();
 }

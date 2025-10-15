@@ -34,6 +34,8 @@ import org.apache.nifi.annotation.lifecycle.OnEnabled;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.PropertyValue;
+import org.apache.nifi.components.connector.components.ConnectorMethod;
+import org.apache.nifi.components.connector.components.MethodArgument;
 import org.apache.nifi.context.PropertyContext;
 import org.apache.nifi.controller.AbstractControllerService;
 import org.apache.nifi.controller.ConfigurationContext;
@@ -59,6 +61,7 @@ import org.apache.nifi.kafka.shared.transaction.TransactionIdSupplier;
 import org.apache.nifi.kafka.shared.validation.DynamicPropertyValidator;
 import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.oauth2.OAuth2AccessTokenProvider;
+import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.apache.nifi.ssl.SSLContextService;
 
@@ -70,6 +73,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
@@ -281,6 +286,30 @@ public class Kafka3ConnectionService extends AbstractControllerService implement
     @Override
     public String getBrokerUri() {
         return uri;
+    }
+
+    @ConnectorMethod(
+        name="listTopicNames",
+        description="Returns a list of topic names available in the Kafka cluster",
+        arguments = {
+            @MethodArgument(name = "context", type = ProcessContext.class, description = "The process context")
+        })
+    public Set<String> listTopicNames(final ProcessContext context) throws ExecutionException, InterruptedException {
+        final Properties clientProperties = getClientProperties(context);
+        final Properties consumerProperties = getConsumerProperties(context, clientProperties);
+
+        try (final Admin admin = Admin.create(consumerProperties)) {
+            final ListTopicsResult result = admin.listTopics();
+            return result.names().get();
+        }
+    }
+
+    @ConnectorMethod(
+        name="verifyCanConnect",
+        description="Ensures that a connection to the Kafka cluster can be established, throwing an Exception if unable to connect"
+    )
+    public void verifyCanConnect(final ProcessContext context) {
+
     }
 
     @Override

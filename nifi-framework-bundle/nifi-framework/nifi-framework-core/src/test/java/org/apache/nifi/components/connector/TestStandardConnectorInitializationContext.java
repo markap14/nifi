@@ -15,24 +15,10 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestStandardConnectorInitializationContext {
 
-    @Test
-    public void testCreateParameterValuesNullInputReturnsEmpty() {
-        final List<ParameterValue> parameterValues = StandardConnectorInitializationContext.createParameterValues(null);
-        assertNotNull(parameterValues);
-        assertTrue(parameterValues.isEmpty());
-    }
-
-    @Test
-    public void testCreateParameterValuesEmptyInputReturnsEmpty() {
-        final List<ParameterValue> parameterValues = StandardConnectorInitializationContext.createParameterValues(List.of());
-        assertNotNull(parameterValues);
-        assertTrue(parameterValues.isEmpty());
-    }
 
     @Test
     public void testCreateParameterValuesSingleContext() {
@@ -45,7 +31,7 @@ public class TestStandardConnectorInitializationContext {
         parameters.add(createVersionedParameter("p2", "secret", true));
         context.setParameters(parameters);
 
-        final List<ParameterValue> parameterValues = StandardConnectorInitializationContext.createParameterValues(List.of(context));
+        final List<ParameterValue> parameterValues = createParameterValues(List.of(context));
         assertEquals(2, parameterValues.size());
 
         final Map<String, ParameterValue> byName = indexByName(parameterValues);
@@ -74,7 +60,7 @@ public class TestStandardConnectorInitializationContext {
         child.setParameters(Set.of());
 
         final Collection<VersionedParameterContext> contexts = List.of(child, high, low);
-        final List<ParameterValue> parameterValues = StandardConnectorInitializationContext.createParameterValues(contexts);
+        final List<ParameterValue> parameterValues = createParameterValues(contexts);
         final Map<String, ParameterValue> byName = indexByName(parameterValues);
         assertEquals(1, byName.size());
         assertEquals("H", byName.get("p").getValue());
@@ -110,7 +96,7 @@ public class TestStandardConnectorInitializationContext {
         contexts.add(mid);
         contexts.add(base);
 
-        final List<ParameterValue> parameterValues = StandardConnectorInitializationContext.createParameterValues(contexts);
+        final List<ParameterValue> parameterValues = createParameterValues(contexts);
         final Map<String, ParameterValue> byName = indexByName(parameterValues);
         assertEquals(3, byName.size());
         assertEquals("3", byName.get("x").getValue());
@@ -133,5 +119,10 @@ public class TestStandardConnectorInitializationContext {
             byName.put(value.getName(), value);
         }
         return byName;
+    }
+
+    private List<ParameterValue> createParameterValues(final Collection<VersionedParameterContext> contexts) {
+        final ConnectorParameterLookup parameterLookup = new ConnectorParameterLookup(contexts, null);
+        return parameterLookup.getParameterValues();
     }
 }

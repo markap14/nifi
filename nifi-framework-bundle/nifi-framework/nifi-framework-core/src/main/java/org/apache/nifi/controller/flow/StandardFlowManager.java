@@ -30,6 +30,7 @@ import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.connector.Connector;
 import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.components.connector.ProcessGroupFacadeFactory;
+import org.apache.nifi.components.connector.facades.standalone.ComponentContextProvider;
 import org.apache.nifi.components.connector.facades.standalone.StandaloneProcessGroupFacade;
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.connectable.ConnectableType;
@@ -67,6 +68,7 @@ import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.groups.RemoteProcessGroup;
 import org.apache.nifi.groups.StandardProcessGroup;
 import org.apache.nifi.groups.StatelessGroupNodeFactory;
+import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.logging.ConnectorLogObserver;
 import org.apache.nifi.logging.ControllerServiceLogObserver;
 import org.apache.nifi.logging.FlowAnalysisRuleLogObserver;
@@ -94,6 +96,7 @@ import org.apache.nifi.remote.StandardRemoteProcessGroup;
 import org.apache.nifi.remote.TransferDirection;
 import org.apache.nifi.reporting.BulletinRepository;
 import org.apache.nifi.reporting.ReportingTask;
+import org.apache.nifi.stateless.engine.ProcessContextFactory;
 import org.apache.nifi.util.FormatUtils;
 import org.apache.nifi.util.NiFiProperties;
 import org.apache.nifi.util.ReflectionUtils;
@@ -748,7 +751,7 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
         final String paramContextId = UUID.nameUUIDFromBytes((id + "-parameter-context").getBytes(StandardCharsets.UTF_8)).toString();
         final String paramContextName = "Connector " + id + " Parameter Context";
         final ParameterContext managedParameterContext = createParameterContext(paramContextId, paramContextName,
-            "Implement Parameter Context for Connector " + id,
+            "Implicit Parameter Context for Connector " + id,
             Collections.emptyMap(), Collections.emptyList(), null);
         managedRootGroup.setParameterContext(managedParameterContext);
 
@@ -769,8 +772,11 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
                 flowMappingOptions);
 
             final VersionedProcessGroup versionedManagedGroup = flowMapper.mapProcessGroup(processGroup, flowController.getControllerServiceProvider(), this, true);
+            final ComponentContextProvider componentContextProvider = new StandardComponentContextProvider(flowController);
+            final ComponentLog connectorLogger = LogRepositoryFactory.getRepository(id).getLogger();
             return new StandaloneProcessGroupFacade(processGroup, versionedManagedGroup,
-                processScheduler, managedParameterContext, flowController.getControllerServiceProvider());
+                processScheduler, managedParameterContext, flowController.getControllerServiceProvider(), componentContextProvider,
+                connectorLogger, extensionManager, flowController.getAssetManager());
         };
 
         final ConnectorNode connectorNode = new ExtensionBuilder()

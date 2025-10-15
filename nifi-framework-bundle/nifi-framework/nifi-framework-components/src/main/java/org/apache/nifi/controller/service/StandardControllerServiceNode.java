@@ -65,6 +65,7 @@ import org.apache.nifi.nar.InstanceClassLoader;
 import org.apache.nifi.nar.NarCloseable;
 import org.apache.nifi.parameter.ParameterContext;
 import org.apache.nifi.parameter.ParameterLookup;
+import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.SimpleProcessLogger;
 import org.apache.nifi.util.CharacterFilterUtils;
 import org.apache.nifi.util.FormatUtils;
@@ -872,7 +873,8 @@ public class StandardControllerServiceNode extends AbstractComponentNode impleme
     }
 
     // TODO: Refactor, this is the same between ProcessorNode / ControllerServiceNode except for getComponentState
-    public Object invokeConnectorMethod(final String methodName, final Map<String, Object> arguments) throws InvocationFailedException {
+    @Override
+    public Object invokeConnectorMethod(final String methodName, final Map<String, Object> arguments, final ConfigurationContext configurationContext) throws InvocationFailedException {
         final ConfigurableComponent component = getComponent();
 
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(getExtensionManager(), component.getClass(), getIdentifier())) {
@@ -886,13 +888,23 @@ public class StandardControllerServiceNode extends AbstractComponentNode impleme
                                                        + methodArgument.name() + "' was not provided");
                 }
 
-                if ( argumentValue != null && !(methodArgument.type().isAssignableFrom(argumentValue.getClass()))) {
+                if (argumentValue != null && !(methodArgument.type().isAssignableFrom(argumentValue.getClass()))) {
                     throw new IllegalArgumentException("Cannot invoke Connector Method '" + methodName + "' on " + this + " because the argument '"
                                                        + methodArgument.name() + "' is of type " + argumentValue.getClass().getName() + " defined by " + argumentValue.getClass().getClassLoader()
                                                        + " but the method expects type " + methodArgument.type().getName() + " defined by " + methodArgument.type().getClassLoader());
                 }
 
                 argumentValues.add(argumentValue);
+            }
+
+            // Inject ConfigurationContext if the method signature supports it
+            // TODO: Can we move away from Maps and instead just use reflection to get the arguments directly?
+            final Class<?>[] argumentTypes = implementationMethod.getParameterTypes();
+            if (argumentTypes.length > 0 && ConfigurationContext.class.isAssignableFrom(argumentTypes[0])) {
+                argumentValues.addFirst(configurationContext);
+            }
+            if (argumentTypes.length > 1 && ConfigurationContext.class.isAssignableFrom(argumentTypes[argumentTypes.length - 1])) {
+                argumentValues.add(configurationContext);
             }
 
             try {
@@ -902,6 +914,11 @@ public class StandardControllerServiceNode extends AbstractComponentNode impleme
                 throw new InvocationFailedException(e);
             }
         }
+    }
+
+    @Override
+    public List<ConnectorMethod> getConnectorMethods() {
+        return getConnectorMethods(getControllerServiceImplementation().getClass());
     }
 
     private MethodArgument[] getConnectorMethodArguments(final String methodName, final Method implementationMethod, final ConfigurableComponent component) throws InvocationFailedException {
