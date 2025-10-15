@@ -20,7 +20,7 @@ package org.apache.nifi.components.connector;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.Validator;
 import org.apache.nifi.components.connector.components.ParameterValue;
-import org.apache.nifi.components.connector.util.ConnectorUtils;
+import org.apache.nifi.components.connector.util.VersionedFlowUtils;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.processor.util.StandardValidators;
 
@@ -60,7 +60,7 @@ public class ParameterConnector extends AbstractConnector {
     @Override
     protected void init() throws FlowUpdateException {
         // Load the base flow from the generate-and-log-with-parameter.json flow
-        final VersionedExternalFlow externalFlow = ConnectorUtils.loadFlowFromResource("flows/generate-and-log-with-parameter.json");
+        final VersionedExternalFlow externalFlow = VersionedFlowUtils.loadFlowFromResource("flows/generate-and-log-with-parameter.json");
         getInitializationContext().updateFlow(externalFlow);
         initialized = true;
     }

@@ -24,7 +24,7 @@ import org.apache.nifi.components.connector.processors.DuplicateFlowFile;
 import org.apache.nifi.components.connector.processors.LogFlowFileContents;
 import org.apache.nifi.components.connector.processors.OverwriteFlowFile;
 import org.apache.nifi.components.connector.services.impl.StandardCounterService;
-import org.apache.nifi.components.connector.util.ConnectorUtils;
+import org.apache.nifi.components.connector.util.VersionedFlowUtils;
 import org.apache.nifi.flow.Bundle;
 import org.apache.nifi.flow.ConnectableComponent;
 import org.apache.nifi.flow.Position;
@@ -114,7 +114,7 @@ public class DynamicFlowConnector extends AbstractConnector {
     @Override
     protected void init() throws FlowUpdateException {
         // Load the base flow without property-based customizations
-        final VersionedExternalFlow externalFlow = ConnectorUtils.loadFlowFromResource("flows/generate-duplicate-log-flow.json");
+        final VersionedExternalFlow externalFlow = VersionedFlowUtils.loadFlowFromResource("flows/generate-duplicate-log-flow.json");
         final VersionedProcessGroup versionedProcessGroup = externalFlow.getFlowContents();
 
         getInitializationContext().updateFlow(versionedProcessGroup);
@@ -150,7 +150,7 @@ public class DynamicFlowConnector extends AbstractConnector {
     }
 
     private VersionedProcessGroup getFlow() {
-        final VersionedExternalFlow externalFlow = ConnectorUtils.loadFlowFromResource("flows/generate-duplicate-log-flow.json");
+        final VersionedExternalFlow externalFlow = VersionedFlowUtils.loadFlowFromResource("flows/generate-duplicate-log-flow.json");
         final VersionedProcessGroup versionedProcessGroup = externalFlow.getFlowContents();
 
         // Update the flow based on configured properties
@@ -164,7 +164,7 @@ public class DynamicFlowConnector extends AbstractConnector {
     private void updateSourceStep(final VersionedProcessGroup rootGroup) {
         final String sourceText = getProperty(SOURCE_STEP, SOURCE_TEXT).getValue();
 
-        final VersionedProcessor sourceTextProcessor = ConnectorUtils.findProcessor(rootGroup,
+        final VersionedProcessor sourceTextProcessor = VersionedFlowUtils.findProcessor(rootGroup,
             p -> p.getType().equals(OverwriteFlowFile.class.getName())).orElseThrow();
         sourceTextProcessor.getProperties().put(OverwriteFlowFile.CONTENT.getName(), sourceText);
 
@@ -175,10 +175,10 @@ public class DynamicFlowConnector extends AbstractConnector {
             systemBundle.setGroup("default");
             systemBundle.setVersion("unversioned");
 
-            final VersionedControllerService controllerService = ConnectorUtils.addControllerService(rootGroup, StandardCounterService.class.getName(), systemBundle, "Count");
+            final VersionedControllerService controllerService = VersionedFlowUtils.addControllerService(rootGroup, StandardCounterService.class.getName(), systemBundle, "Count");
             rootGroup.getControllerServices().add(controllerService);
 
-            final VersionedProcessor generateProcessor = ConnectorUtils.findProcessor(rootGroup,
+            final VersionedProcessor generateProcessor = VersionedFlowUtils.findProcessor(rootGroup,
                 p -> p.getType().equals(CreateDummyFlowFile.class.getName())).orElseThrow();
             generateProcessor.getProperties().put("Counter Service", controllerService.getIdentifier());
         }
@@ -186,18 +186,18 @@ public class DynamicFlowConnector extends AbstractConnector {
 
     private void updateDuplicationStep(final VersionedProcessGroup rootGroup) {
         final int numCopies = getProperty(DUPLICATION_STEP, NUM_COPIES).asInteger();
-        final VersionedProcessor duplicateProcessor = ConnectorUtils.findProcessor(rootGroup,
+        final VersionedProcessor duplicateProcessor = VersionedFlowUtils.findProcessor(rootGroup,
             p -> p.getType().equals(DuplicateFlowFile.class.getName())).orElseThrow();
         duplicateProcessor.getProperties().put(DuplicateFlowFile.NUM_DUPLICATES.getName(), String.valueOf(numCopies));
 
         // Need to determine how many Connections exist going out of the DuplicateFlowFile processor
         // and then add/remove connections as necessary to match the number of copies.
-        final VersionedProcessGroup duplicatesGroup = ConnectorUtils.findGroupForProcessor(rootGroup, duplicateProcessor);
+        final VersionedProcessGroup duplicatesGroup = VersionedFlowUtils.findGroupForProcessor(rootGroup, duplicateProcessor);
         if (duplicatesGroup == null) {
             return;
         }
 
-        final List<VersionedConnection> outboundConnections = ConnectorUtils.findOutboundConnections(rootGroup, duplicateProcessor);
+        final List<VersionedConnection> outboundConnections = VersionedFlowUtils.findOutboundConnections(rootGroup, duplicateProcessor);
         final int currentConnections = outboundConnections.size();
 
         if (numCopies > currentConnections) {
@@ -224,7 +224,7 @@ public class DynamicFlowConnector extends AbstractConnector {
         // 250 pixels and update connections so that it's Port -> LogFlowFileContents -> TerminateFlowFile
 
         // Find the existing TerminateFlowFile processor
-        final VersionedProcessor terminateProcessor = ConnectorUtils.findProcessor(destinationGroup,
+        final VersionedProcessor terminateProcessor = VersionedFlowUtils.findProcessor(destinationGroup,
             p -> p.getType().equals("org.apache.nifi.components.connector.processors.TerminateFlowFile")).orElseThrow();
 
         // Get the first (and only) input port
@@ -249,13 +249,13 @@ public class DynamicFlowConnector extends AbstractConnector {
 
         // Use the first existing connection as a template for creating new connections
         final VersionedConnection templateConnection = existingConnections.getFirst();
-        final ConnectableComponent sourceComponent = ConnectorUtils.createConnectableComponent(duplicateProcessor);
+        final ConnectableComponent sourceComponent = VersionedFlowUtils.createConnectableComponent(duplicateProcessor);
         final ConnectableComponent destinationComponent = templateConnection.getDestination();
 
         final int currentConnections = existingConnections.size();
         for (int i = currentConnections + 1; i <= targetNumCopies; i++) {
             final Set<String> relationships = Set.of(String.valueOf(i));
-            ConnectorUtils.addConnection(duplicatesGroup, sourceComponent, destinationComponent, relationships);
+            VersionedFlowUtils.addConnection(duplicatesGroup, sourceComponent, destinationComponent, relationships);
         }
     }
 
@@ -302,13 +302,13 @@ public class DynamicFlowConnector extends AbstractConnector {
         }
 
         // Create connection from input port to LogFlowFileContents processor
-        final ConnectableComponent inputPortComponent = ConnectorUtils.createConnectableComponent(inputPort);
-        final ConnectableComponent logProcessorComponent = ConnectorUtils.createConnectableComponent(logProcessor);
-        ConnectorUtils.addConnection(destinationGroup, inputPortComponent, logProcessorComponent, Set.of(""));
+        final ConnectableComponent inputPortComponent = VersionedFlowUtils.createConnectableComponent(inputPort);
+        final ConnectableComponent logProcessorComponent = VersionedFlowUtils.createConnectableComponent(logProcessor);
+        VersionedFlowUtils.addConnection(destinationGroup, inputPortComponent, logProcessorComponent, Set.of(""));
 
         // Create connection from LogFlowFileContents processor to TerminateFlowFile processor
-        final ConnectableComponent terminateProcessorComponent = ConnectorUtils.createConnectableComponent(terminateProcessor);
-        ConnectorUtils.addConnection(destinationGroup, logProcessorComponent, terminateProcessorComponent, Set.of("success"));
+        final ConnectableComponent terminateProcessorComponent = VersionedFlowUtils.createConnectableComponent(terminateProcessor);
+        VersionedFlowUtils.addConnection(destinationGroup, logProcessorComponent, terminateProcessorComponent, Set.of("success"));
     }
 
     private VersionedProcessor createLogFlowFileContentsProcessor(final VersionedProcessGroup destinationGroup, final VersionedProcessor terminateProcessor) {
@@ -316,7 +316,7 @@ public class DynamicFlowConnector extends AbstractConnector {
         final Position terminatePosition = terminateProcessor.getPosition();
         final Position logProcessorPosition = new Position(terminatePosition.getX(), terminatePosition.getY());
 
-        return ConnectorUtils.addProcessor(
+        return VersionedFlowUtils.addProcessor(
             destinationGroup,
             LogFlowFileContents.class.getName(),
             terminateProcessor.getBundle(),

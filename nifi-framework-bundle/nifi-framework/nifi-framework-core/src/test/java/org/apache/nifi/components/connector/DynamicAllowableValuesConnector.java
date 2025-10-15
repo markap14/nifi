@@ -19,7 +19,7 @@ package org.apache.nifi.components.connector;
 
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.components.ProcessorFacade;
-import org.apache.nifi.components.connector.util.ConnectorUtils;
+import org.apache.nifi.components.connector.util.VersionedFlowUtils;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.flow.VersionedProcessGroup;
 import org.apache.nifi.flow.VersionedProcessor;
@@ -92,7 +92,7 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
 
     @Override
     public void finishUpdate() throws FlowUpdateException {
-        final VersionedExternalFlow externalFlow = ConnectorUtils.loadFlowFromResource("flows/choose-color.json");
+        final VersionedExternalFlow externalFlow = VersionedFlowUtils.loadFlowFromResource("flows/choose-color.json");
         final VersionedProcessGroup rootGroup = externalFlow.getFlowContents();
         final VersionedProcessor processor = rootGroup.getProcessors().iterator().next();
         processor.setProperties(Map.of("File", getProperty(FILE_STEP, FILE_PATH).getValue()));

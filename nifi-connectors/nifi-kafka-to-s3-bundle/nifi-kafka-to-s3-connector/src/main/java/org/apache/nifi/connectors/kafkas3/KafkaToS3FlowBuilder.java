@@ -6,7 +6,7 @@ package org.apache.nifi.connectors.kafkas3;
 
 import org.apache.nifi.components.connector.ConfigurationStep;
 import org.apache.nifi.components.connector.ConnectorConfigurationContext;
-import org.apache.nifi.components.connector.util.ConnectorUtils;
+import org.apache.nifi.components.connector.util.VersionedFlowUtils;
 import org.apache.nifi.flow.VersionedControllerService;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.flow.VersionedProcessGroup;
@@ -21,7 +21,7 @@ public class KafkaToS3FlowBuilder {
     }
 
     public VersionedExternalFlow buildFlow() {
-        final VersionedExternalFlow externalFlow = ConnectorUtils.loadFlowFromResource(FLOW_JSON_PATH);
+        final VersionedExternalFlow externalFlow = VersionedFlowUtils.loadFlowFromResource(FLOW_JSON_PATH);
         configureSchemaRegistry(externalFlow);
 
         updateKafkaConnectionParameters(externalFlow);
@@ -45,7 +45,7 @@ public class KafkaToS3FlowBuilder {
                 .orElseThrow();
 
             processGroup.getControllerServices().remove(schemaRegistryService);
-            ConnectorUtils.removeControllerServiceReferences(processGroup, schemaRegistryService.getIdentifier());
+            VersionedFlowUtils.removeControllerServiceReferences(processGroup, schemaRegistryService.getIdentifier());
         }
     }
 
@@ -53,13 +53,13 @@ public class KafkaToS3FlowBuilder {
         final ConfigurationStep connectionStep = KafkaConnectionStep.KAFKA_CONNECTION_STEP;
 
         final String schemaRegistryUrl = configContext.getProperty(connectionStep, KafkaConnectionStep.SCHEMA_REGISTRY_URL).getValue();
-        ConnectorUtils.setParameterValue(externalFlow, "Schema Registry URLs", schemaRegistryUrl);
+        VersionedFlowUtils.setParameterValue(externalFlow, "Schema Registry URLs", schemaRegistryUrl);
         if (schemaRegistryUrl != null) {
             final String username = configContext.getProperty(connectionStep, KafkaConnectionStep.SCHEMA_REGISTRY_USERNAME).getValue();
             final String password = configContext.getProperty(connectionStep, KafkaConnectionStep.PASSWORD).getValue();
 
-            ConnectorUtils.setParameterValue(externalFlow, "Schema Registry Username", username);
-            ConnectorUtils.setParameterValue(externalFlow, "Schema Registry Password", password);
+            VersionedFlowUtils.setParameterValue(externalFlow, "Schema Registry Username", username);
+            VersionedFlowUtils.setParameterValue(externalFlow, "Schema Registry Password", password);
         }
     }
 
@@ -67,45 +67,45 @@ public class KafkaToS3FlowBuilder {
         final ConfigurationStep connectionStep = KafkaConnectionStep.KAFKA_CONNECTION_STEP;
 
         final String kafkaBrokers = configContext.getProperty(connectionStep, KafkaConnectionStep.KAFKA_BROKERS).getValue();
-        ConnectorUtils.setParameterValue(externalFlow, "Kafka Bootstrap Servers", kafkaBrokers);
+        VersionedFlowUtils.setParameterValue(externalFlow, "Kafka Bootstrap Servers", kafkaBrokers);
 
         final String securityProtocol = configContext.getProperty(connectionStep, KafkaConnectionStep.SECURITY_PROTOCOL).getValue();
-        ConnectorUtils.setParameterValue(externalFlow, "Kafka Security Protocol", securityProtocol);
+        VersionedFlowUtils.setParameterValue(externalFlow, "Kafka Security Protocol", securityProtocol);
 
         if (securityProtocol.contains("SASL")) {
             final String saslMechanism = configContext.getProperty(connectionStep, KafkaConnectionStep.SASL_MECHANISM).getValue();
-            ConnectorUtils.setParameterValue(externalFlow, "Kafka SASL Mechanism", saslMechanism);
+            VersionedFlowUtils.setParameterValue(externalFlow, "Kafka SASL Mechanism", saslMechanism);
 
             final String username = configContext.getProperty(connectionStep, KafkaConnectionStep.USERNAME).getValue();
-            ConnectorUtils.setParameterValue(externalFlow, "Kafka Username", username);
+            VersionedFlowUtils.setParameterValue(externalFlow, "Kafka Username", username);
 
             final String password = configContext.getProperty(connectionStep, KafkaConnectionStep.PASSWORD).getValue();
-            ConnectorUtils.setParameterValue(externalFlow, "Kafka Password", password);
+            VersionedFlowUtils.setParameterValue(externalFlow, "Kafka Password", password);
         }
     }
 
     private void updateReaderWriterParameters(final VersionedExternalFlow externalFlow) {
         final String kafkaDataFormat = configContext.getProperty(KafkaTopicsStep.STEP_NAME, KafkaTopicsStep.KAFKA_DATA_FORMAT.getName()).getValue();
-        ConnectorUtils.setParameterValue(externalFlow, "Kafka Data Format", kafkaDataFormat);
+        VersionedFlowUtils.setParameterValue(externalFlow, "Kafka Data Format", kafkaDataFormat);
 
         final String s3DataFormat = configContext.getProperty(S3Step.S3_STEP, S3Step.S3_DATA_FORMAT).getValue();
-        ConnectorUtils.setParameterValue(externalFlow, "S3 Data Format", s3DataFormat);
+        VersionedFlowUtils.setParameterValue(externalFlow, "S3 Data Format", s3DataFormat);
     }
 
     private void updateS3Config(final VersionedExternalFlow externalFlow) {
         final String region = configContext.getProperty(S3Step.S3_STEP, S3Step.S3_REGION).getValue();
-        ConnectorUtils.setParameterValue(externalFlow, "S3 Region", region);
+        VersionedFlowUtils.setParameterValue(externalFlow, "S3 Region", region);
 
         final String bucket = configContext.getProperty(S3Step.S3_STEP, S3Step.S3_BUCKET).getValue();
-        ConnectorUtils.setParameterValue(externalFlow, "S3 Bucket", bucket);
+        VersionedFlowUtils.setParameterValue(externalFlow, "S3 Bucket", bucket);
 
         final String prefix = configContext.getProperty(S3Step.S3_STEP, S3Step.S3_PREFIX).getValue();
-        ConnectorUtils.setParameterValue(externalFlow, "S3 Prefix", prefix);
+        VersionedFlowUtils.setParameterValue(externalFlow, "S3 Prefix", prefix);
 
         final String accessKey = configContext.getProperty(S3Step.S3_STEP, S3Step.S3_ACCESS_KEY_ID).getValue();
-        ConnectorUtils.setParameterValue(externalFlow, "S3 Access Key ID", accessKey);
+        VersionedFlowUtils.setParameterValue(externalFlow, "S3 Access Key ID", accessKey);
 
         final String secretKey = configContext.getProperty(S3Step.S3_STEP, S3Step.S3_SECRET_ACCESS_KEY).getValue();
-        ConnectorUtils.setParameterValue(externalFlow, "S3 Secret Access Key", secretKey);
+        VersionedFlowUtils.setParameterValue(externalFlow, "S3 Secret Access Key", secretKey);
     }
 }
