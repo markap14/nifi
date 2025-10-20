@@ -17,7 +17,7 @@
 
 package org.apache.nifi.components.connector;
 
-import org.apache.nifi.components.ValidationResult;
+import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.Validator;
 import org.apache.nifi.components.connector.components.ParameterValue;
 import org.apache.nifi.components.connector.util.VersionedFlowUtils;
@@ -97,7 +97,7 @@ public class ParameterConnector extends AbstractConnector {
     }
 
     @Override
-    public List<ValidationResult> validateConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
+    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
         return List.of();
     }
 

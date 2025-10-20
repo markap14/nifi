@@ -17,6 +17,7 @@
 
 package org.apache.nifi.components.connector;
 
+import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
 
 import java.time.Duration;
@@ -84,7 +85,7 @@ public class SleepingConnector implements Connector {
     }
 
     @Override
-    public List<ValidationResult> validateConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
+    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
         return List.of();
     }
 

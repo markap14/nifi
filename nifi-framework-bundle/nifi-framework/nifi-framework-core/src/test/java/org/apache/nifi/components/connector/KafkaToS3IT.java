@@ -1,0 +1,368 @@
+/*
+ *  Copyright (c) 2025 Snowflake Computing Inc. All rights reserved.
+ */
+
+package org.apache.nifi.components.connector;
+
+import org.apache.nifi.bundle.Bundle;
+import org.apache.nifi.bundle.BundleCoordinate;
+import org.apache.nifi.components.ConfigVerificationResult;
+import org.apache.nifi.components.ConfigVerificationResult.Outcome;
+import org.apache.nifi.components.DescribedValue;
+import org.apache.nifi.components.state.StateManagerProvider;
+import org.apache.nifi.components.validation.StandardValidationTrigger;
+import org.apache.nifi.components.validation.ValidationTrigger;
+import org.apache.nifi.connectable.Connectable;
+import org.apache.nifi.connectable.Connection;
+import org.apache.nifi.connectable.StandardConnection;
+import org.apache.nifi.connectors.kafkas3.KafkaConnectionStep;
+import org.apache.nifi.connectors.kafkas3.KafkaToS3;
+import org.apache.nifi.connectors.kafkas3.KafkaTopicsStep;
+import org.apache.nifi.controller.FlowController;
+import org.apache.nifi.controller.GarbageCollectionLog;
+import org.apache.nifi.controller.MockStateManagerProvider;
+import org.apache.nifi.controller.NodeTypeProvider;
+import org.apache.nifi.controller.ReloadComponent;
+import org.apache.nifi.controller.flow.StandardFlowManager;
+import org.apache.nifi.controller.queue.FlowFileQueue;
+import org.apache.nifi.controller.queue.FlowFileQueueFactory;
+import org.apache.nifi.controller.queue.LoadBalanceCompression;
+import org.apache.nifi.controller.queue.LoadBalanceStrategy;
+import org.apache.nifi.controller.queue.QueueSize;
+import org.apache.nifi.controller.repository.ContentRepository;
+import org.apache.nifi.controller.repository.FlowFileEventRepository;
+import org.apache.nifi.controller.repository.FlowFileRecord;
+import org.apache.nifi.controller.repository.FlowFileRepository;
+import org.apache.nifi.controller.scheduling.LifecycleStateManager;
+import org.apache.nifi.controller.scheduling.RepositoryContextFactory;
+import org.apache.nifi.controller.scheduling.StandardLifecycleStateManager;
+import org.apache.nifi.controller.scheduling.StandardProcessScheduler;
+import org.apache.nifi.controller.service.ControllerServiceProvider;
+import org.apache.nifi.controller.service.StandardControllerServiceProvider;
+import org.apache.nifi.engine.FlowEngine;
+import org.apache.nifi.groups.ProcessGroup;
+import org.apache.nifi.mock.MockNodeTypeProvider;
+import org.apache.nifi.nar.ExtensionDiscoveringManager;
+import org.apache.nifi.nar.NarClassLoaders;
+import org.apache.nifi.nar.NarUnpackMode;
+import org.apache.nifi.nar.NarUnpacker;
+import org.apache.nifi.nar.StandardExtensionDiscoveringManager;
+import org.apache.nifi.nar.SystemBundle;
+import org.apache.nifi.parameter.ParameterContextManager;
+import org.apache.nifi.processor.Relationship;
+import org.apache.nifi.provenance.ProvenanceRepository;
+import org.apache.nifi.reporting.BulletinRepository;
+import org.apache.nifi.stateless.bootstrap.StatelessBootstrap;
+import org.apache.nifi.util.NiFiProperties;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.testcontainers.containers.Container.ExecResult;
+import org.testcontainers.kafka.ConfluentKafkaContainer;
+import org.testcontainers.utility.DockerImageName;
+
+import java.io.File;
+import java.io.IOException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+
+import static java.util.Objects.requireNonNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+// TODO: Delete this.
+public class KafkaToS3IT {
+    private final ScheduledExecutorService threadPool = Executors.newScheduledThreadPool(4);
+    private StandardProcessScheduler processScheduler;
+    private StandardFlowManager flowManager;
+    private FlowEngine componentLifeycleThreadPool;
+    private ConnectorRepository connectorRepository;
+    private ExtensionDiscoveringManager extensionManager;
+    private ConfluentKafkaContainer kafkaContainer;
+
+    private static final String SCRAM_USERNAME = "testuser";
+    private static final String SCRAM_PASSWORD = "testpassword";
+
+    // JAAS configuration for Kafka broker SASL/PLAIN authentication.
+    // The 'username' and 'password' fields are credentials the broker uses for inter-broker communication.
+    // The 'user_<username>="<password>"' entries define client users that can authenticate to this broker.
+    // In this setup:
+    //   - Broker uses 'admin' / 'admin-secret' for inter-broker communication (though we use PLAINTEXT for that)
+    //   - Clients can authenticate using 'testuser' / 'testpassword' on the SASL listener with PLAIN mechanism
+    private static final String JAAS_CONFIG_CONTENT = """
+        KafkaServer {
+          org.apache.kafka.common.security.plain.PlainLoginModule required
+          username="admin"
+          password="admin-secret"
+          user_%s="%s";
+        };
+        """.formatted(SCRAM_USERNAME, SCRAM_PASSWORD);
+
+    @BeforeEach
+    public void setup() throws IOException, ClassNotFoundException {
+        connectorRepository = new StandardConnectorRepository();
+
+        extensionManager = new StandardExtensionDiscoveringManager();
+        final BulletinRepository bulletinRepository = mock(BulletinRepository.class);
+        final StateManagerProvider stateManagerProvider = new MockStateManagerProvider();
+        final LifecycleStateManager lifecycleStateManager = new StandardLifecycleStateManager();
+        final ReloadComponent reloadComponent = mock(ReloadComponent.class);
+
+        final FlowController flowController = mock(FlowController.class);
+        when(flowController.isInitialized()).thenReturn(true);
+        when(flowController.getExtensionManager()).thenReturn(extensionManager);
+        when(flowController.getStateManagerProvider()).thenReturn(stateManagerProvider);
+        when(flowController.getReloadComponent()).thenReturn(reloadComponent);
+
+        final RepositoryContextFactory repoContextFactory = mock(RepositoryContextFactory.class);
+        final FlowFileRepository flowFileRepo = mock(FlowFileRepository.class);
+        final ProvenanceRepository provRepo = mock(ProvenanceRepository.class);
+        final ContentRepository contentRepo = mock(ContentRepository.class);
+        when(repoContextFactory.getFlowFileRepository()).thenReturn(flowFileRepo);
+        when(repoContextFactory.getProvenanceRepository()).thenReturn(provRepo);
+        when(repoContextFactory.getContentRepository()).thenReturn(contentRepo);
+
+        when(flowController.getRepositoryContextFactory()).thenReturn(repoContextFactory);
+        when(flowController.getGarbageCollectionLog()).thenReturn(mock(GarbageCollectionLog.class));
+        when(flowController.getProvenanceRepository()).thenReturn(provRepo);
+        when(flowController.getBulletinRepository()).thenReturn(bulletinRepository);
+        when(flowController.getLifecycleStateManager()).thenReturn(lifecycleStateManager);
+        when(flowController.getFlowFileEventRepository()).thenReturn(mock(FlowFileEventRepository.class));
+        when(flowController.getConnectorRepository()).thenReturn(connectorRepository);
+
+        final ValidationTrigger validationTrigger = new StandardValidationTrigger(threadPool, () -> true);
+        when(flowController.getValidationTrigger()).thenReturn(validationTrigger);
+
+        doAnswer(invocation -> {
+            return createConnection(invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2), invocation.getArgument(3), invocation.getArgument(4));
+        }).when(flowController).createConnection(anyString(), nullable(String.class), any(Connectable.class), any(Connectable.class), anyCollection());
+
+        final NiFiProperties nifiProperties = NiFiProperties.createBasicNiFiProperties("src/test/resources/conf/nifi.properties");
+
+        final FlowFileEventRepository flowFileEventRepository = mock(FlowFileEventRepository.class);
+        final ParameterContextManager parameterContextManager = mock(ParameterContextManager.class);
+
+        final NodeTypeProvider nodeTypeProvider = new MockNodeTypeProvider();
+        componentLifeycleThreadPool = new FlowEngine(4, "Component Lifecycle Thread Pool", true);
+        processScheduler = new StandardProcessScheduler(componentLifeycleThreadPool, extensionManager, nodeTypeProvider, null,
+            reloadComponent, stateManagerProvider, nifiProperties, lifecycleStateManager);
+        when(flowController.getProcessScheduler()).thenReturn(processScheduler);
+
+
+        final File assemblyLibDir = new File("../../../nifi-assembly/target/nifi-2.6.0-SNAPSHOT-bin/nifi-2.6.0-SNAPSHOT/lib");
+        final ClassLoader systemClassLoader = StatelessBootstrap.createExtensionRootClassLoader(assemblyLibDir, ClassLoader.getSystemClassLoader());
+        final String narLibraryDirectory = assemblyLibDir.getAbsolutePath();
+        final Bundle systemBundle = SystemBundle.create(narLibraryDirectory, systemClassLoader);
+        final File unpackDir = new File("target/unpacked-nars");
+        final File frameworkWorkingDir = new File(unpackDir, "framework");
+        final File extensionsWorkingDir = new File(unpackDir, "extensions");
+        NarUnpacker.unpackNars(systemBundle, frameworkWorkingDir, extensionsWorkingDir, List.of(assemblyLibDir.toPath()), true,
+            NarClassLoaders.FRAMEWORK_NAR_ID, true, false, NarUnpackMode.UNPACK_TO_UBER_JAR, bundleCoordinate -> true);
+
+
+        flowManager = new StandardFlowManager(nifiProperties, null, flowController, flowFileEventRepository, parameterContextManager);
+        when(flowController.getFlowManager()).thenReturn(flowManager);
+
+        final NarClassLoaders narClassLoaders = new NarClassLoaders();
+        narClassLoaders.init(new File("target/unpacked-nars/framework"), new File("target/unpacked-nars/extensions"));
+        final Set<Bundle> bundles = narClassLoaders.getBundles();
+        extensionManager.discoverExtensions(systemBundle, bundles);
+        Thread.currentThread().setContextClassLoader(systemClassLoader);
+
+        final ControllerServiceProvider controllerServiceProvider = new StandardControllerServiceProvider(processScheduler, bulletinRepository, flowManager, extensionManager);
+        when(flowController.getControllerServiceProvider()).thenReturn(controllerServiceProvider);
+
+        kafkaContainer = new ConfluentKafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.8.0"));
+        kafkaContainer
+            .withStartupTimeout(Duration.ofSeconds(10))
+            .withEnv("KAFKA_LISTENER_SECURITY_PROTOCOL_MAP", "CONTROLLER:PLAINTEXT,BROKER:PLAINTEXT,PLAINTEXT:PLAINTEXT,SASL:SASL_PLAINTEXT")
+            .withEnv("KAFKA_LISTENERS", "CONTROLLER://0.0.0.0:9094,BROKER://0.0.0.0:9092,PLAINTEXT://0.0.0.0:19092,SASL://0.0.0.0:9093")
+            .withEnv("KAFKA_ADVERTISED_LISTENERS", "BROKER://localhost:9092,PLAINTEXT://localhost:19092,SASL://localhost:9093")
+            .withEnv("KAFKA_CONTROLLER_LISTENER_NAMES", "CONTROLLER")
+            .withEnv("KAFKA_INTER_BROKER_LISTENER_NAME", "BROKER")
+            .withEnv("KAFKA_SASL_ENABLED_MECHANISMS", "PLAIN")
+            .withEnv("KAFKA_OPTS", "-Djava.security.auth.login.config=/tmp/kafka_jaas.conf")
+            .withCommand(
+                "sh", "-c",
+                "echo '" + JAAS_CONFIG_CONTENT + "' > /tmp/kafka_jaas.conf && " +
+                "/etc/confluent/docker/run"
+            )
+            .setPortBindings(List.of("9093:9093"));
+
+
+        kafkaContainer.start();
+
+        final ProcessGroup rootGroup = flowManager.createProcessGroup("root");
+        rootGroup.setName("Root");
+        flowManager.setRootGroup(rootGroup);
+    }
+
+    @AfterEach
+    public void tearDown() {
+        if (componentLifeycleThreadPool != null) {
+            componentLifeycleThreadPool.shutdown();
+        }
+        if (kafkaContainer != null) {
+            kafkaContainer.stop();
+        }
+    }
+
+    private void createKafkaTopics(final String... topicNames) throws IOException, InterruptedException {
+        for (final String topicName : topicNames) {
+            kafkaContainer.execInContainer(
+                "kafka-topics",
+                "--create",
+                "--topic", topicName,
+                "--bootstrap-server", "localhost:9092",
+                "--partitions", "1",
+                "--replication-factor", "1"
+            );
+        }
+    }
+
+    private void produceRecordsToTopic(final String topicName, final String... records) throws IOException, InterruptedException {
+        final String recordsData = String.join("\n", records);
+        final ExecResult result = kafkaContainer.execInContainer(
+            "sh", "-c",
+            "echo '" + recordsData + "' | kafka-console-producer --bootstrap-server localhost:9092 --topic " + topicName
+        );
+
+        assertEquals(0, result.getExitCode());
+    }
+
+    @Test
+    public void testCreate() throws FlowUpdateException, IOException, InterruptedException {
+        createKafkaTopics("topic-1", "topic-2", "topic-3", "topic-4", "topic-5", "Z-topic", "an-important-topic");
+
+        produceRecordsToTopic("topic-1",
+            """
+            {"id": 1, "name": "Alice", "age": 30}""",
+            """
+            {"id": 2, "name": "Bob", "age": 25}""",
+            """
+            {"id": 3, "name": "Charlie", "age": 35}"""
+        );
+
+        produceRecordsToTopic("an-important-topic",
+            "This is a plaintext message",
+            "Another important message",
+            "Final plaintext record"
+        );
+
+        final BundleCoordinate bundleCoordinate = new BundleCoordinate("org.apache.nifi", "nifi-kafka-to-s3-nar", "2.6.0-SNAPSHOT");
+        final ConnectorNode connectorNode = flowManager.createConnector(KafkaToS3.class.getName(), "kafka-to-s3", bundleCoordinate, true, true);
+        assertNotNull(connectorNode);
+
+        final String saslBootstrapServers = "localhost:9093";
+
+        connectorNode.prepareForUpdate(threadPool);
+
+        // Configure connection step
+        final PropertyGroupConfiguration serverGroup = new PropertyGroupConfiguration(KafkaConnectionStep.KAFKA_SERVER_GROUP.getName(), Map.of(
+            KafkaConnectionStep.KAFKA_BROKERS.getName(), saslBootstrapServers,
+            KafkaConnectionStep.SECURITY_PROTOCOL.getName(), "SASL_PLAINTEXT",
+            KafkaConnectionStep.SASL_MECHANISM.getName(), "PLAIN",
+            KafkaConnectionStep.USERNAME.getName(), SCRAM_USERNAME,
+            KafkaConnectionStep.PASSWORD.getName(), SCRAM_PASSWORD
+        ));
+
+        // Ensure that the configuration will be valid
+        final List<ConfigVerificationResult> connectionValidationResults = connectorNode.verifyConfigurationStep(KafkaConnectionStep.STEP_NAME, List.of(serverGroup));
+        assertEquals(List.of(), connectionValidationResults);
+
+        // Set the configuration on the Connector.
+        connectorNode.setConfiguration(KafkaConnectionStep.STEP_NAME, List.of(serverGroup));
+
+        // Get the updated list of Configuration Steps. This should now include a list of available topics as Allowable Values for the "Topic Names" property.
+        final List<ConfigurationStep> configurationSteps = connectorNode.getConfigurationSteps();
+        assertEquals(3, configurationSteps.size());
+        final ConfigurationStep topicsStep = configurationSteps.get(1);
+        final ConnectorPropertyGroup topicsGroup = topicsStep.getPropertyGroups().getFirst();
+        final List<ConnectorPropertyDescriptor> propertyDescriptors = topicsGroup.getProperties();
+        final ConnectorPropertyDescriptor topicNamesDescriptor = propertyDescriptors.getFirst();
+        assertEquals("Topic Names", topicNamesDescriptor.getName());
+        final List<String> topicNames = topicNamesDescriptor.getAllowableValues().stream().map(DescribedValue::getValue).toList();
+        assertEquals(List.of("an-important-topic", "topic-1", "topic-2", "topic-3", "topic-4", "topic-5", "Z-topic"), topicNames);
+
+        // Create configuration to point to "topic-1" topic.
+        final PropertyGroupConfiguration topic1GroupConfig = new PropertyGroupConfiguration(topicsGroup.getName(), Map.of(
+            KafkaTopicsStep.TOPIC_NAMES.getName(), "topic-1",
+            KafkaTopicsStep.CONSUMER_GROUP_ID.getName(), "kafka-to-s3-test-group",
+            KafkaTopicsStep.OFFSET_RESET.getName(), "earliest",
+            KafkaTopicsStep.KAFKA_DATA_FORMAT.getName(), "JSON"
+        ));
+
+        // Validate the configuration for the topics step. This is expected to be valid.
+        final List<ConfigVerificationResult> topic1ValidationResults = connectorNode.verifyConfigurationStep(KafkaTopicsStep.STEP_NAME, List.of(topic1GroupConfig));
+        assertEquals(List.of(), topic1ValidationResults.stream().filter(result -> result.getOutcome() == Outcome.FAILED).toList());
+
+        // Create configuration to point to "an-important-topic" topic.
+        final PropertyGroupConfiguration importantTopicGroupConfig = new PropertyGroupConfiguration(topicsGroup.getName(), Map.of(
+            KafkaTopicsStep.TOPIC_NAMES.getName(), "an-important-topic",
+            KafkaTopicsStep.CONSUMER_GROUP_ID.getName(), "kafka-to-s3-test-group",
+            KafkaTopicsStep.OFFSET_RESET.getName(), "earliest",
+            KafkaTopicsStep.KAFKA_DATA_FORMAT.getName(), "JSON"
+        ));
+
+        // Validate the configuration for the topics step. We expect 1 validation issue because the data format is set to JSON but the topic contains plaintext messages.
+        final List<ConfigVerificationResult> importantTopicValidationResults = connectorNode.verifyConfigurationStep(KafkaTopicsStep.STEP_NAME, List.of(importantTopicGroupConfig));
+        final List<ConfigVerificationResult> invalidImportantTopicResults = importantTopicValidationResults.stream()
+            .filter(result -> result.getOutcome() == Outcome.FAILED)
+            .toList();
+        assertEquals(1, invalidImportantTopicResults.size());
+        final ConfigVerificationResult invalidResult = invalidImportantTopicResults.getFirst();
+        assertTrue(invalidResult.getExplanation().contains("parse"), "Unexpected validation reason: " + invalidResult.getExplanation());
+
+        connectorNode.finishUpdate(threadPool);
+    }
+
+    private Connection createConnection(final String id, final String name, final Connectable source, final Connectable destination, final Collection<String> relationshipNames) {
+        final List<Relationship> relationships = relationshipNames.stream()
+            .map(relName -> new Relationship.Builder().name(relName).build())
+            .toList();
+
+        final FlowFileQueue flowFileQueue = mock(FlowFileQueue.class);
+        final List<FlowFileRecord> flowFileList = new ArrayList<>();
+
+        // Update mock to add FlowFiles to the queue
+        doAnswer(invocation -> {
+            flowFileList.add(invocation.getArgument(0));
+            return null;
+        }).when(flowFileQueue).put(any(FlowFileRecord.class));
+
+        // Update mock to return queue size and isEmpty status
+        when(flowFileQueue.size()).thenAnswer(invocation -> new QueueSize(flowFileList.size(), flowFileList.size()));
+        when(flowFileQueue.isEmpty()).thenAnswer(invocation -> flowFileList.isEmpty());
+        when(flowFileQueue.getLoadBalanceStrategy()).thenReturn(LoadBalanceStrategy.DO_NOT_LOAD_BALANCE);
+        when(flowFileQueue.getLoadBalanceCompression()).thenReturn(LoadBalanceCompression.DO_NOT_COMPRESS);
+
+        final FlowFileQueueFactory flowFileQueueFactory = (loadBalanceStrategy, partitioningAttribute, processGroup) -> flowFileQueue;
+
+        final Connection connection = new StandardConnection.Builder(processScheduler)
+            .id(id)
+            .name(name)
+            .processGroup(destination.getProcessGroup())
+            .relationships(relationships)
+            .source(requireNonNull(source))
+            .destination(destination)
+            .flowFileQueueFactory(flowFileQueueFactory)
+            .build();
+
+        return connection;
+    }
+
+}

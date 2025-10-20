@@ -65,6 +65,8 @@ public class StandaloneParameterContextFacade implements ParameterContextFacade 
         final AffectedComponentSet affectedComponentSet = new AffectedComponentSet(flowController);
         final ParameterReferenceManager parameterReferenceManager = new StandardParameterReferenceManager(() -> managedProcessGroup);
 
+        final Set<ProcessorNode> allReferencingProcessors = new HashSet<>();
+        final Set<ControllerServiceNode> allReferencingServices = new HashSet<>();
         for (final ParameterValue parameterValue : updatedValues) {
             if (!isParameterChanged(parameterValue)) {
                 continue;
@@ -75,6 +77,9 @@ public class StandaloneParameterContextFacade implements ParameterContextFacade 
             final Set<ControllerServiceNode> referencingServices = parameterReferenceManager.getControllerServicesReferencing(managedProcessGroup.getParameterContext(), parameterName);
             referencingProcessors.forEach(affectedComponentSet::addProcessor);
             referencingServices.forEach(affectedComponentSet::addControllerService);
+
+            allReferencingProcessors.addAll(referencingProcessors);
+            allReferencingServices.addAll(referencingServices);
         }
 
         if (affectedComponentSet.isEmpty()) {
@@ -89,6 +94,9 @@ public class StandaloneParameterContextFacade implements ParameterContextFacade 
         // Update the parameter value in our map
         final Map<String, Parameter> updatedParameters = createParameterMap(updatedValues);
         managedProcessGroup.getParameterContext().setParameters(updatedParameters);
+
+        allReferencingProcessors.forEach(ProcessorNode::resetValidationState);
+        allReferencingServices.forEach(ControllerServiceNode::resetValidationState);
 
         logger.info("Parameter Context updated {} parameter. Restarting {} affected components.", updatedValues.size(), activeSet.getComponentCount());
         activeSet.start();

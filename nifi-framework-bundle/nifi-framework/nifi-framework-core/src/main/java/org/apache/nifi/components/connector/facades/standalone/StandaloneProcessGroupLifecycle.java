@@ -28,6 +28,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 public class StandaloneProcessGroupLifecycle implements ProcessGroupLifecycle {
     private final ProcessGroup processGroup;
@@ -41,21 +42,48 @@ public class StandaloneProcessGroupLifecycle implements ProcessGroupLifecycle {
     @Override
     public CompletableFuture<Void> enableControllerServices() {
         final Set<ControllerServiceNode> controllerServices = processGroup.findAllControllerServices();
-        if (controllerServices.isEmpty()) {
+        return enableControllerServices(controllerServices);
+    }
+
+    @Override
+    public CompletableFuture<Void> enableControllerServices(final Collection<String> collection) {
+        final Set<ControllerServiceNode> serviceNodes = findControllerServices(collection);
+        return enableControllerServices(serviceNodes);
+    }
+
+    private CompletableFuture<Void> enableControllerServices(final Set<ControllerServiceNode> serviceNodes) {
+        if (serviceNodes.isEmpty()) {
             return CompletableFuture.completedFuture(null);
         }
 
-        return controllerServiceProvider.enableControllerServicesAsync(controllerServices);
+        return controllerServiceProvider.enableControllerServicesAsync(serviceNodes);
+    }
+
+    private Set<ControllerServiceNode> findControllerServices(final Collection<String> serviceIds) {
+        return processGroup.findAllControllerServices().stream()
+            .filter(service -> service.getVersionedComponentId().isPresent())
+            .filter(service -> serviceIds.contains(service.getVersionedComponentId().get()))
+            .collect(Collectors.toSet());
     }
 
     @Override
     public CompletableFuture<Void> disableControllerServices() {
         final Set<ControllerServiceNode> controllerServices = processGroup.findAllControllerServices();
-        if (controllerServices.isEmpty()) {
+        return disableControllerServices(controllerServices);
+    }
+
+    private CompletableFuture<Void> disableControllerServices(final Set<ControllerServiceNode> serviceNodes) {
+        if (serviceNodes.isEmpty()) {
             return CompletableFuture.completedFuture(null);
         }
 
-        return controllerServiceProvider.disableControllerServicesAsync(controllerServices);
+        return controllerServiceProvider.disableControllerServicesAsync(serviceNodes);
+    }
+
+    @Override
+    public CompletableFuture<Void> disableControllerServices(final Collection<String> collection) {
+        final Set<ControllerServiceNode> serviceNodes = findControllerServices(collection);
+        return disableControllerServices(serviceNodes);
     }
 
     @Override

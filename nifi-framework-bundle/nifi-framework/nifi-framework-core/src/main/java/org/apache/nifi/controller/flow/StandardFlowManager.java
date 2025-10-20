@@ -79,12 +79,14 @@ import org.apache.nifi.logging.LogRepositoryFactory;
 import org.apache.nifi.logging.ParameterProviderLogObserver;
 import org.apache.nifi.logging.ProcessorLogObserver;
 import org.apache.nifi.logging.ReportingTaskLogObserver;
+import org.apache.nifi.logging.StandardLoggingContext;
 import org.apache.nifi.nar.ExtensionManager;
 import org.apache.nifi.nar.NarCloseable;
 import org.apache.nifi.parameter.ParameterContext;
 import org.apache.nifi.parameter.ParameterContextManager;
 import org.apache.nifi.parameter.ParameterProvider;
 import org.apache.nifi.processor.Processor;
+import org.apache.nifi.processor.SimpleProcessLogger;
 import org.apache.nifi.registry.flow.FlowRegistryClientNode;
 import org.apache.nifi.registry.flow.mapping.ComponentIdLookup;
 import org.apache.nifi.registry.flow.mapping.FlowMappingOptions;
@@ -755,7 +757,7 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
             Collections.emptyMap(), Collections.emptyList(), null);
         managedRootGroup.setParameterContext(managedParameterContext);
 
-        final ProcessGroupFacadeFactory processGroupFacadeFactory = (processGroup) -> {
+        final ProcessGroupFacadeFactory processGroupFacadeFactory = (processGroup, connectorLogger) -> {
             final FlowMappingOptions flowMappingOptions = new FlowMappingOptions.Builder()
                 .mapSensitiveConfiguration(true)
                 .mapPropertyDescriptors(true)
@@ -773,7 +775,7 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
 
             final VersionedProcessGroup versionedManagedGroup = flowMapper.mapProcessGroup(processGroup, flowController.getControllerServiceProvider(), this, true);
             final ComponentContextProvider componentContextProvider = new StandardComponentContextProvider(flowController);
-            final ComponentLog connectorLogger = LogRepositoryFactory.getRepository(id).getLogger();
+
             return new StandaloneProcessGroupFacade(processGroup, versionedManagedGroup,
                 processScheduler, managedParameterContext, flowController.getControllerServiceProvider(), componentContextProvider,
                 connectorLogger, extensionManager, flowController.getAssetManager());

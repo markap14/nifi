@@ -64,7 +64,7 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
         this.activeBundle = builder.activeBundle;
         this.assetManager = builder.assetManager;
 
-        this.processGroupFacade = processGroupFacadeFactory.create(managedProcessGroup);
+        this.processGroupFacade = processGroupFacadeFactory.create(managedProcessGroup, componentLog);
     }
 
     @Override
@@ -114,7 +114,7 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
 
         managedProcessGroup.updateFlow(versionedExternalFlow, managedProcessGroup.getIdentifier(), false, true, true);
 
-        processGroupFacade = processGroupFacadeFactory.create(managedProcessGroup);
+        processGroupFacade = processGroupFacadeFactory.create(managedProcessGroup, componentLog);
     }
 
     @Override
@@ -133,7 +133,7 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
         final ConnectorParameterLookup parameterLookup = new ConnectorParameterLookup(versionedExternalFlow.getParameterContexts().values(), assetManager);
         getParameterContext().updateParameters(parameterLookup.getParameterValues());
 
-        processGroupFacade = processGroupFacadeFactory.create(managedProcessGroup);
+        processGroupFacade = processGroupFacadeFactory.create(managedProcessGroup, componentLog);
     }
 
     private void updateParameterContext(final VersionedProcessGroup group, final String parameterContextName) {

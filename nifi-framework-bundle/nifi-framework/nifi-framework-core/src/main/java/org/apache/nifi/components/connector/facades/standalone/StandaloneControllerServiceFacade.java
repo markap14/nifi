@@ -93,17 +93,15 @@ public class StandaloneControllerServiceFacade implements ControllerServiceFacad
 
     @Override
     public List<ConfigVerificationResult> verify(final Map<String, String> propertyValues, final Map<String, String> variables) {
-        // TODO: This is not right because it takes a given set of properties that override values but not a parameter context that may have overrridden values.
-        // TODO: Need to take in a parameter context as well instead of using this.parameterContext.
         final ConfigurationContext configurationContext = componentContextProvider.createConfigurationContext(controllerServiceNode, propertyValues, parameterContext);
-        return controllerServiceNode.verifyConfiguration(configurationContext, connectorLogger, variables, extensionManager);
+        return controllerServiceNode.verifyConfiguration(configurationContext, connectorLogger, variables, extensionManager, parameterContext);
     }
 
     @Override
     public List<ConfigVerificationResult> verify(final Map<String, String> propertyValues, final VersionedParameterContext parameterContext, final Map<String, String> variables) {
         final ParameterLookup parameterLookup = new ConnectorParameterLookup(List.of(parameterContext), assetManager);
         final ConfigurationContext configurationContext = componentContextProvider.createConfigurationContext(controllerServiceNode, propertyValues, parameterLookup);
-        return controllerServiceNode.verifyConfiguration(configurationContext, connectorLogger, variables, extensionManager);
+        return controllerServiceNode.verifyConfiguration(configurationContext, connectorLogger, variables, extensionManager, parameterLookup);
     }
 
     @Override
@@ -118,7 +116,7 @@ public class StandaloneControllerServiceFacade implements ControllerServiceFacad
 
         final Map<String, String> propertyValues = versionedService.getProperties();
         final ConfigurationContext configurationContext = componentContextProvider.createConfigurationContext(controllerServiceNode, propertyValues, connectorParameterLookup);
-        return controllerServiceNode.verifyConfiguration(configurationContext, connectorLogger, variables, extensionManager);
+        return controllerServiceNode.verifyConfiguration(configurationContext, connectorLogger, variables, extensionManager, connectorParameterLookup);
     }
 
     private VersionedProcessGroup findVersionedServiceGroup(final VersionedProcessGroup group) {
@@ -149,7 +147,7 @@ public class StandaloneControllerServiceFacade implements ControllerServiceFacad
         }
 
         for (final VersionedControllerService service : parentGroup.getControllerServices()) {
-            if (service.getIdentifier().equals(parentGroup.getIdentifier())) {
+            if (service.getIdentifier().equals(controllerServiceNode.getVersionedComponentId().orElseThrow())) {
                 return service;
             }
         }
@@ -159,7 +157,7 @@ public class StandaloneControllerServiceFacade implements ControllerServiceFacad
 
     @Override
     public Object invokeConnectorMethod(final String methodName, final Map<String, Object> arguments) throws InvocationFailedException {
-        final ConfigurationContext configurationContext = componentContextProvider.createConfigurationContext(controllerServiceNode);
+        final ConfigurationContext configurationContext = componentContextProvider.createConfigurationContext(controllerServiceNode, parameterContext);
         return controllerServiceNode.invokeConnectorMethod(methodName, arguments, configurationContext);
     }
 

@@ -17,6 +17,7 @@
 
 package org.apache.nifi.controller.flow;
 
+import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.ConfigurationStep;
 import org.apache.nifi.components.connector.Connector;
@@ -105,7 +106,7 @@ public class NopConnector implements Connector {
     }
 
     @Override
-    public List<ValidationResult> validateConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
+    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
         return List.of();
     }
 

@@ -22,6 +22,7 @@ import org.apache.nifi.authorization.resource.Authorizable;
 import org.apache.nifi.authorization.resource.ResourceFactory;
 import org.apache.nifi.authorization.resource.ResourceType;
 import org.apache.nifi.bundle.BundleCoordinate;
+import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.validation.ValidationState;
 import org.apache.nifi.components.validation.ValidationStatus;
@@ -58,12 +59,11 @@ public class StandardConnectorNode implements ConnectorNode {
     private final ConnectorDetails connectorDetails;
     private final String componentType;
     private final BundleCoordinate bundleCoordinate;
-    private final StandardConnectorConfigurationContext configurationContext = new StandardConnectorConfigurationContext();
+    private final StandardConnectorConfigurationContext configurationContext;
     private final AtomicReference<String> versionedComponentId = new AtomicReference<>();
     private final AtomicReference<ConnectorState> currentState = new AtomicReference<>(ConnectorState.STOPPED);
     private final AtomicReference<ConnectorState> desiredState = new AtomicReference<>(ConnectorState.STOPPED);
     private final AtomicReference<ConnectorState> updateResumeState = new AtomicReference<>(null);
-    private final Map<String, Map<String, String>> propertyGroupConfigurations = new HashMap<>();
 
     private volatile String name;
     private volatile String description;
@@ -77,9 +77,17 @@ public class StandardConnectorNode implements ConnectorNode {
     private final List<CompletableFuture<Void>> pendingStartFutures = new ArrayList<>();
     private final List<CompletableFuture<Void>> pendingStopFutures = new ArrayList<>();
 
-
     public StandardConnectorNode(final String identifier, final ExtensionManager extensionManager, final Authorizable parentAuthorizable, final ProcessGroup managedProcessGroup,
         final ConnectorDetails connectorDetails, final String componentType, final BundleCoordinate bundleCoordinate) {
+
+        this(identifier, extensionManager, parentAuthorizable, managedProcessGroup, connectorDetails, componentType, bundleCoordinate,
+            new StandardConnectorConfigurationContext());
+    }
+
+    // TODO: REMOVE REDUNDANT CONSTRUCTOR
+    public StandardConnectorNode(final String identifier, final ExtensionManager extensionManager, final Authorizable parentAuthorizable, final ProcessGroup managedProcessGroup,
+        final ConnectorDetails connectorDetails, final String componentType, final BundleCoordinate bundleCoordinate,
+        final StandardConnectorConfigurationContext configurationContext) {
 
         this.identifier = identifier;
         this.extensionManager = extensionManager;
@@ -88,6 +96,7 @@ public class StandardConnectorNode implements ConnectorNode {
         this.connectorDetails = connectorDetails;
         this.componentType = componentType;
         this.bundleCoordinate = bundleCoordinate;
+        this.configurationContext = configurationContext;
     }
 
     @Override
@@ -491,6 +500,34 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
+    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final List<PropertyGroupConfiguration> groupConfigurations) {
+        verifyCanValidate();
+
+        final Map<String, String> properties = new HashMap<>();
+        for (final PropertyGroupConfiguration groupConfiguration : groupConfigurations) {
+            properties.putAll(groupConfiguration.getPropertyValues());
+        }
+
+        try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
+            return getConnector().verifyConfigurationStep(stepName, properties);
+        }
+    }
+
+    private void verifyCanValidate() {
+        final ConnectorState currentState = getCurrentState();
+        if (currentState != ConnectorState.UPDATING) {
+            throw new IllegalStateException("Cannot validate the configuration step of " + this + " because its state is currently " + currentState
+                                            + "; its state must be UPDATING in order to validate a configuration step.");
+        }
+
+        final ConnectorState desiredState = getDesiredState();
+        if (desiredState != ConnectorState.UPDATING) {
+            throw new IllegalStateException("Cannot validate the configuration step of " + this + " because its desired state is currently " + desiredState
+                                            + "; its state must be UPDATING in order to validate a configuration step.");
+        }
+    }
+
+    @Override
     public String getIdentifier() {
         return identifier;
     }
@@ -508,6 +545,13 @@ public class StandardConnectorNode implements ConnectorNode {
     @Override
     public ConnectorConfigurationContext getConfigurationContext() {
         return configurationContext;
+    }
+
+    @Override
+    public List<ConfigurationStep> getConfigurationSteps() {
+        try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
+            return getConnector().getConfigurationSteps();
+        }
     }
 
     @Override

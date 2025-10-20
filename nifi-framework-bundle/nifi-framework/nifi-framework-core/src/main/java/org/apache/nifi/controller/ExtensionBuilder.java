@@ -25,13 +25,19 @@ import org.apache.nifi.bundle.Bundle;
 import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.ConfigurableComponent;
 import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.components.connector.ConfigurationStep;
 import org.apache.nifi.components.connector.Connector;
+import org.apache.nifi.components.connector.ConnectorConfigurationContext;
 import org.apache.nifi.components.connector.ConnectorDetails;
 import org.apache.nifi.components.connector.ConnectorInitializationContext;
 import org.apache.nifi.components.connector.ConnectorNode;
+import org.apache.nifi.components.connector.ConnectorPropertyDescriptor;
+import org.apache.nifi.components.connector.ConnectorPropertyGroup;
 import org.apache.nifi.components.connector.GhostConnector;
 import org.apache.nifi.components.connector.ProcessGroupFacadeFactory;
+import org.apache.nifi.components.connector.PropertyGroupConfiguration;
 import org.apache.nifi.components.connector.SecretsManager;
+import org.apache.nifi.components.connector.StandardConnectorConfigurationContext;
 import org.apache.nifi.components.connector.StandardConnectorInitializationContext;
 import org.apache.nifi.components.connector.StandardConnectorNode;
 import org.apache.nifi.components.connector.components.ParameterContextFacade;
@@ -99,9 +105,12 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -403,7 +412,7 @@ public class ExtensionBuilder {
        try {
            return createControllerServiceNode();
        } catch (final Throwable t) {
-           logger.error("Could not create Controller Service of type {} from {} for ID {} due to: {}; creating \"Ghost\" implementation", type, bundleCoordinate, identifier, t.getMessage());
+           logger.error("Could not create Controller Service of type {} from {} for ID {} due to: {}; creating \"Ghost\" implementation", type, bundleCoordinate, identifier, t.toString());
            if (logger.isDebugEnabled()) {
                logger.debug(t.getMessage(), t);
            }
@@ -471,6 +480,16 @@ public class ExtensionBuilder {
 
        final ComponentLog logger = new SimpleProcessLogger(identifier, connector, new StandardLoggingContext(null));
        final ConnectorDetails connectorDetails = new ConnectorDetails(connector, bundleCoordinate, logger);
+       final StandardConnectorConfigurationContext configurationContext = new StandardConnectorConfigurationContext();
+
+       final ConnectorInitializationContext initContext = createConnectorInitializationContext(managedProcessGroup, logger, configurationContext);
+
+       // TODO: If an Exception is thrown in the call to #initialize, we should create a Ghosted Connector
+       try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(connector.getClass().getClassLoader())) {
+           connector.initialize(initContext);
+       }
+
+       initializeDefaultValues(connector, configurationContext);
 
        final ConnectorNode connectorNode = new StandardConnectorNode(
            identifier,
@@ -479,30 +498,51 @@ public class ExtensionBuilder {
            managedProcessGroup,
            connectorDetails,
            componentType,
-           bundleCoordinate
+           bundleCoordinate,
+           configurationContext
        );
-
-       final ConnectorInitializationContext initContext = createConnectorInitializationContext(connectorNode);
-
-       // TODO: If an Exception is thrown in the call to #initialize, we should create a Ghosted Connector
-       try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(connectorDetails.getConnector().getClass().getClassLoader())) {
-           connectorDetails.getConnector().initialize(initContext);
-       }
 
        return connectorNode;
    }
 
-   private ConnectorInitializationContext createConnectorInitializationContext(final ConnectorNode connectorNode) {
+   private void initializeDefaultValues(final Connector connector, final StandardConnectorConfigurationContext configurationContext) {
+       try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, connector.getClass(), identifier)) {
+           final List<ConfigurationStep> configSteps = connector.getConfigurationSteps();
+
+           for (final ConfigurationStep step : configSteps) {
+               final List<ConnectorPropertyGroup> propertyGroups = step.getPropertyGroups();
+               final List<PropertyGroupConfiguration> propertyGroupConfigurations = new ArrayList<>();
+
+               for (final ConnectorPropertyGroup propertyGroup : propertyGroups) {
+                   final Map<String, String> defaultValues = new HashMap<>();
+
+                   for (final ConnectorPropertyDescriptor descriptor : propertyGroup.getProperties()) {
+                       final String name = descriptor.getName();
+                       final String defaultValue = descriptor.getDefaultValue();
+                       defaultValues.put(name, defaultValue);
+                   }
+
+                   propertyGroupConfigurations.add(new PropertyGroupConfiguration(propertyGroup.getName(), defaultValues));
+               }
+
+               configurationContext.setProperties(step.getName(), propertyGroupConfigurations);
+           }
+       }
+   }
+
+   private ConnectorInitializationContext createConnectorInitializationContext(final ProcessGroup managedProcessGroup, final ComponentLog componentLog,
+            final ConnectorConfigurationContext configurationContext) {
+
        final org.apache.nifi.flow.Bundle bundle = new org.apache.nifi.flow.Bundle(bundleCoordinate.getGroup(), bundleCoordinate.getId(), bundleCoordinate.getVersion());
        final String name = type.contains(".") ? StringUtils.substringAfterLast(type, ".") : type;
-       final ParameterContextFacade parameterContextFacade = new StandaloneParameterContextFacade(flowController, connectorNode.getManagedProcessGroup());
+       final ParameterContextFacade parameterContextFacade = new StandaloneParameterContextFacade(flowController, managedProcessGroup);
        final SecretsManager secretsManager = null;
 
        return new StandardConnectorInitializationContext.Builder()
            .identifier(identifier)
            .name(name)
-           .componentLog(connectorNode.getComponentLog())
-           .configurationContext(connectorNode.getConfigurationContext())
+           .componentLog(componentLog)
+           .configurationContext(configurationContext)
            .parameterContextFacade(parameterContextFacade)
            .managedProcessGroup(managedProcessGroup)
            .processGroupFacadeFactory(processGroupFacadeFactory)

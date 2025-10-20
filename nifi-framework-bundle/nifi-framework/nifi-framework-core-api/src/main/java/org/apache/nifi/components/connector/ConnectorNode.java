@@ -19,6 +19,7 @@ package org.apache.nifi.components.connector;
 
 import org.apache.nifi.authorization.resource.ComponentAuthorizable;
 import org.apache.nifi.bundle.BundleCoordinate;
+import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.VersionedComponent;
 import org.apache.nifi.components.validation.ValidationState;
 import org.apache.nifi.components.validation.ValidationStatus;
@@ -95,10 +96,13 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
      */
     void resumeValidationTrigger();
 
+    List<ConfigVerificationResult> verifyConfigurationStep(String configurationStepName, List<PropertyGroupConfiguration> propertyGroupConfigurations);
+
     ComponentLog getComponentLog();
 
     ConnectorConfigurationContext getConfigurationContext();
 
+    List<ConfigurationStep> getConfigurationSteps();
 
     // -------------------
     // The following methods should always be called via the ConnectorRepository in order to maintain proper

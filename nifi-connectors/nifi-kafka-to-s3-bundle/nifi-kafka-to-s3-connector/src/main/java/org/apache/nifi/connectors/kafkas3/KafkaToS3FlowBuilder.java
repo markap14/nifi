@@ -11,13 +11,20 @@ import org.apache.nifi.flow.VersionedControllerService;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.flow.VersionedProcessGroup;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public class KafkaToS3FlowBuilder {
-    private static final String FLOW_JSON_PATH = "/flows/Kafka_to_S3.json";
+    private static final String FLOW_JSON_PATH = "flows/Kafka_to_S3.json";
 
     private final ConnectorConfigurationContext configContext;
 
     public KafkaToS3FlowBuilder(final ConnectorConfigurationContext configurationContext) {
         this.configContext = configurationContext;
+    }
+
+    public static VersionedExternalFlow loadInitialFlow() {
+        return VersionedFlowUtils.loadFlowFromResource(FLOW_JSON_PATH);
     }
 
     public VersionedExternalFlow buildFlow() {
@@ -26,7 +33,8 @@ public class KafkaToS3FlowBuilder {
 
         updateKafkaConnectionParameters(externalFlow);
         updateSchemaRegistryParameters(externalFlow);
-        updateReaderWriterParameters(externalFlow);
+        updateReaderWriter(externalFlow);
+        updateKafkaTopicsParameters(externalFlow);
         updateS3Config(externalFlow);
 
         return externalFlow;
@@ -54,7 +62,18 @@ public class KafkaToS3FlowBuilder {
 
         final String schemaRegistryUrl = configContext.getProperty(connectionStep, KafkaConnectionStep.SCHEMA_REGISTRY_URL).getValue();
         VersionedFlowUtils.setParameterValue(externalFlow, "Schema Registry URLs", schemaRegistryUrl);
-        if (schemaRegistryUrl != null) {
+
+        if (schemaRegistryUrl == null) {
+            final Map<String, String> properties = new HashMap<>();
+            properties.put("schema-access-strategy", "infer-schema");
+            properties.put("schema-registry", null);
+            properties.put("schema-reference-reader", null);
+
+            externalFlow.getFlowContents().getControllerServices().stream()
+                .filter(service -> service.getType().endsWith("JsonTreeReader"))
+                .findFirst()
+                .ifPresent(service -> service.setProperties(properties));
+        } else {
             final String username = configContext.getProperty(connectionStep, KafkaConnectionStep.SCHEMA_REGISTRY_USERNAME).getValue();
             final String password = configContext.getProperty(connectionStep, KafkaConnectionStep.PASSWORD).getValue();
 
@@ -77,19 +96,56 @@ public class KafkaToS3FlowBuilder {
             VersionedFlowUtils.setParameterValue(externalFlow, "Kafka SASL Mechanism", saslMechanism);
 
             final String username = configContext.getProperty(connectionStep, KafkaConnectionStep.USERNAME).getValue();
-            VersionedFlowUtils.setParameterValue(externalFlow, "Kafka Username", username);
+            VersionedFlowUtils.setParameterValue(externalFlow, "Kafka SASL Username", username);
 
             final String password = configContext.getProperty(connectionStep, KafkaConnectionStep.PASSWORD).getValue();
-            VersionedFlowUtils.setParameterValue(externalFlow, "Kafka Password", password);
+            VersionedFlowUtils.setParameterValue(externalFlow, "Kafka SASL Password", password);
         }
     }
 
-    private void updateReaderWriterParameters(final VersionedExternalFlow externalFlow) {
+    private void updateReaderWriter(final VersionedExternalFlow externalFlow) {
+        final VersionedProcessGroup rootGroup = externalFlow.getFlowContents();
+
+        final VersionedControllerService avroService = rootGroup.getControllerServices().stream()
+            .filter(service -> service.getType().endsWith("AvroReader"))
+            .findFirst()
+            .orElseThrow();
+
         final String kafkaDataFormat = configContext.getProperty(KafkaTopicsStep.STEP_NAME, KafkaTopicsStep.KAFKA_DATA_FORMAT.getName()).getValue();
+        if (kafkaDataFormat.equalsIgnoreCase("JSON")) {
+            // Remove Avro Reader
+//            rootGroup.getControllerServices().remove(avroService);
+//
+//            VersionedFlowUtils.removeControllerServiceReferences(externalFlow.getFlowContents(), avroService.getIdentifier());
+        } else {
+            // Remove JsonTreeReader
+//            final VersionedControllerService jsonService = rootGroup.getControllerServices().stream()
+//                .filter(service -> service.getType().endsWith("JsonTreeReader"))
+//                .findFirst()
+//                .orElseThrow();
+//            rootGroup.getControllerServices().remove(jsonService);
+//
+//            VersionedFlowUtils.removeControllerServiceReferences(externalFlow.getFlowContents(), jsonService.getIdentifier());
+
+            // Update ConsumeKafka processor to use Avro Reader
+            rootGroup.getProcessors().stream()
+                .filter(versionedProcessor ->  versionedProcessor.getType().endsWith("ConsumeKafka"))
+                .findFirst()
+                .ifPresent(processor -> processor.getProperties().put("Record Reader", avroService.getIdentifier()));
+        }
+
         VersionedFlowUtils.setParameterValue(externalFlow, "Kafka Data Format", kafkaDataFormat);
 
         final String s3DataFormat = configContext.getProperty(S3Step.S3_STEP, S3Step.S3_DATA_FORMAT).getValue();
         VersionedFlowUtils.setParameterValue(externalFlow, "S3 Data Format", s3DataFormat);
+    }
+
+    private void updateKafkaTopicsParameters(final VersionedExternalFlow externalFlow) {
+        final String topics = configContext.getProperty(KafkaTopicsStep.STEP_NAME, KafkaTopicsStep.TOPIC_NAMES.getName()).getValue();
+        VersionedFlowUtils.setParameterValue(externalFlow, "Topic Names", topics);
+
+        final String groupId = configContext.getProperty(KafkaTopicsStep.STEP_NAME, KafkaTopicsStep.CONSUMER_GROUP_ID.getName()).getValue();
+        VersionedFlowUtils.setParameterValue(externalFlow, "Consumer Group ID", groupId);
     }
 
     private void updateS3Config(final VersionedExternalFlow externalFlow) {

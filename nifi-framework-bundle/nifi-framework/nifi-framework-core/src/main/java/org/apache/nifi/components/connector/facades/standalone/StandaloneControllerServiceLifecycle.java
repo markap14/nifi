@@ -19,6 +19,7 @@ package org.apache.nifi.components.connector.facades.standalone;
 
 import org.apache.nifi.components.connector.components.ControllerServiceLifecycle;
 import org.apache.nifi.components.connector.components.ControllerServiceState;
+import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.controller.ProcessScheduler;
 import org.apache.nifi.controller.service.ControllerServiceNode;
 
@@ -45,6 +46,12 @@ public class StandaloneControllerServiceLifecycle implements ControllerServiceLi
 
     @Override
     public CompletableFuture<Void> enable() {
+        // If validating, perform validation to ensure it's complete before enabling
+        final ValidationStatus currentStatus = controllerServiceNode.getValidationStatus();
+        if (currentStatus == ValidationStatus.VALIDATING) {
+            controllerServiceNode.performValidation();
+        }
+
         return processScheduler.enableControllerService(controllerServiceNode);
     }
 

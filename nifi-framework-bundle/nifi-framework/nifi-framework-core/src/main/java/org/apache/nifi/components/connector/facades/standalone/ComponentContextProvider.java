@@ -13,11 +13,11 @@ import org.apache.nifi.processor.ProcessContext;
 import java.util.Map;
 
 public interface ComponentContextProvider {
-    ProcessContext createProcessContext(ProcessorNode processorNode);
+    ProcessContext createProcessContext(ProcessorNode processorNode, ParameterLookup parameterLookup);
 
     ProcessContext createProcessContext(ProcessorNode processorNode, Map<String, String> propertiesOverride, ParameterLookup parameterLookup);
 
-    ConfigurationContext createConfigurationContext(ControllerServiceNode serviceNode);
+    ConfigurationContext createConfigurationContext(ControllerServiceNode serviceNode, ParameterLookup parameterLookup);
 
     ConfigurationContext createConfigurationContext(ControllerServiceNode serviceNode, Map<String, String> propertiesOverride, ParameterLookup parameterLookup);
 

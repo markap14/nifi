@@ -409,9 +409,12 @@ public class StandardExtensionDiscoveringManager implements ExtensionDiscovering
             serviceResourceUrls.add(serviceResourceUrlEnum.nextElement());
         }
 
-        final Enumeration<URL> parentResourceUrlEnum = bundle.getClassLoader().getParent().getResources(servicesFile);
-        while (parentResourceUrlEnum.hasMoreElements()) {
-            serviceResourceUrls.remove(parentResourceUrlEnum.nextElement());
+        final ClassLoader parentClassLoader = bundle.getClassLoader().getParent();
+        if (parentClassLoader != null) {
+            final Enumeration<URL> parentResourceUrlEnum = parentClassLoader.getResources(servicesFile);
+            while (parentResourceUrlEnum.hasMoreElements()) {
+                serviceResourceUrls.remove(parentResourceUrlEnum.nextElement());
+            }
         }
 
         return serviceResourceUrls;
@@ -866,6 +869,10 @@ public class StandardExtensionDiscoveringManager implements ExtensionDiscovering
                 tempComponent = pythonBridge.createProcessor(procId, classType, bundleCoordinate.getVersion(), false, false);
             } else {
                 final Class<?> componentClass = Class.forName(classType, true, bundleClassLoader);
+                if (!ConfigurableComponent.class.isAssignableFrom(componentClass)) {
+                    return null;
+                }
+
                 tempComponent = (ConfigurableComponent) componentClass.getDeclaredConstructor().newInstance();
             }
 

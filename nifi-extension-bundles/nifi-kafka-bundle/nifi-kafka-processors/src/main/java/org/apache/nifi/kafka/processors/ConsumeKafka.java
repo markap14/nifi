@@ -517,9 +517,9 @@ public class ConsumeKafka extends AbstractProcessor implements VerifiableProcess
         final List<ConfigVerificationResult> verificationResults = new ArrayList<>();
 
         final KafkaConnectionService connectionService = context.getProperty(CONNECTION_SERVICE).asControllerService(KafkaConnectionService.class);
-        final PollingContext pollingContext = createPollingContext(context);
+        final PollingContext pollingContext = createPollingContext(context, null, AutoOffsetReset.EARLIEST);
         try (final KafkaConsumerService consumerService = connectionService.getConsumerService(pollingContext)) {
-            final ConfigVerificationResult partitionVerification = verifyPartitions(consumerService);
+            final ConfigVerificationResult partitionVerification = verifyPartitions(consumerService, pollingContext);
             verificationResults.add(partitionVerification);
 
             final ConfigVerificationResult parsingResult = verifyCanParse(context, consumerService, verificationLogger);
@@ -535,7 +535,7 @@ public class ConsumeKafka extends AbstractProcessor implements VerifiableProcess
         return verificationResults;
     }
 
-    private ConfigVerificationResult verifyPartitions(final KafkaConsumerService consumerService) {
+    private ConfigVerificationResult verifyPartitions(final KafkaConsumerService consumerService, final PollingContext pollingContext) {
         final ConfigVerificationResult.Builder partitionVerification = new ConfigVerificationResult.Builder()
             .verificationStepName("Verify Topic Partitions");
 

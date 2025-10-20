@@ -48,6 +48,7 @@ import org.apache.nifi.kafka.service.api.consumer.KafkaConsumerService;
 import org.apache.nifi.kafka.service.api.consumer.PollingContext;
 import org.apache.nifi.kafka.service.api.producer.KafkaProducerService;
 import org.apache.nifi.kafka.service.api.producer.ProducerConfiguration;
+import org.apache.nifi.kafka.service.consumer.Kafka3AssignmentService;
 import org.apache.nifi.kafka.service.consumer.Kafka3ConsumerService;
 import org.apache.nifi.kafka.service.consumer.Subscription;
 import org.apache.nifi.kafka.service.producer.Kafka3ProducerService;
@@ -61,7 +62,6 @@ import org.apache.nifi.kafka.shared.transaction.TransactionIdSupplier;
 import org.apache.nifi.kafka.shared.validation.DynamicPropertyValidator;
 import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.oauth2.OAuth2AccessTokenProvider;
-import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.apache.nifi.ssl.SSLContextService;
 
@@ -232,18 +232,25 @@ public class Kafka3ConnectionService extends AbstractControllerService implement
     public KafkaConsumerService getConsumerService(final PollingContext pollingContext) {
         Objects.requireNonNull(pollingContext, "Polling Context required");
 
-        final Subscription subscription = createSubscription(pollingContext);
+        final String groupId = pollingContext.getGroupId();
 
         final Properties properties = new Properties();
         properties.putAll(consumerProperties);
-        properties.put(ConsumerConfig.GROUP_ID_CONFIG, subscription.getGroupId());
-        properties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, subscription.getAutoOffsetReset().getValue());
+        if (groupId != null) {
+            properties.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
+        }
+        properties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, pollingContext.getAutoOffsetReset().getValue());
         properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
 
         final ByteArrayDeserializer deserializer = new ByteArrayDeserializer();
         final Consumer<byte[], byte[]> consumer = new KafkaConsumer<>(properties, deserializer, deserializer);
 
-        return new Kafka3ConsumerService(getLogger(), consumer, subscription);
+        if (groupId == null) {
+            return new Kafka3AssignmentService(consumer, pollingContext.getTopics());
+        } else {
+            final Subscription subscription = createSubscription(pollingContext);
+            return new Kafka3ConsumerService(getLogger(), consumer, subscription);
+        }
     }
 
     private Subscription createSubscription(final PollingContext pollingContext) {
@@ -292,25 +299,21 @@ public class Kafka3ConnectionService extends AbstractControllerService implement
         name="listTopicNames",
         description="Returns a list of topic names available in the Kafka cluster",
         arguments = {
-            @MethodArgument(name = "context", type = ProcessContext.class, description = "The process context")
+            @MethodArgument(name = "context", type = ConfigurationContext.class, description = "The configuration context that specifies connectivity details")
         })
-    public Set<String> listTopicNames(final ProcessContext context) throws ExecutionException, InterruptedException {
+    public List<String> listTopicNames(final ConfigurationContext context) throws ExecutionException, InterruptedException {
         final Properties clientProperties = getClientProperties(context);
         final Properties consumerProperties = getConsumerProperties(context, clientProperties);
 
         try (final Admin admin = Admin.create(consumerProperties)) {
             final ListTopicsResult result = admin.listTopics();
-            return result.names().get();
+            final Set<String> topicNames = result.names().get();
+            final List<String> sortedTopicNames = new ArrayList<>(topicNames);
+            sortedTopicNames.sort(String.CASE_INSENSITIVE_ORDER);
+            return sortedTopicNames;
         }
     }
 
-    @ConnectorMethod(
-        name="verifyCanConnect",
-        description="Ensures that a connection to the Kafka cluster can be established, throwing an Exception if unable to connect"
-    )
-    public void verifyCanConnect(final ProcessContext context) {
-
-    }
 
     @Override
     public List<ConfigVerificationResult> verify(final ConfigurationContext configurationContext, final ComponentLog verificationLogger, final Map<String, String> variables) {

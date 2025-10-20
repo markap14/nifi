@@ -92,14 +92,14 @@ public class StandaloneProcessorFacade implements ProcessorFacade {
     @Override
     public List<ConfigVerificationResult> verify(final Map<String, String> propertyValues, final Map<String, String> attributes) {
         final ProcessContext processContext = componentContextProvider.createProcessContext(processorNode, propertyValues, parameterContext);
-        return processorNode.verifyConfiguration(processContext, connectorLogger, attributes, extensionManager);
+        return processorNode.verifyConfiguration(processContext, connectorLogger, attributes, extensionManager, parameterContext);
     }
 
     @Override
     public List<ConfigVerificationResult> verify(final Map<String, String> propertyValues, final VersionedParameterContext versionedParameterContext, final Map<String, String> attributes) {
         final ParameterLookup parameterLookup = new ConnectorParameterLookup(List.of(versionedParameterContext), assetManager);
         final ProcessContext processContext = componentContextProvider.createProcessContext(processorNode, propertyValues, parameterLookup);
-        return processorNode.verifyConfiguration(processContext, connectorLogger, attributes, extensionManager);
+        return processorNode.verifyConfiguration(processContext, connectorLogger, attributes, extensionManager, parameterContext);
     }
 
     @Override
@@ -112,7 +112,7 @@ public class StandaloneProcessorFacade implements ProcessorFacade {
         final ParameterLookup parameterLookup = new ConnectorParameterLookup(versionedExternalFlow.getParameterContexts().values(), assetManager);
 
         final ProcessContext processContext = componentContextProvider.createProcessContext(processorNode, providedProcessor.getProperties(), parameterLookup);
-        return processorNode.verifyConfiguration(processContext, connectorLogger, attributes, extensionManager);
+        return processorNode.verifyConfiguration(processContext, connectorLogger, attributes, extensionManager, parameterLookup);
     }
 
     private VersionedProcessGroup findParentGroup(final VersionedProcessGroup group) {
@@ -143,7 +143,7 @@ public class StandaloneProcessorFacade implements ProcessorFacade {
         }
 
         for (final VersionedProcessor processor : group.getProcessors()) {
-            if (processor.getIdentifier().equals(parentGroup.getIdentifier())) {
+            if (processor.getIdentifier().equals(processorNode.getVersionedComponentId().orElseThrow())) {
                 return processor;
             }
         }
@@ -154,7 +154,7 @@ public class StandaloneProcessorFacade implements ProcessorFacade {
 
     @Override
     public Object invokeConnectorMethod(final String methodName, final Map<String, Object> arguments) throws InvocationFailedException {
-        final ProcessContext processContext = componentContextProvider.createProcessContext(processorNode);
+        final ProcessContext processContext = componentContextProvider.createProcessContext(processorNode, parameterContext);
         return processorNode.invokeConnectorMethod(methodName, arguments, processContext);
     }
 

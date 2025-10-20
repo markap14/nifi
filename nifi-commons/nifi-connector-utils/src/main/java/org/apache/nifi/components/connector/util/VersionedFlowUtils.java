@@ -249,6 +249,45 @@ public class VersionedFlowUtils {
         return controllerService;
     }
 
+    public static Set<VersionedControllerService> getReferencedControllerServices(final VersionedProcessGroup group) {
+        final Set<VersionedControllerService> referencedServices = new HashSet<>();
+        collectReferencedControllerServices(group, referencedServices);
+        return referencedServices;
+    }
+
+    private static void collectReferencedControllerServices(final VersionedProcessGroup group, final Set<VersionedControllerService> referencedServices) {
+        final Map<String, VersionedControllerService> serviceMap = new HashMap<>();
+        for (final VersionedControllerService service : group.getControllerServices()) {
+            serviceMap.put(service.getIdentifier(), service);
+        }
+
+        for (final VersionedProcessor processor : group.getProcessors()) {
+            for (final String propertyValue : processor.getProperties().values()) {
+                final VersionedControllerService referencedService = serviceMap.get(propertyValue);
+                if (referencedService != null) {
+                    referencedServices.add(referencedService);
+                }
+            }
+        }
+
+        boolean referencesAdded = false;
+        do {
+            for (final VersionedControllerService service : referencedServices) {
+                for (final String propertyValue : service.getProperties().values()) {
+                    final VersionedControllerService referencedService = serviceMap.get(propertyValue);
+                    if (referencedService != null && !referencedServices.contains(referencedService)) {
+                        referencedServices.add(referencedService);
+                        referencesAdded = true;
+                    }
+                }
+            }
+        } while (referencesAdded);
+
+        for (final VersionedProcessGroup childGroup : group.getProcessGroups()) {
+            collectReferencedControllerServices(childGroup, referencedServices);
+        }
+    }
+
     public static void removeControllerServiceReferences(final VersionedProcessGroup processGroup, final String serviceIdentifier) {
         for (final VersionedProcessor processor : processGroup.getProcessors()) {
             removeValuesFromMap(processor.getProperties(), serviceIdentifier);
@@ -266,7 +305,7 @@ public class VersionedFlowUtils {
     private static void removeValuesFromMap(final Map<String, String> properties, final String valueToRemove) {
         final List<String> keysToRemove = new ArrayList<>();
         for (final Map.Entry<String, String> entry : properties.entrySet()) {
-            if (entry.getValue().equals(valueToRemove)) {
+            if (Objects.equals(entry.getValue(), valueToRemove)) {
                 keysToRemove.add(entry.getKey());
             }
         }

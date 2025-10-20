@@ -416,7 +416,7 @@ public abstract class AbstractComponentNode implements ComponentNode {
         }
     }
 
-    protected List<ConfigVerificationResult> verifyConfig(final Map<PropertyDescriptor, String> propertyValues, final String annotationData, final ParameterContext parameterContext) {
+    protected List<ConfigVerificationResult> verifyConfig(final Map<PropertyDescriptor, String> propertyValues, final String annotationData, final ParameterLookup parameterLookup) {
         final List<ConfigVerificationResult> results = new ArrayList<>();
 
         try {
@@ -424,7 +424,7 @@ public abstract class AbstractComponentNode implements ComponentNode {
 
             final Map<PropertyDescriptor, PropertyConfiguration> descriptorToConfigMap = createDescriptorToConfigMap(propertyValues);
             final ValidationContext validationContext = getValidationContextFactory().newValidationContext(descriptorToConfigMap, annotationData,
-                getProcessGroupIdentifier(), getIdentifier(), parameterContext, false);
+                getProcessGroupIdentifier(), getIdentifier(), parameterLookup, false);
 
             final ValidationState validationState = performValidation(validationContext);
             final ValidationStatus validationStatus = validationState.getStatus();

@@ -30,7 +30,7 @@ public class KafkaConnectionStep {
         .description("The security protocol to use when connecting to Kafka brokers.")
         .required(true)
         .type(PropertyType.STRING)
-        .defaultValue("PLAINTEXT")
+        .defaultValue("SASL_PLAINTEXT")
         .allowableValues("PLAINTEXT", "SSL", "SASL_PLAINTEXT", "SASL_SSL")
         .build();
 

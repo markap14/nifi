@@ -4,19 +4,24 @@
 
 package org.apache.nifi.controller.flow;
 
+import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.connector.facades.standalone.ComponentContextProvider;
 import org.apache.nifi.components.state.StateManager;
+import org.apache.nifi.controller.ComponentNode;
 import org.apache.nifi.controller.ConfigurationContext;
 import org.apache.nifi.controller.FlowController;
 import org.apache.nifi.controller.ProcessorNode;
 import org.apache.nifi.controller.lifecycle.TaskTermination;
 import org.apache.nifi.controller.service.ControllerServiceNode;
 import org.apache.nifi.controller.service.StandardConfigurationContext;
+import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.parameter.ParameterLookup;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.StandardProcessContext;
 
+import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class StandardComponentContextProvider implements ComponentContextProvider {
     private final FlowController flowController;
@@ -26,26 +31,48 @@ public class StandardComponentContextProvider implements ComponentContextProvide
     }
 
     @Override
-    public ProcessContext createProcessContext(final ProcessorNode processorNode) {
-        final StateManager stateManager = flowController.getStateManagerProvider().getStateManager(processorNode.getIdentifier());
-        final TaskTermination taskTermination = () -> false;
-        return new StandardProcessContext(processorNode, flowController.getControllerServiceProvider(), stateManager, taskTermination, flowController);
+    public ProcessContext createProcessContext(final ProcessorNode processorNode, final ParameterLookup parameterLookup) {
+        return createProcessContext(processorNode, Map.of(), parameterLookup);
     }
 
     @Override
     public ProcessContext createProcessContext(final ProcessorNode processorNode, final Map<String, String> propertiesOverride, final ParameterLookup parameterLookup) {
         final StateManager stateManager = flowController.getStateManagerProvider().getStateManager(processorNode.getIdentifier());
         final TaskTermination taskTermination = () -> false;
-        return new StandardProcessContext(processorNode, propertiesOverride, null, parameterLookup, flowController.getControllerServiceProvider(), stateManager, taskTermination, flowController);
+        final Map<String, String> serviceReferencedProperties = resolveServiceReferences(processorNode, processorNode.getProcessGroup(), propertiesOverride);
+        return new StandardProcessContext(processorNode, serviceReferencedProperties, null, parameterLookup, flowController.getControllerServiceProvider(), stateManager, taskTermination, flowController);
+    }
+
+    private Map<String, String> resolveServiceReferences(final ComponentNode processorNode, final ProcessGroup processGroup, final Map<String, String> propertiesOverride) {
+        final Map<String, String> versionedToInstanceIds = processGroup.findAllControllerServices().stream()
+            .filter(cs -> cs.getVersionedComponentId().isPresent())
+            .collect(Collectors.toMap(cs -> cs.getVersionedComponentId().get(), ComponentNode::getIdentifier));
+
+        final Map<String, String> resolved = new HashMap<>(propertiesOverride);
+        for (final PropertyDescriptor descriptor : processorNode.getPropertyDescriptors()) {
+            if (descriptor.getControllerServiceDefinition() == null) {
+                continue;
+            }
+
+            final String overriddenValue = propertiesOverride.get(descriptor.getName());
+            final String currentValue = overriddenValue == null ? processorNode.getRawPropertyValue(descriptor) : overriddenValue;
+            final String instanceId = versionedToInstanceIds.get(currentValue);
+            if (instanceId != null) {
+                resolved.put(descriptor.getName(), instanceId);
+            }
+        }
+
+        return resolved;
     }
 
     @Override
-    public ConfigurationContext createConfigurationContext(final ControllerServiceNode serviceNode) {
-        return new StandardConfigurationContext(serviceNode, flowController.getControllerServiceProvider(), null);
+    public ConfigurationContext createConfigurationContext(final ControllerServiceNode serviceNode, final ParameterLookup parameterLookup) {
+        return createConfigurationContext(serviceNode, Map.of(), parameterLookup);
     }
 
     @Override
     public ConfigurationContext createConfigurationContext(final ControllerServiceNode serviceNode, final Map<String, String> propertiesOverride, final ParameterLookup parameterLookup) {
-        return new StandardConfigurationContext(serviceNode, propertiesOverride, null, parameterLookup, flowController.getControllerServiceProvider(), null);
+        final Map<String, String> resolvedProperties = resolveServiceReferences(serviceNode, serviceNode.getProcessGroup(), propertiesOverride);
+        return new StandardConfigurationContext(serviceNode, resolvedProperties, null, parameterLookup, flowController.getControllerServiceProvider(), null);
     }
 }

@@ -21,6 +21,9 @@ import org.apache.nifi.processor.DataUnit;
 import org.apache.nifi.util.FormatUtils;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class StandardConnectorPropertyValue implements ConnectorPropertyValue {
@@ -74,6 +77,21 @@ public class StandardConnectorPropertyValue implements ConnectorPropertyValue {
     @Override
     public Double asDataSize(final DataUnit dataUnit) {
         return rawValue == null ? null : DataUnit.parseDataSize(rawValue.trim(), dataUnit);
+    }
+
+    @Override
+    public List<String> asList() {
+        if (rawValue == null) {
+            return Collections.emptyList();
+        }
+
+        final String[] splits = rawValue.split(":");
+        final List<String> values = new ArrayList<>(splits.length);
+        for (final String split : splits) {
+            values.add(split.trim());
+        }
+
+        return values;
     }
 
     @Override

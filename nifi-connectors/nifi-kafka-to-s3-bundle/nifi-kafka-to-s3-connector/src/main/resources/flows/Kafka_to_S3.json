@@ -162,7 +162,7 @@
           "Key Format": "byte-array",
           "Key Record Reader": null,
           "Message Demarcator": null,
-          "Record Reader": "7012463d-b944-3a7d-897c-ecaf960dfe56",
+          "Record Reader": "919b2a35-4bc7-380c-b592-6ad2ffffbed5",
           "Key Attribute Encoding": "utf-8",
           "Max Uncommitted Size": null,
           "Topic Format": "names",
@@ -469,8 +469,8 @@
             "resourceDefinition": {
               "cardinality": "MULTIPLE",
               "resourceTypes": [
-                "DIRECTORY",
-                "FILE"
+                "FILE",
+                "DIRECTORY"
               ]
             }
           },
@@ -747,60 +747,6 @@
     "funnels": [],
     "controllerServices": [
       {
-        "identifier": "7012463d-b944-3a7d-897c-ecaf960dfe56",
-        "instanceIdentifier": "e4d5fd40-0199-1000-d563-cd4a8a1392a5",
-        "name": "ReaderLookup",
-        "comments": "",
-        "type": "org.apache.nifi.lookup.ReaderLookup",
-        "bundle": {
-          "group": "org.apache.nifi",
-          "artifact": "nifi-record-serialization-services-nar",
-          "version": "2.6.0-SNAPSHOT"
-        },
-        "properties": {
-          "JSON": "919b2a35-4bc7-380c-b592-6ad2ffffbed5",
-          "Avro": "174d0040-161d-39dc-8da9-0f127fc46373",
-          "Service to Use": "#{Kafka Data Format}"
-        },
-        "propertyDescriptors": {
-          "JSON": {
-            "name": "JSON",
-            "displayName": "JSON",
-            "identifiesControllerService": true,
-            "sensitive": false,
-            "dynamic": true
-          },
-          "Avro": {
-            "name": "Avro",
-            "displayName": "Avro",
-            "identifiesControllerService": true,
-            "sensitive": false,
-            "dynamic": true
-          },
-          "Service to Use": {
-            "name": "Service to Use",
-            "displayName": "Service to Use",
-            "identifiesControllerService": false,
-            "sensitive": false,
-            "dynamic": false
-          }
-        },
-        "controllerServiceApis": [
-          {
-            "type": "org.apache.nifi.serialization.RecordReaderFactory",
-            "bundle": {
-              "group": "org.apache.nifi",
-              "artifact": "nifi-standard-services-api-nar",
-              "version": "2.6.0-SNAPSHOT"
-            }
-          }
-        ],
-        "scheduledState": "DISABLED",
-        "bulletinLevel": "WARN",
-        "componentType": "CONTROLLER_SERVICE",
-        "groupIdentifier": "3412cb3e-75db-352b-a181-147d4820bd4e"
-      },
-      {
         "identifier": "b01590c6-5149-3c50-9d16-3a8e7b1bcdf6",
         "instanceIdentifier": "e443e28f-0199-1000-6f64-ff877463aca2",
         "name": "AvroRecordSetWriter",
@@ -915,60 +861,6 @@
             "name": "Schema Reference Writer",
             "displayName": "Schema Reference Writer",
             "identifiesControllerService": true,
-            "sensitive": false,
-            "dynamic": false
-          }
-        },
-        "controllerServiceApis": [
-          {
-            "type": "org.apache.nifi.serialization.RecordSetWriterFactory",
-            "bundle": {
-              "group": "org.apache.nifi",
-              "artifact": "nifi-standard-services-api-nar",
-              "version": "2.6.0-SNAPSHOT"
-            }
-          }
-        ],
-        "scheduledState": "DISABLED",
-        "bulletinLevel": "WARN",
-        "componentType": "CONTROLLER_SERVICE",
-        "groupIdentifier": "3412cb3e-75db-352b-a181-147d4820bd4e"
-      },
-      {
-        "identifier": "460046c1-cbed-3094-a4f8-b9c2510547ea",
-        "instanceIdentifier": "e4d737da-0199-1000-a2f4-4d9a3f7c0bd0",
-        "name": "RecordSetWriterLookup",
-        "comments": "",
-        "type": "org.apache.nifi.lookup.RecordSetWriterLookup",
-        "bundle": {
-          "group": "org.apache.nifi",
-          "artifact": "nifi-record-serialization-services-nar",
-          "version": "2.6.0-SNAPSHOT"
-        },
-        "properties": {
-          "JSON": "d7380ae4-2807-3aa2-898c-56465ee50d7a",
-          "Avro": "b01590c6-5149-3c50-9d16-3a8e7b1bcdf6",
-          "Service to Use": "#{S3 Data Format}"
-        },
-        "propertyDescriptors": {
-          "JSON": {
-            "name": "JSON",
-            "displayName": "JSON",
-            "identifiesControllerService": true,
-            "sensitive": false,
-            "dynamic": true
-          },
-          "Avro": {
-            "name": "Avro",
-            "displayName": "Avro",
-            "identifiesControllerService": true,
-            "sensitive": false,
-            "dynamic": true
-          },
-          "Service to Use": {
-            "name": "Service to Use",
-            "displayName": "Service to Use",
-            "identifiesControllerService": false,
             "sensitive": false,
             "dynamic": false
           }
@@ -1431,8 +1323,8 @@
             "resourceDefinition": {
               "cardinality": "MULTIPLE",
               "resourceTypes": [
-                "DIRECTORY",
-                "FILE"
+                "FILE",
+                "DIRECTORY"
               ]
             }
           },
@@ -1494,7 +1386,7 @@
         },
         "controllerServiceApis": [
           {
-            "type": "org.apache.nifi.processors.aws.credentials.provider.service.AWSCredentialsProviderService",
+            "type": "org.apache.nifi.processors.aws.credentials.provider.AwsCredentialsProviderService",
             "bundle": {
               "group": "org.apache.nifi",
               "artifact": "nifi-aws-service-api-nar",
@@ -1502,7 +1394,7 @@
             }
           },
           {
-            "type": "org.apache.nifi.processors.aws.credentials.provider.AwsCredentialsProviderService",
+            "type": "org.apache.nifi.processors.aws.credentials.provider.service.AWSCredentialsProviderService",
             "bundle": {
               "group": "org.apache.nifi",
               "artifact": "nifi-aws-service-api-nar",
@@ -2112,18 +2004,18 @@
           "provided": false
         },
         {
-          "name": "Schema Registry URLs",
-          "description": "",
-          "sensitive": false,
-          "provided": false,
-          "value": "http://localhost:8081"
-        },
-        {
           "name": "S3 Data Format",
           "description": "",
           "sensitive": false,
           "provided": false,
           "value": "JSON"
+        },
+        {
+          "name": "Schema Registry URLs",
+          "description": "",
+          "sensitive": false,
+          "provided": false,
+          "value": "http://localhost:8081"
         },
         {
           "name": "Kafka Security Protocol",

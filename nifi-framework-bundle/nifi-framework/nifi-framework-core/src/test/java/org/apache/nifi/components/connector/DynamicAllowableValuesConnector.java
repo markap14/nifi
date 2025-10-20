@@ -17,7 +17,7 @@
 
 package org.apache.nifi.components.connector;
 
-import org.apache.nifi.components.ValidationResult;
+import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.connector.components.ProcessorFacade;
 import org.apache.nifi.components.connector.util.VersionedFlowUtils;
 import org.apache.nifi.flow.VersionedExternalFlow;
@@ -113,7 +113,7 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
     }
 
     @Override
-    public List<ValidationResult> validateConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
+    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
         return null;
     }
 

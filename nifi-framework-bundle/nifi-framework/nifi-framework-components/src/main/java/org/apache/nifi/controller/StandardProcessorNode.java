@@ -981,7 +981,9 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
     }
 
     @Override
-    public List<ConfigVerificationResult> verifyConfiguration(final ProcessContext context, final ComponentLog logger, final Map<String, String> attributes, final ExtensionManager extensionManager) {
+    public List<ConfigVerificationResult> verifyConfiguration(final ProcessContext context, final ComponentLog logger, final Map<String, String> attributes, final ExtensionManager extensionManager,
+            final ParameterLookup parameterLookup) {
+
         final List<ConfigVerificationResult> results = new ArrayList<>();
 
         try {
@@ -989,7 +991,7 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
 
             final long startNanos = System.nanoTime();
             // Call super's verifyConfig, which will perform component validation
-            results.addAll(super.verifyConfig(context.getProperties(), context.getAnnotationData(), getProcessGroup().getParameterContext()));
+            results.addAll(super.verifyConfig(context.getProperties(), context.getAnnotationData(), parameterLookup));
             final long validationComplete = System.nanoTime();
 
             // If any invalid outcomes from validation, we do not want to perform additional verification, because we only run additional verification when the component is valid.
@@ -1940,6 +1942,10 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
             final List<Object> argumentValues = new ArrayList<>();
             for (final MethodArgument methodArgument : methodArguments) {
                 final Object argumentValue = arguments.get(methodArgument.name());
+                if (ProcessContext.class.equals(methodArgument.type())) {
+                    continue;
+                }
+
                 if (argumentValue == null && methodArgument.required()) {
                     throw new IllegalArgumentException("Cannot invoke Connector Method '" + methodName + "' on " + this + " because the required argument '"
                         + methodArgument.name() + "' was not provided");
@@ -1955,7 +1961,6 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
             }
 
             // Inject ProcessContext if the method signature supports it
-            // TODO: Can we move away from Maps and instead just use reflection to get the arguments directly?
             final Class<?>[] argumentTypes = implementationMethod.getParameterTypes();
             if (argumentTypes.length > 0 && ProcessContext.class.isAssignableFrom(argumentTypes[0])) {
                 argumentValues.addFirst(processContext);

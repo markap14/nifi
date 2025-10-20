@@ -79,6 +79,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -98,6 +99,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class StandardControllerServiceNode extends AbstractComponentNode implements ControllerServiceNode {
@@ -490,7 +492,7 @@ public class StandardControllerServiceNode extends AbstractComponentNode impleme
 
     @Override
     public List<ConfigVerificationResult> verifyConfiguration(final ConfigurationContext context, final ComponentLog logger, final Map<String, String> variables,
-                                                              final ExtensionManager extensionManager) {
+                                                              final ExtensionManager extensionManager, final ParameterLookup parameterLookup) {
 
         final List<ConfigVerificationResult> results = new ArrayList<>();
 
@@ -499,7 +501,7 @@ public class StandardControllerServiceNode extends AbstractComponentNode impleme
 
             final long startNanos = System.nanoTime();
             // Call super's verifyConfig, which will perform component validation
-            results.addAll(super.verifyConfig(context.getProperties(), context.getAnnotationData(), getProcessGroup() == null ? null : getProcessGroup().getParameterContext()));
+            results.addAll(super.verifyConfig(context.getProperties(), context.getAnnotationData(), parameterLookup));
             final long validationComplete = System.nanoTime();
 
             // If any invalid outcomes from validation, we do not want to perform additional verification, because we only run additional verification when the component is valid.
@@ -655,7 +657,17 @@ public class StandardControllerServiceNode extends AbstractComponentNode impleme
                     }
 
                     if (completeExceptionallyOnFailure) {
-                        future.completeExceptionally(new IllegalStateException("Cannot enable " + StandardControllerServiceNode.this + " because it is not valid"));
+                        final Collection<ValidationResult> invalidResults = validationState.getValidationErrors().stream()
+                            .filter(Predicate.not(ValidationResult::isValid))
+                            .toList();
+
+                        final String explanation = "Cannot enable %s because it has a validation status of %s%s".formatted(
+                                StandardControllerServiceNode.this,
+                                validationStatus,
+                                invalidResults.isEmpty() ? "" : ": " + validationState.getValidationErrors()
+                        );
+
+                        future.completeExceptionally(new IllegalStateException(explanation));
                     }
 
                     return;
@@ -883,6 +895,10 @@ public class StandardControllerServiceNode extends AbstractComponentNode impleme
             final List<Object> argumentValues = new ArrayList<>();
             for (final MethodArgument methodArgument : methodArguments) {
                 final Object argumentValue = arguments.get(methodArgument.name());
+                if (ConfigurationContext.class.equals(methodArgument.type())) {
+                    continue;
+                }
+
                 if (argumentValue == null && methodArgument.required()) {
                     throw new IllegalArgumentException("Cannot invoke Connector Method '" + methodName + "' on " + this + " because the required argument '"
                                                        + methodArgument.name() + "' was not provided");

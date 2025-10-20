@@ -6,24 +6,25 @@ package org.apache.nifi.connectors.kafkas3;
 
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ConfigVerificationResult.Outcome;
-import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.AbstractConnector;
 import org.apache.nifi.components.connector.ConfigurationStep;
 import org.apache.nifi.components.connector.ConnectorConfigurationContext;
 import org.apache.nifi.components.connector.FlowUpdateException;
 import org.apache.nifi.components.connector.components.ControllerServiceFacade;
 import org.apache.nifi.components.connector.components.ProcessorFacade;
+import org.apache.nifi.components.connector.util.VersionedFlowUtils;
+import org.apache.nifi.flow.VersionedControllerService;
 import org.apache.nifi.flow.VersionedExternalFlow;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-// TODO: Rename ConnectorUtils to VersionedFlowUtils
 public class KafkaToS3 extends AbstractConnector {
 
     @Override
@@ -33,6 +34,11 @@ public class KafkaToS3 extends AbstractConnector {
             KafkaTopicsStep.createConfigurationStep(getAvailableTopics()),
             S3Step.S3_STEP
         );
+    }
+
+    @Override
+    protected void init() throws FlowUpdateException {
+        getInitializationContext().updateFlow(KafkaToS3FlowBuilder.loadInitialFlow());
     }
 
     @Override
@@ -50,51 +56,70 @@ public class KafkaToS3 extends AbstractConnector {
     }
 
     @Override
-    public List<ValidationResult> validateConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
+    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
         // Get the current ConfigurationContext and then create a new one that contains the provided property values
         final ConnectorConfigurationContext configurationContext = getInitializationContext().getConfigurationContext().createWithOverrides(stepName, propertyValues);
         final VersionedExternalFlow flow = buildFlow(configurationContext);
 
         // Validate Connectivity
         if (stepName.equals(KafkaConnectionStep.STEP_NAME)) {
-            return verifyKafkaConnectivity(configurationContext, flow);
+            return verifyKafkaConnectivity(flow);
         }
         if (stepName.equals(KafkaTopicsStep.STEP_NAME)) {
-            final List<ValidationResult> results = new ArrayList<>();
-            results.addAll(verifyKafkaParsability(configurationContext, flow));
+            final List<ConfigVerificationResult> results = new ArrayList<>();
             results.addAll(verifyTopicsExists(configurationContext));
+            results.addAll(verifyKafkaParsability(flow));
             return results;
         }
 
-        return List.of();
+        return Collections.emptyList();
     }
 
-    private List<ValidationResult> verifyKafkaParsability(final ConnectorConfigurationContext configurationContext, final VersionedExternalFlow flow) {
-        final ProcessorFacade consumeKafkaFacade = findProcessors(getInitializationContext().getRootGroup(),
-            processor -> processor.getDefinition().getType().endsWith("ConsumeKafka")).getFirst();
+    private List<ConfigVerificationResult> verifyKafkaParsability(final VersionedExternalFlow flow) {
+        // Enable necessary Controller Services for parsing records.
+        final Set<VersionedControllerService> referencedServices = VersionedFlowUtils.getReferencedControllerServices(flow.getFlowContents());
+        final Set<String> serviceIds = referencedServices.stream()
+            .map(VersionedControllerService::getIdentifier)
+            .collect(Collectors.toSet());
 
-        final List<ConfigVerificationResult> configVerificationResults = consumeKafkaFacade.verify(flow, Map.of());
-        for (final ConfigVerificationResult result : configVerificationResults) {
-            if (result.getOutcome() == Outcome.FAILED) {
-                return List.of(createValidationResult("Kafka Connection", result).orElseThrow());
-            }
+        try {
+            getInitializationContext().getRootGroup().getLifecycle().enableControllerServices(serviceIds).get(10, TimeUnit.SECONDS);
+        } catch (final Exception e) {
+            return List.of(new ConfigVerificationResult.Builder()
+                .verificationStepName("Record Parsing")
+                .outcome(Outcome.FAILED)
+                .explanation("Failed to enable Controller Services due to " + e)
+                .build());
         }
 
-        return List.of();
+        try {
+            final ProcessorFacade consumeKafkaFacade = findProcessors(getInitializationContext().getRootGroup(),
+                processor -> processor.getDefinition().getType().endsWith("ConsumeKafka")).getFirst();
+
+            final List<ConfigVerificationResult> configVerificationResults = consumeKafkaFacade.verify(flow, Map.of());
+            for (final ConfigVerificationResult result : configVerificationResults) {
+                if (result.getOutcome() == Outcome.FAILED) {
+                    return List.of(result);
+                }
+            }
+
+            return Collections.emptyList();
+        } finally {
+            getInitializationContext().getRootGroup().getLifecycle().disableControllerServices(serviceIds);
+        }
     }
 
-    @SuppressWarnings("unchecked")
-    private List<ValidationResult> verifyTopicsExists(ConnectorConfigurationContext configurationContext) {
-        final ControllerServiceFacade connectionService = getKafkaConnectionService();
 
+    @SuppressWarnings("unchecked")
+    private List<ConfigVerificationResult> verifyTopicsExists(ConnectorConfigurationContext configurationContext) {
         final List<String> topicsAvailable;
         try {
-            topicsAvailable = (List<String>) connectionService.invokeConnectorMethod("listTopicNames", Map.of());
+            topicsAvailable = getAvailableTopics();
         } catch (final Exception e) {
-            return List.of(new ValidationResult.Builder()
-                .subject("Kafka Topics")
-                .valid(false)
-                .explanation("Failed to retrieve available topics from Kafka: " + e)
+            return List.of(new ConfigVerificationResult.Builder()
+                .verificationStepName("Verify Kafka topics exist")
+                .outcome(Outcome.SKIPPED)
+                .explanation("Unable to validate that topics exist due to " + e)
                 .build());
         }
 
@@ -105,47 +130,36 @@ public class KafkaToS3 extends AbstractConnector {
             .collect(Collectors.joining(", "));
 
         if (!missingTopics.isEmpty()) {
-            return List.of(new ValidationResult.Builder()
-                .subject("Kafka Topics")
-                .valid(false)
+            return List.of(new ConfigVerificationResult.Builder()
+                .verificationStepName("Verify Kafka topics exist")
+                .outcome(Outcome.FAILED)
                 .explanation("The following topics do not exist in the Kafka cluster: " + missingTopics)
                 .build());
         } else {
-            return List.of(new ValidationResult.Builder()
-                .subject("Kafka Topics")
-                .valid(true)
+            return List.of(new ConfigVerificationResult.Builder()
+                .verificationStepName("Verify Kafka topics exist")
+                .outcome(Outcome.SUCCESSFUL)
                 .explanation("All specified topics exist in the Kafka cluster")
                 .build());
         }
     }
 
-    private List<ValidationResult> verifyKafkaConnectivity(final ConnectorConfigurationContext configurationContext, final VersionedExternalFlow flow) {
+    private List<ConfigVerificationResult> verifyKafkaConnectivity(final VersionedExternalFlow flow) {
         // Build a new version of the flow so that we can get the relevant properties of the Kafka Connection Service
         final ControllerServiceFacade connectionService = getKafkaConnectionService();
         final List<ConfigVerificationResult> configVerificationResults = connectionService.verify(flow, Map.of());
 
         for (final ConfigVerificationResult result : configVerificationResults) {
             if (result.getOutcome() == Outcome.FAILED) {
-                return List.of(createValidationResult("Kafka Connection", result).orElseThrow());
+                return List.of(new ConfigVerificationResult.Builder()
+                    .verificationStepName("Verify Kafka connectivity")
+                    .outcome(Outcome.FAILED)
+                    .explanation(result.getExplanation())
+                    .build());
             }
         }
 
-        return List.of();
-    }
-
-
-    private Optional<ValidationResult> createValidationResult(final String subject, final ConfigVerificationResult result) {
-        if (result.getOutcome() == Outcome.SKIPPED) {
-            return Optional.empty();
-        }
-
-        final ValidationResult validationResult = new ValidationResult.Builder()
-            .subject(subject)
-            .valid(result.getOutcome() == Outcome.SUCCESSFUL)
-            .explanation(result.getExplanation())
-            .build();
-
-        return Optional.of(validationResult);
+        return Collections.emptyList();
     }
 
     private VersionedExternalFlow buildFlow(final ConnectorConfigurationContext configurationContext) {
@@ -155,6 +169,11 @@ public class KafkaToS3 extends AbstractConnector {
 
     @SuppressWarnings("unchecked")
     private List<String> getAvailableTopics() {
+        // If Kafka Brokers not yet set, return empty list
+        if (!getProperty(KafkaConnectionStep.KAFKA_CONNECTION_STEP, KafkaConnectionStep.KAFKA_BROKERS).isSet()) {
+            return List.of();
+        }
+
         final ControllerServiceFacade kafkaConnectionService = getKafkaConnectionService();
 
         try {

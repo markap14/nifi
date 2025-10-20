@@ -293,7 +293,7 @@ public class StandardConnectorNodeIT {
 
         // Set the value of the 'Text' property to Hi. This should result in the parameter context being updated.
         final Map<String, String> sourceProperties = Map.of("Text", "Hi.");
-        final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration("", sourceProperties);
+        final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration(null, sourceProperties);
         final ConfigurationStepConfiguration sourceConfigurationStepConfiguration = new ConfigurationStepConfiguration("Text Configuration", List.of(sourcePropertyGroupConfiguration));
         final ConnectorConfiguration connectorConfiguration = new ConnectorConfiguration(List.of(sourceConfigurationStepConfiguration));
         configure(connectorNode, connectorConfiguration);
@@ -455,7 +455,7 @@ public class StandardConnectorNodeIT {
         assertEquals(List.of(), initialValidationState.getValidationErrors());
 
         final Map<String, String> sourceProperties = Map.of("Sleep Duration", "Hi.");
-        final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration("", sourceProperties);
+        final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration(null, sourceProperties);
         final ConfigurationStepConfiguration sourceConfigurationStepConfiguration = new ConfigurationStepConfiguration("Text Configuration", List.of(sourcePropertyGroupConfiguration));
         final ConnectorConfiguration connectorConfiguration = new ConnectorConfiguration(List.of(sourceConfigurationStepConfiguration));
         configure(connectorNode, connectorConfiguration);
@@ -529,17 +529,17 @@ public class StandardConnectorNodeIT {
     private ConnectorConfiguration createConnectorConfiguration(final String sourceText, final int numberOfCopies, final boolean logContents, final boolean countFlowFiles) {
         // Source configuration step
         final Map<String, String> sourceProperties = Map.of("Source Text", sourceText, "Count FlowFiles", Boolean.toString(countFlowFiles));
-        final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration("", sourceProperties);
+        final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration(null, sourceProperties);
         final ConfigurationStepConfiguration sourceConfigurationStepConfiguration = new ConfigurationStepConfiguration("Source", List.of(sourcePropertyGroupConfiguration));
 
         // Duplication configuration step
         final Map<String, String> duplicationProperties = Map.of("Number of Copies", Integer.toString(numberOfCopies));
-        final PropertyGroupConfiguration duplicationPropertyGroupConfiguration = new PropertyGroupConfiguration("", duplicationProperties);
+        final PropertyGroupConfiguration duplicationPropertyGroupConfiguration = new PropertyGroupConfiguration(null, duplicationProperties);
         final ConfigurationStepConfiguration duplicationConfigurationStepConfiguration = new ConfigurationStepConfiguration("Duplication", List.of(duplicationPropertyGroupConfiguration));
 
         // Destination configuration step
         final Map<String, String> destinationProperties = Map.of("Log FlowFile Contents", Boolean.toString(logContents));
-        final PropertyGroupConfiguration destinationPropertyGroupConfiguration = new PropertyGroupConfiguration("", destinationProperties);
+        final PropertyGroupConfiguration destinationPropertyGroupConfiguration = new PropertyGroupConfiguration(null, destinationProperties);
         final ConfigurationStepConfiguration destinationConfigurationStepConfiguration = new ConfigurationStepConfiguration("Destination", List.of(destinationPropertyGroupConfiguration));
 
         return new ConnectorConfiguration(List.of(sourceConfigurationStepConfiguration, duplicationConfigurationStepConfiguration, destinationConfigurationStepConfiguration));

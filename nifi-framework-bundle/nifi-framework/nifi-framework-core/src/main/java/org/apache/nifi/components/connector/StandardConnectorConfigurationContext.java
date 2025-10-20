@@ -33,6 +33,8 @@ public class StandardConnectorConfigurationContext implements ConnectorConfigura
 
     final Map<String, List<PropertyGroupConfiguration>> propertyGroupConfigurations = new HashMap<>();
 
+    public StandardConnectorConfigurationContext() {
+    }
 
     @Override
     public ConnectorPropertyValue getProperty(final String stepName, final String propertyName) {
@@ -78,15 +80,21 @@ public class StandardConnectorConfigurationContext implements ConnectorConfigura
 
                 for (final PropertyGroupConfiguration groupConfig : entry.getValue()) {
                     final Map<String, String> mergedProperties = new HashMap<>(groupConfig.getPropertyValues());
+
                     if (Objects.equals(existingStepName, stepName)) {
                         for (final Map.Entry<String, String> overrideEntry : propertyOverrides.entrySet()) {
+                            // Only consider if mergedProperties contains the key because this means it's the correct property group.
                             if (mergedProperties.containsKey(overrideEntry.getKey())) {
-                                mergedProperties.put(overrideEntry.getKey(), overrideEntry.getValue());
+                                if (overrideEntry.getValue() == null) {
+                                    mergedProperties.remove(overrideEntry.getKey());
+                                } else {
+                                    mergedProperties.put(overrideEntry.getKey(), overrideEntry.getValue());
+                                }
                             }
                         }
                     }
 
-                    createdGroupConfigs.add(new PropertyGroupConfiguration(groupConfig.getPropertyGroupName(), new HashMap<>(groupConfig.getPropertyValues())));
+                    createdGroupConfigs.add(new PropertyGroupConfiguration(groupConfig.getPropertyGroupName(), mergedProperties));
                 }
 
                 created.setProperties(existingStepName, createdGroupConfigs);
@@ -98,7 +106,7 @@ public class StandardConnectorConfigurationContext implements ConnectorConfigura
         }
     }
 
-    ConfigurationUpdateResult setProperties(final String stepName, final List<PropertyGroupConfiguration> propertyGroupConfigurations) {
+    public ConfigurationUpdateResult setProperties(final String stepName, final List<PropertyGroupConfiguration> propertyGroupConfigurations) {
         writeLock.lock();
         try {
             final List<PropertyGroupConfiguration> existingGroupConfigs = this.propertyGroupConfigurations.get(stepName);
@@ -113,7 +121,7 @@ public class StandardConnectorConfigurationContext implements ConnectorConfigura
         }
     }
 
-    ConnectorConfiguration toConnectorConfiguration() {
+    public ConnectorConfiguration toConnectorConfiguration() {
         readLock.lock();
         try {
             final List<ConfigurationStepConfiguration> stepConfigs = new ArrayList<>();
