@@ -5,6 +5,7 @@
 package org.apache.nifi.components.connector;
 
 import org.apache.nifi.annotation.lifecycle.OnRemoved;
+import org.apache.nifi.engine.FlowEngine;
 import org.apache.nifi.nar.ExtensionManager;
 import org.apache.nifi.nar.NarCloseable;
 import org.apache.nifi.util.ReflectionUtils;
@@ -12,26 +13,12 @@ import org.apache.nifi.util.ReflectionUtils;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class StandardConnectorRepository implements ConnectorRepository {
 
     private final Map<String, ConnectorNode> connectors = new HashMap<>();
-    private final ScheduledExecutorService lifecycleExecutor = Executors.newScheduledThreadPool(8, new ThreadFactory() {
-        private final AtomicInteger threadNumber = new AtomicInteger(1);
-
-        @Override
-        public Thread newThread(final Runnable runnable) {
-            final Thread thread = Executors.defaultThreadFactory().newThread(runnable);
-            thread.setName("NiFi Connector Lifecycle Thread-" + threadNumber.getAndIncrement());
-            thread.start();
-            return thread;
-        }
-    });
+    private final FlowEngine lifecycleExecutor = new FlowEngine(8, "NiFi Connector Lifecycle");
 
     private volatile ExtensionManager extensionManager;
 

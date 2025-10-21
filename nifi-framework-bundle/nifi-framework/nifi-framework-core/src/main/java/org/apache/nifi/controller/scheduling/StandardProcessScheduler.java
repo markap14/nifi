@@ -101,7 +101,7 @@ public final class StandardProcessScheduler implements ProcessScheduler {
     private final AtomicLong frameworkTaskThreadIndex = new AtomicLong(1L);
     private final ExtensionManager extensionManager;
     private final NodeTypeProvider nodeTypeProvider;
-    private final ControllerServiceProvider controllerServiceProvider;
+    private final Supplier<ControllerServiceProvider> controllerServiceProviderFactory;
     private final ReloadComponent reloadComponent;
 
     private final ConcurrentMap<SchedulingStrategy, SchedulingAgent> strategyAgentMap = new ConcurrentHashMap<>();
@@ -114,12 +114,12 @@ public final class StandardProcessScheduler implements ProcessScheduler {
     public StandardProcessScheduler(final FlowEngine componentLifecycleThreadPool, final FlowController flowController,
         final StateManagerProvider stateManagerProvider, final NiFiProperties nifiProperties, final LifecycleStateManager lifecycleStateManager) {
 
-        this(componentLifecycleThreadPool, flowController.getExtensionManager(), flowController, flowController.getControllerServiceProvider(),
+        this(componentLifecycleThreadPool, flowController.getExtensionManager(), flowController, flowController::getControllerServiceProvider,
             flowController.getReloadComponent(), stateManagerProvider, nifiProperties, lifecycleStateManager);
     }
 
     public StandardProcessScheduler(final FlowEngine componentLifecycleThreadPool, final ExtensionManager extensionManager, final NodeTypeProvider nodeTypeProvider,
-                                    final ControllerServiceProvider controllerServiceProvider, final ReloadComponent reloadComponent,
+                                    final Supplier<ControllerServiceProvider> controllerServiceProviderFactory, final ReloadComponent reloadComponent,
                                     final StateManagerProvider stateManagerProvider, final NiFiProperties nifiProperties,
                                     final LifecycleStateManager lifecycleStateManager) {
 
@@ -128,7 +128,7 @@ public final class StandardProcessScheduler implements ProcessScheduler {
         this.lifecycleStateManager = lifecycleStateManager;
         this.extensionManager = extensionManager;
         this.nodeTypeProvider = nodeTypeProvider;
-        this.controllerServiceProvider = controllerServiceProvider;
+        this.controllerServiceProviderFactory = controllerServiceProviderFactory;
         this.reloadComponent = reloadComponent;
 
         administrativeYieldDuration = nifiProperties.getAdministrativeYieldDuration();
@@ -139,7 +139,7 @@ public final class StandardProcessScheduler implements ProcessScheduler {
     }
 
     public ControllerServiceProvider getControllerServiceProvider() {
-        return controllerServiceProvider;
+        return controllerServiceProviderFactory.get();
     }
 
     private StateManager getStateManager(final String componentId) {

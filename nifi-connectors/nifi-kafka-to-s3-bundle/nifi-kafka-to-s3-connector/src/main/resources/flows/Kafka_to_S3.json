@@ -321,7 +321,9 @@
         "bulletinLevel": "WARN",
         "runDurationMillis": 0,
         "concurrentlySchedulableTaskCount": 1,
-        "autoTerminatedRelationships": [],
+        "autoTerminatedRelationships": [
+          "parse failure"
+        ],
         "scheduledState": "ENABLED",
         "retryCount": 10,
         "retriedRelationships": [],
@@ -2033,18 +2035,18 @@
           "value": "SASL_SSL"
         },
         {
-          "name": "S3 Region",
-          "description": "",
-          "sensitive": false,
-          "provided": false,
-          "value": "us-west-2"
-        },
-        {
           "name": "Maximum Object size",
           "description": "",
           "sensitive": false,
           "provided": false,
           "value": "300 MB"
+        },
+        {
+          "name": "S3 Region",
+          "description": "",
+          "sensitive": false,
+          "provided": false,
+          "value": "us-west-2"
         },
         {
           "name": "Kafka SASL Password",

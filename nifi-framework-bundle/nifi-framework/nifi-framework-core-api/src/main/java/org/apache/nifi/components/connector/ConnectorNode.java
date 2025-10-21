@@ -23,12 +23,12 @@ import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.VersionedComponent;
 import org.apache.nifi.components.validation.ValidationState;
 import org.apache.nifi.components.validation.ValidationStatus;
+import org.apache.nifi.engine.FlowEngine;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 
 import java.util.List;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
 
 public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent {
 
@@ -141,16 +141,16 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
      * @param scheduler the ScheduledExecutorService to use for scheduling any tasks that the Connector needs to perform
      * @return a Future that will be completed when the Connector has started
      */
-    Future<Void> start(ScheduledExecutorService scheduler);
+    Future<Void> start(FlowEngine scheduler);
 
     /**
      * Stops the Connector. This method should only be invoked via the ConnectorRepository.
      * @param scheduler the ScheduledExecutorService to use for scheduling any tasks that the Connector needs to perform
      * @return a Future that will be completed when the Connector has stopped
      */
-    Future<Void> stop(ScheduledExecutorService scheduler);
+    Future<Void> stop(FlowEngine scheduler);
 
-    void prepareForUpdate(ScheduledExecutorService scheduler) throws FlowUpdateException;
+    void prepareForUpdate(FlowEngine scheduler) throws FlowUpdateException;
 
     /**
      * Updates the configuration of one of the configuration steps. This method should only be invoked via the ConnectorRepository.
@@ -175,6 +175,6 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
      * @throws FlowUpdateException if unable to apply the changes made during the update process
      */
     // TODO: Should this return a Future<Void>?
-    void finishUpdate(ScheduledExecutorService scheduler) throws FlowUpdateException;
+    void finishUpdate(FlowEngine scheduler) throws FlowUpdateException;
 
 }

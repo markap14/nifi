@@ -20,6 +20,8 @@ package org.apache.nifi.components.connector.facades.standalone;
 import org.apache.nifi.asset.AssetManager;
 import org.apache.nifi.components.connector.components.ConnectionFacade;
 import org.apache.nifi.components.connector.components.ControllerServiceFacade;
+import org.apache.nifi.components.connector.components.ControllerServiceReferenceHierarchy;
+import org.apache.nifi.components.connector.components.ControllerServiceReferenceScope;
 import org.apache.nifi.components.connector.components.ProcessGroupFacade;
 import org.apache.nifi.components.connector.components.ProcessGroupLifecycle;
 import org.apache.nifi.components.connector.components.ProcessorFacade;
@@ -46,6 +48,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
  * An implementation of ProcessGroupFacade that implements the functionality for a standalone
@@ -61,7 +65,7 @@ public class StandaloneProcessGroupFacade implements ProcessGroupFacade {
     private final Map<String, VersionedConnection> connectionMap;
     private final Map<String, VersionedProcessGroup> processGroupMap;
     private final ControllerServiceProvider controllerServiceProvider;
-    private final ProcessGroupLifecycle lifecycle;
+    private final StandaloneProcessGroupLifecycle lifecycle;
     private final StatelessGroupLifecycle statelessGroupLifecycle;
     private final ComponentContextProvider componentContextProvider;
     private final ComponentLog connectorLogger;
@@ -217,6 +221,46 @@ public class StandaloneProcessGroupFacade implements ProcessGroupFacade {
     }
 
     @Override
+    public Set<ControllerServiceFacade> getControllerServices(final ControllerServiceReferenceScope controllerServiceReferenceScope,
+                final ControllerServiceReferenceHierarchy controllerServiceReferenceHierarchy) {
+
+        final boolean recursive = (controllerServiceReferenceHierarchy == ControllerServiceReferenceHierarchy.INCLUDE_CHILD_GROUPS);
+        if (controllerServiceReferenceScope == ControllerServiceReferenceScope.INCLUDE_ALL) {
+            final Set<ControllerServiceFacade> facades = new HashSet<>();
+            collectControllerServiceFacades(this, facades, facade -> true, recursive);
+            return facades;
+        } else {
+            final Set<ControllerServiceNode> serviceNodes = lifecycle.findReferencedServices(recursive);
+            final Set<String> versionedComponentIds = serviceNodes.stream()
+                .map(ControllerServiceNode::getVersionedComponentId)
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .collect(Collectors.toSet());
+
+            final Set<ControllerServiceFacade> facades = new HashSet<>();
+            final Predicate<ControllerServiceFacade> serviceFacadeFilter = facade -> versionedComponentIds.contains(facade.getDefinition().getIdentifier());
+            collectControllerServiceFacades(this, facades, serviceFacadeFilter, recursive);
+            return facades;
+        }
+    }
+
+    private void collectControllerServiceFacades(final ProcessGroupFacade group, final Set<ControllerServiceFacade> facades, final Predicate<ControllerServiceFacade> filter,
+                final boolean recursive) {
+
+        for (final ControllerServiceFacade serviceFacade : group.getControllerServices()) {
+            if (filter.test(serviceFacade)) {
+                facades.add(serviceFacade);
+            }
+        }
+
+        if (recursive) {
+            for (final ProcessGroupFacade childGroup : group.getProcessGroups()) {
+                collectControllerServiceFacades(childGroup, facades, filter, true);
+            }
+        }
+    }
+
+    @Override
     public ConnectionFacade getConnection(final String id) {
         final Connection connection = lookupConnection(id);
         if (connection == null) {
@@ -315,6 +359,11 @@ public class StandaloneProcessGroupFacade implements ProcessGroupFacade {
     @Override
     public QueueSize getQueueSize() {
         return processGroup.getQueueSize();
+    }
+
+    @Override
+    public boolean isFlowEmpty() {
+        return processGroup.isEmpty();
     }
 
     @Override

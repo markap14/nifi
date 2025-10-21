@@ -25,6 +25,7 @@ import org.apache.nifi.components.connector.ConnectorParameterLookup;
 import org.apache.nifi.components.connector.InvocationFailedException;
 import org.apache.nifi.components.connector.components.ControllerServiceFacade;
 import org.apache.nifi.components.connector.components.ControllerServiceLifecycle;
+import org.apache.nifi.components.validation.DisabledServiceValidationResult;
 import org.apache.nifi.components.validation.ValidationState;
 import org.apache.nifi.controller.ConfigurationContext;
 import org.apache.nifi.controller.ProcessScheduler;
@@ -38,7 +39,6 @@ import org.apache.nifi.nar.ExtensionManager;
 import org.apache.nifi.parameter.ParameterContext;
 import org.apache.nifi.parameter.ParameterLookup;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -77,17 +77,22 @@ public class StandaloneControllerServiceFacade implements ControllerServiceFacad
         return lifecycle;
     }
 
+    @Override
+    public List<ValidationResult> validate() {
+        return validate(getDefinition().getProperties());
+    }
+
     // TODO: Refactor to avoid duplicate code with StandaloneProcessorFacade
     @Override
     public List<ValidationResult> validate(final Map<String, String> propertyValues) {
         final ValidationContext validationContext = componentContextProvider.createValidationContext(controllerServiceNode, propertyValues, parameterContext);
         final ValidationState validationState = controllerServiceNode.performValidation(validationContext);
+        final List<ValidationResult> validationErrors = validationState.getValidationErrors().stream()
+            .filter(result -> !result.isValid())
+            .filter(result -> !DisabledServiceValidationResult.isMatch(result))
+            .toList();
 
-        return switch (validationState.getStatus()) {
-            case VALID -> Collections.emptyList();
-            // If validating, return the current validation errors (if any)
-            case INVALID, VALIDATING -> List.copyOf(validationState.getValidationErrors());
-        };
+        return validationErrors;
     }
 
     @Override

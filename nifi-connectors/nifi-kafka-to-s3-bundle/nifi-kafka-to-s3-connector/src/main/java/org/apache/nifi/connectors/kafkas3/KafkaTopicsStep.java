@@ -69,6 +69,6 @@ public class KafkaTopicsStep {
         .build();
 
     public static ConfigurationStep createConfigurationStep(final List<String> possibleTopics) {
-        return KAFKA_TOPICS_STEP.withAllowableValues(TOPIC_NAMES.getName(), TOPIC_NAMES.getName(), possibleTopics);
+        return KAFKA_TOPICS_STEP.withAllowableValues(KAFKA_TOPICS_GROUP.getName(), TOPIC_NAMES.getName(), possibleTopics);
     }
 }

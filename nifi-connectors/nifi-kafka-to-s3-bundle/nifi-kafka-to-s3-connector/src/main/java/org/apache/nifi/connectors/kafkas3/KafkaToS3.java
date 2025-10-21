@@ -44,7 +44,9 @@ public class KafkaToS3 extends AbstractConnector {
 
     @Override
     protected void init() throws FlowUpdateException {
-        getInitializationContext().updateFlow(KafkaToS3FlowBuilder.loadInitialFlow());
+        if (getInitializationContext().getRootGroup().isFlowEmpty()) {
+            getInitializationContext().updateFlow(KafkaToS3FlowBuilder.loadInitialFlow());
+        }
     }
 
     @Override

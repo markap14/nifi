@@ -27,6 +27,7 @@ import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.validation.DisabledServiceValidationResult;
 import org.apache.nifi.components.validation.ValidationState;
 import org.apache.nifi.components.validation.ValidationStatus;
+import org.apache.nifi.engine.FlowEngine;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.nar.ExtensionManager;
@@ -78,14 +79,7 @@ public class StandardConnectorNode implements ConnectorNode {
     private final List<CompletableFuture<Void>> pendingStartFutures = new ArrayList<>();
     private final List<CompletableFuture<Void>> pendingStopFutures = new ArrayList<>();
 
-    public StandardConnectorNode(final String identifier, final ExtensionManager extensionManager, final Authorizable parentAuthorizable, final ProcessGroup managedProcessGroup,
-        final ConnectorDetails connectorDetails, final String componentType, final BundleCoordinate bundleCoordinate) {
 
-        this(identifier, extensionManager, parentAuthorizable, managedProcessGroup, connectorDetails, componentType, bundleCoordinate,
-            new StandardConnectorConfigurationContext());
-    }
-
-    // TODO: REMOVE REDUNDANT CONSTRUCTOR
     public StandardConnectorNode(final String identifier, final ExtensionManager extensionManager, final Authorizable parentAuthorizable, final ProcessGroup managedProcessGroup,
         final ConnectorDetails connectorDetails, final String componentType, final BundleCoordinate bundleCoordinate,
         final StandardConnectorConfigurationContext configurationContext) {
@@ -98,6 +92,7 @@ public class StandardConnectorNode implements ConnectorNode {
         this.componentType = componentType;
         this.bundleCoordinate = bundleCoordinate;
         this.configurationContext = configurationContext;
+        this.name = connectorDetails.getConnector().getClass().getSimpleName();
     }
 
     @Override
@@ -126,7 +121,7 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
-    public void prepareForUpdate(final ScheduledExecutorService scheduler) throws FlowUpdateException {
+    public void prepareForUpdate(final FlowEngine scheduler) throws FlowUpdateException {
         final ConnectorState initialState = getCurrentState();
         if (initialState == ConnectorState.UPDATING || initialState == ConnectorState.PREPARING_FOR_UPDATE) {
             return;
@@ -154,7 +149,7 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
-    public void finishUpdate(final ScheduledExecutorService scheduler) throws FlowUpdateException {
+    public void finishUpdate(final FlowEngine scheduler) throws FlowUpdateException {
         final ConnectorState currentState = getCurrentState();
         if (currentState != ConnectorState.UPDATING) {
             throw new IllegalStateException("Cannot finish update for " + this + " because its state is currently " + currentState
@@ -327,13 +322,13 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
-    public Future<Void> start(final ScheduledExecutorService scheduler) {
+    public Future<Void> start(final FlowEngine scheduler) {
         final CompletableFuture<Void> startCompleteFuture = new CompletableFuture<>();
         start(scheduler, startCompleteFuture);
         return startCompleteFuture;
     }
 
-    private void start(final ScheduledExecutorService scheduler, final CompletableFuture<Void> startCompleteFuture) {
+    private void start(final FlowEngine scheduler, final CompletableFuture<Void> startCompleteFuture) {
         verifyCanStart();
 
         // Ensure that we're in the proper state to start and update the desired and current states
@@ -370,7 +365,7 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
-    public Future<Void> stop(final ScheduledExecutorService scheduler) {
+    public Future<Void> stop(final FlowEngine scheduler) {
         final CompletableFuture<Void> stopCompleteFuture = new CompletableFuture<>();
 
         // Ensure that we're in the proper state to stop and update the desired and current states
@@ -404,7 +399,7 @@ public class StandardConnectorNode implements ConnectorNode {
         return stopCompleteFuture;
     }
 
-    private void stopComponent(final ScheduledExecutorService scheduler, final CompletableFuture<Void> stopCompleteFuture) {
+    private void stopComponent(final FlowEngine scheduler, final CompletableFuture<Void> stopCompleteFuture) {
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, connectorDetails.getConnector().getClass(), getIdentifier())) {
             connectorDetails.getConnector().stop();
         } catch (final Exception e) {
@@ -464,6 +459,13 @@ public class StandardConnectorNode implements ConnectorNode {
         final ConnectorState currentState = getCurrentState();
         if (currentState == ConnectorState.DISABLED) {
             throw new IllegalStateException("Cannot start " + this + " because its state is currently " + currentState + "; it must be fully stopped before it can be started.");
+        }
+
+        // TODO: Instead of throwing IllegalStateException here, we should behave more like Controller Services / Processors
+        //       and keep trying to start until it becomes valid or is stopped.
+        final ValidationState state = performValidation();
+        if (state.getStatus() != ValidationStatus.VALID) {
+            throw new IllegalStateException("Cannot start " + this + " because it is not valid: " + state.getValidationErrors());
         }
     }
 
@@ -604,7 +606,7 @@ public class StandardConnectorNode implements ConnectorNode {
             // since these will not be relevant when started.
             final List<ValidationResult> relevantResults = allResults.stream()
                 .filter(result -> !result.isValid())
-                .filter(DisabledServiceValidationResult::isMatch)
+                .filter(result -> !DisabledServiceValidationResult.isMatch(result))
                 .toList();
 
             if (relevantResults.isEmpty()) {

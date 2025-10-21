@@ -25,6 +25,7 @@ import org.apache.nifi.components.connector.ConnectorParameterLookup;
 import org.apache.nifi.components.connector.InvocationFailedException;
 import org.apache.nifi.components.connector.components.ProcessorFacade;
 import org.apache.nifi.components.connector.components.ProcessorLifecycle;
+import org.apache.nifi.components.validation.DisabledServiceValidationResult;
 import org.apache.nifi.components.validation.ValidationState;
 import org.apache.nifi.controller.ProcessScheduler;
 import org.apache.nifi.controller.ProcessorNode;
@@ -38,7 +39,6 @@ import org.apache.nifi.parameter.ParameterContext;
 import org.apache.nifi.parameter.ParameterLookup;
 import org.apache.nifi.processor.ProcessContext;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -81,12 +81,12 @@ public class StandaloneProcessorFacade implements ProcessorFacade {
     public List<ValidationResult> validate(final Map<String, String> propertyValues) {
         final ValidationContext validationContext = componentContextProvider.createValidationContext(processorNode, propertyValues, parameterContext);
         final ValidationState validationState = processorNode.performValidation(validationContext);
+        final List<ValidationResult> validationErrors = validationState.getValidationErrors().stream()
+            .filter(result -> !result.isValid())
+            .filter(result -> !DisabledServiceValidationResult.isMatch(result))
+            .toList();
 
-        return switch (validationState.getStatus()) {
-            case VALID -> Collections.emptyList();
-            // If validating, return the current validation errors (if any)
-            case INVALID, VALIDATING -> List.copyOf(validationState.getValidationErrors());
-        };
+        return validationErrors;
     }
 
     @Override

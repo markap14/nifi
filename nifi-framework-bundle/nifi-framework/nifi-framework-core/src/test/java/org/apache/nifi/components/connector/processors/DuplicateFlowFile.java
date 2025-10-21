@@ -63,7 +63,7 @@ public class DuplicateFlowFile extends AbstractProcessor {
     @Override
     public Set<Relationship> getRelationships() {
         final Set<Relationship> relationships = relationshipsRef.get();
-        return relationships != null ? relationships : Set.of();
+        return relationships == null ? Set.of() : relationships;
     }
 
     @Override

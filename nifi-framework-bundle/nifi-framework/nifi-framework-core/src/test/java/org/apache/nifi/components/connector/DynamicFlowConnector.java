@@ -126,7 +126,7 @@ public class DynamicFlowConnector extends AbstractConnector {
     }
 
     @Override
-    public void finishUpdate() throws FlowUpdateException {
+    public void finishUpdate() {
     }
 
     @Override

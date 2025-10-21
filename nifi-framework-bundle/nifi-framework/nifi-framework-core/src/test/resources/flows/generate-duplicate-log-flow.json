@@ -126,7 +126,7 @@
             "labelIndex": 0,
             "zIndex": 4,
             "selectedRelationships": [
-              "success"
+              "3"
             ],
             "backPressureObjectThreshold": 10000,
             "backPressureDataSizeThreshold": "1 GB",
@@ -201,7 +201,7 @@
             "labelIndex": 0,
             "zIndex": 2,
             "selectedRelationships": [
-              "success"
+              "1"
             ],
             "backPressureObjectThreshold": 10000,
             "backPressureDataSizeThreshold": "1 GB",
@@ -236,7 +236,7 @@
             "labelIndex": 0,
             "zIndex": 3,
             "selectedRelationships": [
-              "success"
+              "2"
             ],
             "backPressureObjectThreshold": 10000,
             "backPressureDataSizeThreshold": "1 GB",

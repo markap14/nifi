@@ -113,21 +113,7 @@ public class KafkaToS3FlowBuilder {
             .orElseThrow();
 
         final String kafkaDataFormat = configContext.getProperty(KafkaTopicsStep.STEP_NAME, KafkaTopicsStep.KAFKA_DATA_FORMAT.getName()).getValue();
-        if (kafkaDataFormat.equalsIgnoreCase("JSON")) {
-            // Remove Avro Reader
-//            rootGroup.getControllerServices().remove(avroService);
-//
-//            VersionedFlowUtils.removeControllerServiceReferences(externalFlow.getFlowContents(), avroService.getIdentifier());
-        } else {
-            // Remove JsonTreeReader
-//            final VersionedControllerService jsonService = rootGroup.getControllerServices().stream()
-//                .filter(service -> service.getType().endsWith("JsonTreeReader"))
-//                .findFirst()
-//                .orElseThrow();
-//            rootGroup.getControllerServices().remove(jsonService);
-//
-//            VersionedFlowUtils.removeControllerServiceReferences(externalFlow.getFlowContents(), jsonService.getIdentifier());
-
+        if (!kafkaDataFormat.equalsIgnoreCase("JSON")) {
             // Update ConsumeKafka processor to use Avro Reader
             rootGroup.getProcessors().stream()
                 .filter(versionedProcessor ->  versionedProcessor.getType().endsWith("ConsumeKafka"))
@@ -147,6 +133,9 @@ public class KafkaToS3FlowBuilder {
 
         final String groupId = configContext.getProperty(KafkaTopicsStep.STEP_NAME, KafkaTopicsStep.CONSUMER_GROUP_ID.getName()).getValue();
         VersionedFlowUtils.setParameterValue(externalFlow, "Consumer Group ID", groupId);
+
+        final String offsetReset = configContext.getProperty(KafkaTopicsStep.STEP_NAME, KafkaTopicsStep.OFFSET_RESET.getName()).getValue();
+        VersionedFlowUtils.setParameterValue(externalFlow, "Kafka Auto Offset Reset", offsetReset);
     }
 
     private void updateS3Config(final VersionedExternalFlow externalFlow) {

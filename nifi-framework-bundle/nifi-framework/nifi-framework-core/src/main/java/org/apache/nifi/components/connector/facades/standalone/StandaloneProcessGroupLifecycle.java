@@ -18,7 +18,8 @@
 package org.apache.nifi.components.connector.facades.standalone;
 
 import org.apache.nifi.components.PropertyDescriptor;
-import org.apache.nifi.components.connector.components.ControllerServiceEnablementScope;
+import org.apache.nifi.components.connector.components.ControllerServiceReferenceHierarchy;
+import org.apache.nifi.components.connector.components.ControllerServiceReferenceScope;
 import org.apache.nifi.components.connector.components.ProcessGroupLifecycle;
 import org.apache.nifi.controller.ProcessorNode;
 import org.apache.nifi.controller.service.ControllerServiceNode;
@@ -47,18 +48,19 @@ public class StandaloneProcessGroupLifecycle implements ProcessGroupLifecycle {
     }
 
     @Override
-    public CompletableFuture<Void> enableControllerServices(final ControllerServiceEnablementScope scope) {
-        final Set<ControllerServiceNode> controllerServices = scope == ControllerServiceEnablementScope.ENABLE_ALL ? processGroup.findAllControllerServices() : findReferencedServices();
+    public CompletableFuture<Void> enableControllerServices(final ControllerServiceReferenceScope scope, final ControllerServiceReferenceHierarchy hierarchy) {
+        final boolean recursive = (hierarchy == ControllerServiceReferenceHierarchy.INCLUDE_CHILD_GROUPS);
+        final Set<ControllerServiceNode> controllerServices = (scope == ControllerServiceReferenceScope.INCLUDE_ALL) ? processGroup.findAllControllerServices() : findReferencedServices(recursive);
         return enableControllerServices(controllerServices);
     }
 
-    private Set<ControllerServiceNode> findReferencedServices() {
+    public Set<ControllerServiceNode> findReferencedServices(final boolean recursive) {
         final Set<ControllerServiceNode> referencedServices = new HashSet<>();
-        collectReferencedServices(processGroup, referencedServices);
+        collectReferencedServices(processGroup, referencedServices, recursive);
         return referencedServices;
     }
 
-    private void collectReferencedServices(final ProcessGroup group, final Set<ControllerServiceNode> referencedServices) {
+    private void collectReferencedServices(final ProcessGroup group, final Set<ControllerServiceNode> referencedServices, final boolean recursive) {
         for (final ProcessorNode processor : group.getProcessors()) {
             for (final PropertyDescriptor descriptor : processor.getPropertyDescriptors()) {
                 if (descriptor.getControllerServiceDefinition() == null) {
@@ -110,8 +112,10 @@ public class StandaloneProcessGroupLifecycle implements ProcessGroupLifecycle {
             }
         }
 
-        for (final ProcessGroup childGroup : processGroup.getProcessGroups()) {
-            collectReferencedServices(childGroup, referencedServices);
+        if (recursive) {
+            for (final ProcessGroup childGroup : group.getProcessGroups()) {
+                collectReferencedServices(childGroup, referencedServices, true);
+            }
         }
     }
 
@@ -137,8 +141,9 @@ public class StandaloneProcessGroupLifecycle implements ProcessGroupLifecycle {
     }
 
     @Override
-    public CompletableFuture<Void> disableControllerServices() {
-        final Set<ControllerServiceNode> controllerServices = processGroup.findAllControllerServices();
+    public CompletableFuture<Void> disableControllerServices(final ControllerServiceReferenceHierarchy hierarchy) {
+        final boolean recursive = (hierarchy == ControllerServiceReferenceHierarchy.INCLUDE_CHILD_GROUPS);
+        final Set<ControllerServiceNode> controllerServices = recursive ? processGroup.findAllControllerServices() : processGroup.getControllerServices(false);
         return disableControllerServices(controllerServices);
     }
 

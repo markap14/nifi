@@ -27,17 +27,17 @@ import org.apache.nifi.controller.MockStateManagerProvider;
 import org.apache.nifi.controller.NodeTypeProvider;
 import org.apache.nifi.controller.ReloadComponent;
 import org.apache.nifi.controller.flow.StandardFlowManager;
-import org.apache.nifi.controller.queue.FlowFileQueue;
 import org.apache.nifi.controller.queue.FlowFileQueueFactory;
-import org.apache.nifi.controller.queue.LoadBalanceCompression;
-import org.apache.nifi.controller.queue.LoadBalanceStrategy;
-import org.apache.nifi.controller.queue.QueueSize;
 import org.apache.nifi.controller.repository.ContentRepository;
+import org.apache.nifi.controller.repository.ContentRepositoryContext;
 import org.apache.nifi.controller.repository.CounterRepository;
 import org.apache.nifi.controller.repository.FileSystemRepository;
 import org.apache.nifi.controller.repository.FlowFileEventRepository;
-import org.apache.nifi.controller.repository.FlowFileRecord;
 import org.apache.nifi.controller.repository.FlowFileRepository;
+import org.apache.nifi.controller.repository.StandardContentRepositoryContext;
+import org.apache.nifi.controller.repository.VolatileFlowFileRepository;
+import org.apache.nifi.controller.repository.claim.ResourceClaimManager;
+import org.apache.nifi.controller.repository.claim.StandardResourceClaimManager;
 import org.apache.nifi.controller.scheduling.LifecycleStateManager;
 import org.apache.nifi.controller.scheduling.RepositoryContextFactory;
 import org.apache.nifi.controller.scheduling.SchedulingAgent;
@@ -47,6 +47,7 @@ import org.apache.nifi.controller.scheduling.TimerDrivenSchedulingAgent;
 import org.apache.nifi.controller.service.ControllerServiceProvider;
 import org.apache.nifi.controller.service.StandardControllerServiceProvider;
 import org.apache.nifi.engine.FlowEngine;
+import org.apache.nifi.events.EventReporter;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.mock.MockNodeTypeProvider;
 import org.apache.nifi.nar.ExtensionDiscoveringManager;
@@ -57,10 +58,12 @@ import org.apache.nifi.nar.StandardExtensionDiscoveringManager;
 import org.apache.nifi.nar.SystemBundle;
 import org.apache.nifi.parameter.ParameterContextManager;
 import org.apache.nifi.processor.Relationship;
+import org.apache.nifi.provenance.MockProvenanceRepository;
 import org.apache.nifi.provenance.ProvenanceRepository;
 import org.apache.nifi.reporting.BulletinRepository;
 import org.apache.nifi.scheduling.SchedulingStrategy;
 import org.apache.nifi.stateless.bootstrap.StatelessBootstrap;
+import org.apache.nifi.stateless.queue.StatelessFlowFileQueue;
 import org.apache.nifi.util.NiFiProperties;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -72,14 +75,12 @@ import org.testcontainers.utility.DockerImageName;
 import java.io.File;
 import java.io.IOException;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -99,10 +100,10 @@ import static org.mockito.Mockito.when;
 public class KafkaToS3IT {
     private static final BundleCoordinate BUNDLE_COORDINATE = new BundleCoordinate("org.apache.nifi", "nifi-kafka-to-s3-nar", "2.6.0-SNAPSHOT");
 
-    private final ScheduledExecutorService threadPool = Executors.newScheduledThreadPool(4);
+    private final FlowEngine flowEngine = new FlowEngine(4, "flow-engine");
     private StandardProcessScheduler processScheduler;
     private StandardFlowManager flowManager;
-    private FlowEngine componentLifeycleThreadPool;
+    private FlowEngine componentLifecycleThreadPool;
     private ConnectorRepository connectorRepository;
     private ExtensionDiscoveringManager extensionManager;
     private ConfluentKafkaContainer kafkaContainer;
@@ -144,8 +145,15 @@ public class KafkaToS3IT {
         final NiFiProperties nifiProperties = NiFiProperties.createBasicNiFiProperties("src/test/resources/conf/nifi.properties");
 
         final ContentRepository contentRepo = new FileSystemRepository(nifiProperties);
-        final FlowFileRepository flowFileRepo = mock(FlowFileRepository.class);
-        final ProvenanceRepository provRepo = mock(ProvenanceRepository.class);
+        final ResourceClaimManager resourceClaimManager = new StandardResourceClaimManager();
+        final EventReporter eventReporter = mock(EventReporter.class);
+        final ContentRepositoryContext contentRepoInitializationContext = new StandardContentRepositoryContext(resourceClaimManager, eventReporter);
+        contentRepo.initialize(contentRepoInitializationContext);
+
+        final FlowFileRepository flowFileRepo = new VolatileFlowFileRepository();
+        flowFileRepo.initialize(resourceClaimManager);
+
+        final ProvenanceRepository provRepo = new MockProvenanceRepository();
         final FlowFileEventRepository flowFileEventRepo = mock(FlowFileEventRepository.class);
         final CounterRepository counterRepo = mock(CounterRepository.class);
         final RepositoryContextFactory repoContextFactory = new RepositoryContextFactory(contentRepo, flowFileRepo, flowFileEventRepo, counterRepo, provRepo, stateManagerProvider, 1L);
@@ -158,7 +166,7 @@ public class KafkaToS3IT {
         when(flowController.getFlowFileEventRepository()).thenReturn(mock(FlowFileEventRepository.class));
         when(flowController.getConnectorRepository()).thenReturn(connectorRepository);
 
-        final ValidationTrigger validationTrigger = new StandardValidationTrigger(threadPool, () -> true);
+        final ValidationTrigger validationTrigger = new StandardValidationTrigger(flowEngine, () -> true);
         when(flowController.getValidationTrigger()).thenReturn(validationTrigger);
 
         doAnswer(invocation -> {
@@ -169,8 +177,8 @@ public class KafkaToS3IT {
         final ParameterContextManager parameterContextManager = mock(ParameterContextManager.class);
 
         final NodeTypeProvider nodeTypeProvider = new MockNodeTypeProvider();
-        componentLifeycleThreadPool = new FlowEngine(4, "Component Lifecycle Thread Pool", true);
-        processScheduler = new StandardProcessScheduler(componentLifeycleThreadPool, extensionManager, nodeTypeProvider, null,
+        componentLifecycleThreadPool = new FlowEngine(4, "Component Lifecycle Thread Pool", true);
+        processScheduler = new StandardProcessScheduler(componentLifecycleThreadPool, extensionManager, nodeTypeProvider, flowController::getControllerServiceProvider,
             reloadComponent, stateManagerProvider, nifiProperties, lifecycleStateManager);
         when(flowController.getProcessScheduler()).thenReturn(processScheduler);
 
@@ -228,8 +236,8 @@ public class KafkaToS3IT {
 
     @AfterEach
     public void tearDown() {
-        if (componentLifeycleThreadPool != null) {
-            componentLifeycleThreadPool.shutdown();
+        if (componentLifecycleThreadPool != null) {
+            componentLifecycleThreadPool.shutdown();
         }
         if (kafkaContainer != null) {
             kafkaContainer.stop();
@@ -287,7 +295,7 @@ public class KafkaToS3IT {
         final ConnectorNode connectorNode = flowManager.createConnector(KafkaToS3.class.getName(), "kafka-to-s3", BUNDLE_COORDINATE, true, true);
         assertNotNull(connectorNode);
 
-        connectorNode.prepareForUpdate(threadPool);
+        connectorNode.prepareForUpdate(flowEngine);
 
         // Configure connection step
         final PropertyGroupConfiguration serverGroup = new PropertyGroupConfiguration(KafkaConnectionStep.KAFKA_SERVER_GROUP.getName(), Map.of(
@@ -308,12 +316,16 @@ public class KafkaToS3IT {
         // Get the updated list of Configuration Steps. This should now include a list of available topics as Allowable Values for the "Topic Names" property.
         final List<ConfigurationStep> configurationSteps = connectorNode.getConfigurationSteps();
         assertEquals(3, configurationSteps.size());
+
         final ConfigurationStep topicsStep = configurationSteps.get(1);
         final ConnectorPropertyGroup topicsGroup = topicsStep.getPropertyGroups().getFirst();
         final List<ConnectorPropertyDescriptor> propertyDescriptors = topicsGroup.getProperties();
         final ConnectorPropertyDescriptor topicNamesDescriptor = propertyDescriptors.getFirst();
         assertEquals("Topic Names", topicNamesDescriptor.getName());
-        final List<String> topicNames = topicNamesDescriptor.getAllowableValues().stream().map(DescribedValue::getValue).toList();
+
+        final List<DescribedValue> allowedTopicValues = topicNamesDescriptor.getAllowableValues();
+        assertNotNull(allowedTopicValues);
+        final List<String> topicNames = allowedTopicValues.stream().map(DescribedValue::getValue).toList();
         assertEquals(List.of("an-important-topic", "topic-1", "topic-2", "topic-3", "topic-4", "topic-5", "Z-topic"), topicNames);
 
         // Create configuration to point to "topic-1" topic.
@@ -345,7 +357,7 @@ public class KafkaToS3IT {
         final ConfigVerificationResult invalidResult = invalidImportantTopicResults.getFirst();
         assertTrue(invalidResult.getExplanation().contains("parse"), "Unexpected validation reason: " + invalidResult.getExplanation());
 
-        connectorNode.finishUpdate(threadPool);
+        connectorNode.finishUpdate(flowEngine);
     }
 
     @Test
@@ -382,7 +394,7 @@ public class KafkaToS3IT {
 
         final PropertyGroupConfiguration topicGroupConfig = new PropertyGroupConfiguration(KafkaTopicsStep.KAFKA_TOPICS_GROUP.getName(), Map.of(
             KafkaTopicsStep.TOPIC_NAMES.getName(), "story",
-            KafkaTopicsStep.CONSUMER_GROUP_ID.getName(), "kafka-to-s3-test-group",
+            KafkaTopicsStep.CONSUMER_GROUP_ID.getName(), "kafka-to-s3-test-group-testFullFlow",
             KafkaTopicsStep.OFFSET_RESET.getName(), "earliest",
             KafkaTopicsStep.KAFKA_DATA_FORMAT.getName(), "JSON"
         ));
@@ -390,7 +402,7 @@ public class KafkaToS3IT {
         final PropertyGroupConfiguration s3DestinationGroup = new PropertyGroupConfiguration(S3Step.S3_DESTINATION_GROUP.getName(), Map.of(
             S3Step.S3_REGION.getName(), "us-west-2",
             S3Step.S3_DATA_FORMAT.getName(), "Avro",
-            S3Step.S3_BUCKET.getName(), "mpayne-test-bucket"
+            S3Step.S3_BUCKET.getName(), "mpayne-test-bucket-123"
         ));
         final PropertyGroupConfiguration s3AuthGroup = new PropertyGroupConfiguration(S3Step.S3_DESTINATION_GROUP.getName(), Map.of(
             S3Step.S3_AUTHENTICATION_STRATEGY.getName(), S3Step.DEFAULT_CREDENTIALS
@@ -400,16 +412,19 @@ public class KafkaToS3IT {
             S3Step.MERGE_LATENCY.getName(), "5 sec"
         ));
 
-        connectorNode.prepareForUpdate(threadPool);
+        connectorNode.prepareForUpdate(flowEngine);
         connectorNode.setConfiguration(KafkaConnectionStep.STEP_NAME, List.of(serverGroup));
         connectorNode.setConfiguration(KafkaTopicsStep.STEP_NAME, List.of(topicGroupConfig));
         connectorNode.setConfiguration(S3Step.S3_STEP.getName(), List.of(s3DestinationGroup, s3AuthGroup, mergeGroup));
-        connectorNode.finishUpdate(threadPool);
+        connectorNode.finishUpdate(flowEngine);
 
         final ValidationState validationState = connectorNode.performValidation();
         assertEquals(ValidationStatus.VALID, validationState.getStatus(), "Connector is invalid due to: " + validationState.getValidationErrors());
 
-        connectorNode.start(threadPool).get(1, TimeUnit.MINUTES);
+        connectorNode.start(flowEngine).get(1, TimeUnit.MINUTES);
+
+        Thread.sleep(Duration.ofSeconds(30));
+        connectorNode.stop(flowEngine).get(1, TimeUnit.MINUTES);
     }
 
     private Connection createConnection(final String id, final String name, final Connectable source, final Connectable destination, final Collection<String> relationshipNames) {
@@ -417,23 +432,7 @@ public class KafkaToS3IT {
             .map(relName -> new Relationship.Builder().name(relName).build())
             .toList();
 
-        final FlowFileQueue flowFileQueue = mock(FlowFileQueue.class);
-        final List<FlowFileRecord> flowFileList = new ArrayList<>();
-
-        // Update mock to add FlowFiles to the queue
-        doAnswer(invocation -> {
-            flowFileList.add(invocation.getArgument(0));
-            return null;
-        }).when(flowFileQueue).put(any(FlowFileRecord.class));
-
-        // Update mock to return queue size and isEmpty status
-        when(flowFileQueue.size()).thenAnswer(invocation -> new QueueSize(flowFileList.size(), flowFileList.size()));
-        when(flowFileQueue.isEmpty()).thenAnswer(invocation -> flowFileList.isEmpty());
-        when(flowFileQueue.getLoadBalanceStrategy()).thenReturn(LoadBalanceStrategy.DO_NOT_LOAD_BALANCE);
-        when(flowFileQueue.getLoadBalanceCompression()).thenReturn(LoadBalanceCompression.DO_NOT_COMPRESS);
-
-        final FlowFileQueueFactory flowFileQueueFactory = (loadBalanceStrategy, partitioningAttribute, processGroup) -> flowFileQueue;
-
+        final FlowFileQueueFactory flowFileQueueFactory = (loadBalanceStrategy, partitioningAttribute, processGroup) -> new StatelessFlowFileQueue(UUID.randomUUID().toString());
         final Connection connection = new StandardConnection.Builder(processScheduler)
             .id(id)
             .name(name)

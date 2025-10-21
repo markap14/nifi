@@ -106,10 +106,9 @@ import static org.mockito.Mockito.when;
 
 public class StandardConnectorNodeIT {
 
-    private final ScheduledExecutorService threadPool = Executors.newScheduledThreadPool(1);
     private StandardProcessScheduler processScheduler;
     private StandardFlowManager flowManager;
-    private FlowEngine componentLifeycleThreadPool;
+    private FlowEngine componentLifecycleThreadPool;
     private ConnectorRepository connectorRepository;
 
     @BeforeEach
@@ -157,8 +156,8 @@ public class StandardConnectorNodeIT {
         final ParameterContextManager parameterContextManager = mock(ParameterContextManager.class);
 
         final NodeTypeProvider nodeTypeProvider = new MockNodeTypeProvider();
-        componentLifeycleThreadPool = new FlowEngine(4, "Component Lifecycle Thread Pool", true);
-        processScheduler = new StandardProcessScheduler(componentLifeycleThreadPool, extensionManager, nodeTypeProvider, controllerServiceProvider,
+        componentLifecycleThreadPool = new FlowEngine(4, "Component Lifecycle Thread Pool", true);
+        processScheduler = new StandardProcessScheduler(componentLifecycleThreadPool, extensionManager, nodeTypeProvider, () -> controllerServiceProvider,
             reloadComponent, stateManagerProvider, nifiProperties, lifecycleStateManager);
         when(flowController.getProcessScheduler()).thenReturn(processScheduler);
 
@@ -175,8 +174,8 @@ public class StandardConnectorNodeIT {
 
     @AfterEach
     public void tearDown() {
-        if (componentLifeycleThreadPool != null) {
-            componentLifeycleThreadPool.shutdown();
+        if (componentLifecycleThreadPool != null) {
+            componentLifecycleThreadPool.shutdown();
         }
     }
 
@@ -223,11 +222,13 @@ public class StandardConnectorNodeIT {
     }
 
     private void configure(final ConnectorNode connectorNode, final ConnectorConfiguration configuration) throws FlowUpdateException {
-        connectorNode.prepareForUpdate(threadPool);
-        for (final ConfigurationStepConfiguration stepConfig : configuration.getConfigurationStepConfigurations()) {
-            connectorNode.setConfiguration(stepConfig.getConfigurationStepName(), stepConfig.getPropertyGroupConfigurations());
+        try (final FlowEngine flowEngine = new FlowEngine(1, "flow-engine")) {
+            connectorNode.prepareForUpdate(flowEngine);
+            for (final ConfigurationStepConfiguration stepConfig : configuration.getConfigurationStepConfigurations()) {
+                connectorNode.setConfiguration(stepConfig.getConfigurationStepName(), stepConfig.getPropertyGroupConfigurations());
+            }
+            connectorNode.finishUpdate(flowEngine);
         }
-        connectorNode.finishUpdate(threadPool);
     }
 
     private ConnectorNode initializeDynamicFlowConnector() {
@@ -345,20 +346,22 @@ public class StandardConnectorNodeIT {
         // Because the component is being removed and there's data queued in its incoming connection, it should fail.
         final ConnectorConfiguration removeLogConfiguration = createConnectorConfiguration("Second Iteration", 5, false, false);
 
-        connectorNode.prepareForUpdate(threadPool);
-        final Throwable cause = assertThrows(FlowUpdateException.class, () -> configure(connectorNode, removeLogConfiguration));
-        connectorNode.abortUpdate(cause);
+        try (final FlowEngine flowEngine = new FlowEngine(1, "flow-engine")) {
+            connectorNode.prepareForUpdate(flowEngine);
+            final Throwable cause = assertThrows(FlowUpdateException.class, () -> configure(connectorNode, removeLogConfiguration));
+            connectorNode.abortUpdate(cause);
 
-        rootGroup.findAllConnections().contains(connection);
-        assertFalse(connection.getFlowFileQueue().isEmpty());
+            rootGroup.findAllConnections().contains(connection);
+            assertFalse(connection.getFlowFileQueue().isEmpty());
+        }
     }
 
     @Test
     public void testUpdateConnectorFailsIfRunning() throws ExecutionException, InterruptedException, TimeoutException {
         final ConnectorNode connectorNode = initializeDynamicFlowConnector();
 
-        try (final ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor()) {
-            connectorNode.start(executorService).get(5, TimeUnit.SECONDS);
+        try (final FlowEngine flowEngine = new FlowEngine(1, "flow-engine")) {
+            connectorNode.start(flowEngine).get(5, TimeUnit.SECONDS);
             assertSame(ConnectorState.RUNNING, connectorNode.getCurrentState());
 
             final ConnectorConfiguration configuration = createConnectorConfiguration("Second Iteration", 5, true, false);
@@ -373,11 +376,11 @@ public class StandardConnectorNodeIT {
     public void testUpdateConnectorFailsWhileStopping() throws ExecutionException, InterruptedException, TimeoutException {
         final ConnectorNode connectorNode = initializeParameterConnector();
 
-        try (final ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor()) {
-            connectorNode.start(executorService).get(5, TimeUnit.SECONDS);
+        try (final FlowEngine flowEngine = new FlowEngine(1, "flow-engine")) {
+            connectorNode.start(flowEngine).get(5, TimeUnit.SECONDS);
             assertSame(ConnectorState.RUNNING, connectorNode.getCurrentState());
 
-            connectorNode.stop(executorService);
+            connectorNode.stop(flowEngine);
             assertSame(ConnectorState.STOPPING, connectorNode.getCurrentState());
 
             final ConnectorConfiguration configuration = createConnectorConfiguration("Second Iteration", 5, true, false);

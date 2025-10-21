@@ -19,10 +19,12 @@ package org.apache.nifi.components.connector;
 
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
+import org.apache.nifi.engine.FlowEngine;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.nar.ExtensionManager;
 import org.apache.nifi.util.MockComponentLog;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -37,8 +39,6 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -49,7 +49,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestStandardConnectorNode {
 
-    private ScheduledExecutorService scheduler;
+    private FlowEngine scheduler;
 
     @Mock
     private ExtensionManager extensionManager;
@@ -61,7 +61,14 @@ public class TestStandardConnectorNode {
     @BeforeEach
     public void setUp() {
         MockitoAnnotations.openMocks(this);
-        scheduler = new ScheduledThreadPoolExecutor(4);
+        scheduler = new FlowEngine(1, "flow-engine");
+    }
+
+    @AfterEach
+    public void teardown() {
+        if (scheduler != null) {
+            scheduler.close();
+        }
     }
 
     @Test
@@ -171,7 +178,8 @@ public class TestStandardConnectorNode {
             managedProcessGroup,
             createConnectorDetails(blockingConnector),
             "BlockingConnector",
-            null
+            null,
+            new StandardConnectorConfigurationContext()
         );
 
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
@@ -261,7 +269,8 @@ public class TestStandardConnectorNode {
             managedProcessGroup,
             createConnectorDetails(blockingConnector),
             "BlockingConnector",
-            null
+            null,
+            new StandardConnectorConfigurationContext()
         );
 
         connectorNode.start(scheduler).get(5, TimeUnit.SECONDS);
@@ -298,7 +307,8 @@ public class TestStandardConnectorNode {
             managedProcessGroup,
             createConnectorDetails(blockingConnector),
             "SlowStartingConnector",
-            null
+            null,
+            new StandardConnectorConfigurationContext()
         );
 
         // Start the connector - this will take time
@@ -368,7 +378,8 @@ public class TestStandardConnectorNode {
             managedProcessGroup,
             createConnectorDetails(blockingConnector),
             "SlowStartingConnector",
-            null
+            null,
+            new StandardConnectorConfigurationContext()
         );
 
         final Future<Void> startFuture = slowNode.start(scheduler);
@@ -393,7 +404,8 @@ public class TestStandardConnectorNode {
             managedProcessGroup,
             createConnectorDetails(blockingConnector),
             "SlowStoppingConnector",
-            null
+            null,
+            new StandardConnectorConfigurationContext()
         );
 
         connectorNode.start(scheduler).get(5, TimeUnit.SECONDS);
@@ -506,11 +518,13 @@ public class TestStandardConnectorNode {
 
     private StandardConnectorNode createConnectorNode() {
         final SleepingConnector sleepingConnector = new SleepingConnector(Duration.ofMillis(1));
-        return new StandardConnectorNode("test-connector-id", extensionManager, null, managedProcessGroup, createConnectorDetails(sleepingConnector), "TestConnector", null);
+        return new StandardConnectorNode("test-connector-id", extensionManager, null, managedProcessGroup,
+            createConnectorDetails(sleepingConnector), "TestConnector", null, new StandardConnectorConfigurationContext());
     }
 
     private StandardConnectorNode createConnectorNode(final Connector connector) {
-        return new StandardConnectorNode("test-connector-id", extensionManager, null, managedProcessGroup, createConnectorDetails(connector), "TestConnector", null);
+        return new StandardConnectorNode("test-connector-id", extensionManager, null, managedProcessGroup,
+            createConnectorDetails(connector), "TestConnector", null, new StandardConnectorConfigurationContext());
     }
 
     private ConnectorDetails createConnectorDetails(final Connector connector) {
