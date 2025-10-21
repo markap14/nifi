@@ -39,6 +39,7 @@ import org.apache.nifi.components.connector.PropertyGroupConfiguration;
 import org.apache.nifi.components.connector.SecretsManager;
 import org.apache.nifi.components.connector.StandardConnectorConfigurationContext;
 import org.apache.nifi.components.connector.StandardConnectorInitializationContext;
+import org.apache.nifi.components.connector.ConnectorStateTransition;
 import org.apache.nifi.components.connector.StandardConnectorNode;
 import org.apache.nifi.components.connector.components.ParameterContextFacade;
 import org.apache.nifi.components.connector.facades.standalone.StandaloneParameterContextFacade;
@@ -140,6 +141,7 @@ public class ExtensionBuilder {
    private PythonBridge pythonBridge;
    private ProcessGroup managedProcessGroup;
    private ProcessGroupFacadeFactory processGroupFacadeFactory;
+   private ConnectorStateTransition connectorStateTransition;
 
    public ExtensionBuilder type(final String type) {
        this.type = type;
@@ -251,6 +253,11 @@ public class ExtensionBuilder {
 
    public ExtensionBuilder processGroupFacadeFactory(final ProcessGroupFacadeFactory processGroupFacadeFactory) {
        this.processGroupFacadeFactory = processGroupFacadeFactory;
+       return this;
+   }
+
+   public ExtensionBuilder connectorStateTransition(final ConnectorStateTransition connectorStateTransition) {
+       this.connectorStateTransition = connectorStateTransition;
        return this;
    }
 
@@ -499,7 +506,8 @@ public class ExtensionBuilder {
            connectorDetails,
            componentType,
            bundleCoordinate,
-           configurationContext
+           configurationContext,
+           connectorStateTransition
        );
 
        return connectorNode;

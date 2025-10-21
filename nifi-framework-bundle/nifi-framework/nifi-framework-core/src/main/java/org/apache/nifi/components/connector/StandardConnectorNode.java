@@ -35,7 +35,6 @@ import org.apache.nifi.nar.NarCloseable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -47,9 +46,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class StandardConnectorNode implements ConnectorNode {
     private static final Logger logger = LoggerFactory.getLogger(StandardConnectorNode.class);
@@ -62,27 +58,18 @@ public class StandardConnectorNode implements ConnectorNode {
     private final String componentType;
     private final BundleCoordinate bundleCoordinate;
     private final StandardConnectorConfigurationContext configurationContext;
+    private final ConnectorStateTransition stateTransition;
     private final AtomicReference<String> versionedComponentId = new AtomicReference<>();
-    private final AtomicReference<ConnectorState> currentState = new AtomicReference<>(ConnectorState.STOPPED);
-    private final AtomicReference<ConnectorState> desiredState = new AtomicReference<>(ConnectorState.STOPPED);
     private final AtomicReference<ConnectorState> updateResumeState = new AtomicReference<>(null);
 
     private volatile String name;
     private volatile String description;
     private volatile boolean performValidation = true;
 
-    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
-    private final Lock readLock = rwLock.readLock();
-    private final Lock writeLock = rwLock.writeLock();
-
-    // Pending futures for state transitions; guarded by read/write lock
-    private final List<CompletableFuture<Void>> pendingStartFutures = new ArrayList<>();
-    private final List<CompletableFuture<Void>> pendingStopFutures = new ArrayList<>();
-
 
     public StandardConnectorNode(final String identifier, final ExtensionManager extensionManager, final Authorizable parentAuthorizable, final ProcessGroup managedProcessGroup,
         final ConnectorDetails connectorDetails, final String componentType, final BundleCoordinate bundleCoordinate,
-        final StandardConnectorConfigurationContext configurationContext) {
+        final StandardConnectorConfigurationContext configurationContext, final ConnectorStateTransition stateTransition) {
 
         this.identifier = identifier;
         this.extensionManager = extensionManager;
@@ -92,6 +79,7 @@ public class StandardConnectorNode implements ConnectorNode {
         this.componentType = componentType;
         this.bundleCoordinate = bundleCoordinate;
         this.configurationContext = configurationContext;
+        this.stateTransition = stateTransition;
         this.name = connectorDetails.getConnector().getClass().getSimpleName();
     }
 
@@ -128,15 +116,15 @@ public class StandardConnectorNode implements ConnectorNode {
         }
 
         updateResumeState.set(initialState);
-        setDesiredState(ConnectorState.UPDATING);
-        setCurrentState(ConnectorState.PREPARING_FOR_UPDATE);
+        stateTransition.setDesiredState(ConnectorState.UPDATING);
+        stateTransition.setCurrentState(ConnectorState.PREPARING_FOR_UPDATE);
 
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
             getConnector().prepareForUpdate();
-            setCurrentState(ConnectorState.UPDATING);
+            stateTransition.setCurrentState(ConnectorState.UPDATING);
         } catch (final Throwable t) {
             logger.error("Failed to prepare update for {}", this, t);
-            setCurrentState(ConnectorState.UPDATE_FAILED);
+            stateTransition.setCurrentState(ConnectorState.UPDATE_FAILED);
 
             try {
                 getConnector().abortUpdatePreparation(t);
@@ -160,8 +148,8 @@ public class StandardConnectorNode implements ConnectorNode {
             getConnector().finishUpdate();
         } catch (final Throwable t) {
             logger.error("Failed to finish update for {}", this, t);
-            setCurrentState(ConnectorState.UPDATE_FAILED);
-            setDesiredState(ConnectorState.UPDATE_FAILED);
+            stateTransition.setCurrentState(ConnectorState.UPDATE_FAILED);
+            stateTransition.setDesiredState(ConnectorState.UPDATE_FAILED);
 
             throw new FlowUpdateException("Failed to finish update for " + this, t);
         }
@@ -178,8 +166,8 @@ public class StandardConnectorNode implements ConnectorNode {
 
     @Override
     public void abortUpdate(final Throwable cause) {
-        setCurrentState(ConnectorState.UPDATE_FAILED);
-        setDesiredState(ConnectorState.UPDATE_FAILED);
+        stateTransition.setCurrentState(ConnectorState.UPDATE_FAILED);
+        stateTransition.setDesiredState(ConnectorState.UPDATE_FAILED);
 
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
             getConnector().abortUpdatePreparation(cause);
@@ -223,102 +211,38 @@ public class StandardConnectorNode implements ConnectorNode {
 
     @Override
     public ConnectorState getCurrentState() {
-        return currentState.get();
+        return stateTransition.getCurrentState();
     }
 
     @Override
     public ConnectorState getDesiredState() {
-        return desiredState.get();
+        return stateTransition.getDesiredState();
     }
 
     @Override
     public void enable() {
-        setDesiredState(ConnectorState.STOPPED);
-        if (trySetCurrentState(ConnectorState.DISABLED, ConnectorState.STOPPED)) {
+        stateTransition.setDesiredState(ConnectorState.STOPPED);
+        if (stateTransition.trySetCurrentState(ConnectorState.DISABLED, ConnectorState.STOPPED)) {
             logger.info("Transitioned current state for {} to {}", this, ConnectorState.STOPPED);
             return;
         }
 
-        logger.info("{} enabled but not currently DISABLED so set desired state to STOPPED; current state is {}", this, currentState.get());
+        logger.info("{} enabled but not currently DISABLED so set desired state to STOPPED; current state is {}", this, stateTransition.getCurrentState());
     }
 
     @Override
     public void disable() {
-        setDesiredState(ConnectorState.DISABLED);
+        stateTransition.setDesiredState(ConnectorState.DISABLED);
 
         final ConnectorState currentState = getCurrentState();
         if (currentState == ConnectorState.DISABLED || currentState == ConnectorState.STOPPED || currentState == ConnectorState.UPDATE_FAILED) {
-            if (trySetCurrentState(currentState, ConnectorState.DISABLED)) {
+            if (stateTransition.trySetCurrentState(currentState, ConnectorState.DISABLED)) {
                 logger.info("Transitioned current state for {} to {}", this, ConnectorState.DISABLED);
                 return;
             }
         }
 
         logger.info("{} disabled but not in a state that can immediately transition to DISABLED so set desired state to DISABLED; current state is {}", this, currentState);
-    }
-
-    private void setDesiredState(final ConnectorState desiredState) {
-        this.desiredState.set(desiredState);
-        logger.info("Desired State for {} set to {}", this, desiredState);
-    }
-
-    private boolean trySetCurrentState(final ConnectorState expected, final ConnectorState newState) {
-        final boolean changed = currentState.compareAndSet(expected, newState);
-        if (changed) {
-            logger.info("Transitioned current state for {} from {} to {}", this, expected, newState);
-            // Complete appropriate futures when state is successfully updated
-            completeFuturesForStateTransition(newState);
-        }
-
-        return changed;
-    }
-
-    private void setCurrentState(final ConnectorState newState) {
-        final ConnectorState oldState = currentState.getAndSet(newState);
-        logger.info("Transitioned current state for {} from {} to {}", this, oldState, newState);
-
-        // Complete appropriate futures when state changes
-        completeFuturesForStateTransition(newState);
-    }
-
-    private void completeFuturesForStateTransition(final ConnectorState newState) {
-        // Complete start futures when transitioning to RUNNING
-        if (newState == ConnectorState.RUNNING) {
-            writeLock.lock();
-            try {
-                final List<CompletableFuture<Void>> futuresToComplete = new ArrayList<>(pendingStartFutures);
-                pendingStartFutures.clear();
-
-                for (final CompletableFuture<Void> future : futuresToComplete) {
-                    future.complete(null);
-                }
-
-                if (!futuresToComplete.isEmpty()) {
-                    logger.debug("Completed {} pending start futures for {}", futuresToComplete.size(), this);
-                }
-            } finally {
-                writeLock.unlock();
-            }
-        }
-
-        // Complete stop futures when transitioning to STOPPED or DISABLED
-        if (newState == ConnectorState.STOPPED) {
-            writeLock.lock();
-            try {
-                final List<CompletableFuture<Void>> futuresToComplete = new ArrayList<>(pendingStopFutures);
-                pendingStopFutures.clear();
-
-                for (final CompletableFuture<Void> future : futuresToComplete) {
-                    future.complete(null);
-                }
-
-                if (!futuresToComplete.isEmpty()) {
-                    logger.debug("Completed {} pending stop futures for {}", futuresToComplete.size(), this);
-                }
-            } finally {
-                writeLock.unlock();
-            }
-        }
     }
 
     @Override
@@ -331,36 +255,31 @@ public class StandardConnectorNode implements ConnectorNode {
     private void start(final FlowEngine scheduler, final CompletableFuture<Void> startCompleteFuture) {
         verifyCanStart();
 
-        // Ensure that we're in the proper state to start and update the desired and current states
-        writeLock.lock();
-        try {
-            setDesiredState(ConnectorState.RUNNING);
-            final ConnectorState currentState = getCurrentState();
+        stateTransition.setDesiredState(ConnectorState.RUNNING);
+        final ConnectorState currentState = getCurrentState();
 
-            switch (currentState) {
-                case STARTING -> {
-                    logger.debug("{} is already starting; adding future to pending start futures", this);
-                }
-                case RUNNING -> {
-                    logger.debug("{} is already {}; will not attempt to start", this, currentState);
-                    startCompleteFuture.complete(null);
-                }
-                case STOPPING -> {
-                    // We have set the Desired State to RUNNING so when the Connector fully stops, it will be started again automatically
-                    logger.info("{} is currently stopping so will not trigger Connector to start until it has fully stopped", this);
-                }
-                case STOPPED, PREPARING_FOR_UPDATE -> {
-                    setCurrentState(ConnectorState.STARTING);
-                    scheduler.schedule(() -> startComponent(scheduler, startCompleteFuture), 0, TimeUnit.SECONDS);
-                }
+        switch (currentState) {
+            case STARTING -> {
+                logger.debug("{} is already starting; adding future to pending start futures", this);
+                stateTransition.addPendingStartFuture(startCompleteFuture);
             }
-        } finally {
-            if (!startCompleteFuture.isDone()) {
-                // If we didn't complete the future above, we must have added it to pendingStartFutures
-                pendingStartFutures.add(startCompleteFuture);
+            case RUNNING -> {
+                logger.debug("{} is already {}; will not attempt to start", this, currentState);
+                startCompleteFuture.complete(null);
             }
-
-            writeLock.unlock();
+            case STOPPING -> {
+                // We have set the Desired State to RUNNING so when the Connector fully stops, it will be started again automatically
+                logger.info("{} is currently stopping so will not trigger Connector to start until it has fully stopped", this);
+                stateTransition.addPendingStartFuture(startCompleteFuture);
+            }
+            case STOPPED, PREPARING_FOR_UPDATE -> {
+                stateTransition.setCurrentState(ConnectorState.STARTING);
+                scheduler.schedule(() -> startComponent(scheduler, startCompleteFuture), 0, TimeUnit.SECONDS);
+            }
+            default -> {
+                logger.warn("{} is in state {} and cannot be started", this, currentState);
+                stateTransition.addPendingStartFuture(startCompleteFuture);
+            }
         }
     }
 
@@ -368,30 +287,24 @@ public class StandardConnectorNode implements ConnectorNode {
     public Future<Void> stop(final FlowEngine scheduler) {
         final CompletableFuture<Void> stopCompleteFuture = new CompletableFuture<>();
 
-        // Ensure that we're in the proper state to stop and update the desired and current states
-        writeLock.lock();
-        try {
-            setDesiredState(ConnectorState.STOPPED);
+        stateTransition.setDesiredState(ConnectorState.STOPPED);
 
-            boolean stateUpdated = false;
-            while (!stateUpdated) {
-                final ConnectorState currentState = getCurrentState();
-                if (currentState == ConnectorState.STOPPED || currentState == ConnectorState.DISABLED) {
-                    logger.debug("{} is already {}; will not attempt to stop", this, currentState);
-                    stopCompleteFuture.complete(null);
-                    return stopCompleteFuture;
-                }
-
-                if (currentState == ConnectorState.STOPPING) {
-                    logger.debug("{} is already stopping; adding future to pending stop futures", this);
-                    pendingStopFutures.add(stopCompleteFuture);
-                    return stopCompleteFuture;
-                }
-
-                stateUpdated = trySetCurrentState(currentState, ConnectorState.STOPPING);
+        boolean stateUpdated = false;
+        while (!stateUpdated) {
+            final ConnectorState currentState = getCurrentState();
+            if (currentState == ConnectorState.STOPPED || currentState == ConnectorState.DISABLED) {
+                logger.debug("{} is already {}; will not attempt to stop", this, currentState);
+                stopCompleteFuture.complete(null);
+                return stopCompleteFuture;
             }
-        } finally {
-            writeLock.unlock();
+
+            if (currentState == ConnectorState.STOPPING) {
+                logger.debug("{} is already stopping; adding future to pending stop futures", this);
+                stateTransition.addPendingStopFuture(stopCompleteFuture);
+                return stopCompleteFuture;
+            }
+
+            stateUpdated = stateTransition.trySetCurrentState(currentState, ConnectorState.STOPPING);
         }
 
         scheduler.schedule(() -> stopComponent(scheduler, stopCompleteFuture), 0, TimeUnit.SECONDS);
@@ -408,7 +321,7 @@ public class StandardConnectorNode implements ConnectorNode {
             return;
         }
 
-        setCurrentState(ConnectorState.STOPPED);
+        stateTransition.setCurrentState(ConnectorState.STOPPED);
         stopCompleteFuture.complete(null);
 
         final ConnectorState desiredState = getDesiredState();
@@ -420,6 +333,9 @@ public class StandardConnectorNode implements ConnectorNode {
             case RUNNING -> {
                 logger.info("{} was requested to be RUNNING while it was stopping so will attempt to start again", this);
                 start(scheduler, new CompletableFuture<>());
+            }
+            default -> {
+                // No action needed for other states
             }
         }
     }
@@ -439,7 +355,7 @@ public class StandardConnectorNode implements ConnectorNode {
             return;
         }
 
-        setCurrentState(ConnectorState.RUNNING);
+        stateTransition.setCurrentState(ConnectorState.RUNNING);
         startCompleteFuture.complete(null);
     }
 
@@ -633,6 +549,6 @@ public class StandardConnectorNode implements ConnectorNode {
 
     @Override
     public String toString() {
-        return "StandardConnectorNode[id=" + identifier + ", name=" + name + ", state=" + currentState.get() + "]";
+        return "StandardConnectorNode[id=" + identifier + ", name=" + name + ", state=" + stateTransition.getCurrentState() + "]";
     }
 }

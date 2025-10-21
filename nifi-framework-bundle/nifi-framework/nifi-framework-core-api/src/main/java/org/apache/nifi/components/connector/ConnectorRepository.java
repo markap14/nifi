@@ -66,4 +66,13 @@ public interface ConnectorRepository {
     void finishUpdate(ConnectorNode connector) throws FlowUpdateException;
 
     void configureConnector(ConnectorNode connector, String stepName, List<PropertyGroupConfiguration> stepConfiguration) throws FlowUpdateException;
+
+    /**
+     * Creates a new ConnectorStateTransition instance for managing the lifecycle state of a connector.
+     *
+     * @param type the connector type
+     * @param id the connector identifier
+     * @return a new ConnectorStateTransition instance
+     */
+    ConnectorStateTransition createStateTransition(String type, String id);
 }

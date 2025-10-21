@@ -171,6 +171,7 @@ public class TestStandardConnectorNode {
     public void testMultipleStartCallsReturnCompletedFutures() throws Exception {
         final CountDownLatch startLatch = new CountDownLatch(1);
         final BlockingConnector blockingConnector = new BlockingConnector(startLatch, new CountDownLatch(0), new CountDownLatch(0));
+        final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("BlockingConnectorNode");
         final StandardConnectorNode connectorNode = new StandardConnectorNode(
             "blocking-connector-id",
             extensionManager,
@@ -179,7 +180,8 @@ public class TestStandardConnectorNode {
             createConnectorDetails(blockingConnector),
             "BlockingConnector",
             null,
-            new StandardConnectorConfigurationContext()
+            new StandardConnectorConfigurationContext(),
+            stateTransition
         );
 
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
@@ -262,6 +264,7 @@ public class TestStandardConnectorNode {
     public void testStartWhileStoppingQueuesStartFuture() throws Exception {
         final CountDownLatch stopLatch = new CountDownLatch(1);
         final BlockingConnector blockingConnector = new BlockingConnector(new CountDownLatch(0), stopLatch, new CountDownLatch(0));
+        final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("BlockingConnectorNode");
         final StandardConnectorNode connectorNode = new StandardConnectorNode(
             "blocking-connector-id",
             extensionManager,
@@ -270,7 +273,8 @@ public class TestStandardConnectorNode {
             createConnectorDetails(blockingConnector),
             "BlockingConnector",
             null,
-            new StandardConnectorConfigurationContext()
+            new StandardConnectorConfigurationContext(),
+            stateTransition
         );
 
         connectorNode.start(scheduler).get(5, TimeUnit.SECONDS);
@@ -300,6 +304,7 @@ public class TestStandardConnectorNode {
         // Use a slow-starting connector to test deletion during STARTING state
         final CountDownLatch startLatch = new CountDownLatch(1);
         final BlockingConnector blockingConnector = new BlockingConnector(startLatch, new CountDownLatch(0), new CountDownLatch(0));
+        final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("SlowStartingConnectorNode");
         final StandardConnectorNode slowNode = new StandardConnectorNode(
             "slow-starting-connector-id",
             extensionManager,
@@ -308,7 +313,8 @@ public class TestStandardConnectorNode {
             createConnectorDetails(blockingConnector),
             "SlowStartingConnector",
             null,
-            new StandardConnectorConfigurationContext()
+            new StandardConnectorConfigurationContext(),
+            stateTransition
         );
 
         // Start the connector - this will take time
@@ -371,6 +377,7 @@ public class TestStandardConnectorNode {
     public void testCannotSetConfigurationWhenStarting() throws Exception {
         final CountDownLatch startLatch = new CountDownLatch(1);
         final BlockingConnector blockingConnector = new BlockingConnector(startLatch, new CountDownLatch(0), new CountDownLatch(0));
+        final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("SlowStartingConnectorNode");
         final StandardConnectorNode slowNode = new StandardConnectorNode(
             "slow-starting-connector-id",
             extensionManager,
@@ -379,7 +386,8 @@ public class TestStandardConnectorNode {
             createConnectorDetails(blockingConnector),
             "SlowStartingConnector",
             null,
-            new StandardConnectorConfigurationContext()
+            new StandardConnectorConfigurationContext(),
+            stateTransition
         );
 
         final Future<Void> startFuture = slowNode.start(scheduler);
@@ -397,6 +405,7 @@ public class TestStandardConnectorNode {
     public void testCannotSetConfigurationWhenStopping() throws Exception {
         final CountDownLatch stopLatch = new CountDownLatch(1);
         final BlockingConnector blockingConnector = new BlockingConnector(new CountDownLatch(0), stopLatch, new CountDownLatch(0));
+        final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("SlowStoppingConnectorNode");
         final StandardConnectorNode connectorNode = new StandardConnectorNode(
             "slow-stopping-connector-id",
             extensionManager,
@@ -405,7 +414,8 @@ public class TestStandardConnectorNode {
             createConnectorDetails(blockingConnector),
             "SlowStoppingConnector",
             null,
-            new StandardConnectorConfigurationContext()
+            new StandardConnectorConfigurationContext(),
+            stateTransition
         );
 
         connectorNode.start(scheduler).get(5, TimeUnit.SECONDS);
@@ -518,13 +528,15 @@ public class TestStandardConnectorNode {
 
     private StandardConnectorNode createConnectorNode() {
         final SleepingConnector sleepingConnector = new SleepingConnector(Duration.ofMillis(1));
+        final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("TestConnectorNode");
         return new StandardConnectorNode("test-connector-id", extensionManager, null, managedProcessGroup,
-            createConnectorDetails(sleepingConnector), "TestConnector", null, new StandardConnectorConfigurationContext());
+            createConnectorDetails(sleepingConnector), "TestConnector", null, new StandardConnectorConfigurationContext(), stateTransition);
     }
 
     private StandardConnectorNode createConnectorNode(final Connector connector) {
+        final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("TestConnectorNode");
         return new StandardConnectorNode("test-connector-id", extensionManager, null, managedProcessGroup,
-            createConnectorDetails(connector), "TestConnector", null, new StandardConnectorConfigurationContext());
+            createConnectorDetails(connector), "TestConnector", null, new StandardConnectorConfigurationContext(), stateTransition);
     }
 
     private ConnectorDetails createConnectorDetails(final Connector connector) {

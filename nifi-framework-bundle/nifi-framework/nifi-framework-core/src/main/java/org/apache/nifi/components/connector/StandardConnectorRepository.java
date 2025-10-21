@@ -95,4 +95,10 @@ public class StandardConnectorRepository implements ConnectorRepository {
     public void configureConnector(final ConnectorNode connector, final String stepName, final List<PropertyGroupConfiguration> stepConfiguration) throws FlowUpdateException {
         connector.setConfiguration(stepName, stepConfiguration);
     }
+
+    @Override
+    public ConnectorStateTransition createStateTransition(final String type, final String id) {
+        final String componentDescription = "StandardConnectorNode[id=" + id + ", type=" + type + "]";
+        return new StandardConnectorStateTransition(componentDescription);
+    }
 }

@@ -29,6 +29,7 @@ import org.apache.nifi.components.ConfigurableComponent;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.connector.Connector;
 import org.apache.nifi.components.connector.ConnectorNode;
+import org.apache.nifi.components.connector.ConnectorStateTransition;
 import org.apache.nifi.components.connector.ProcessGroupFacadeFactory;
 import org.apache.nifi.components.connector.facades.standalone.ComponentContextProvider;
 import org.apache.nifi.components.connector.facades.standalone.StandaloneProcessGroupFacade;
@@ -781,6 +782,8 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
                 connectorLogger, extensionManager, flowController.getAssetManager());
         };
 
+        final ConnectorStateTransition stateTransition = flowController.getConnectorRepository().createStateTransition(type, id);
+
         final ConnectorNode connectorNode = new ExtensionBuilder()
             .identifier(id)
             .type(type)
@@ -789,6 +792,7 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
             .managedProcessGroup(managedRootGroup)
             .processGroupFacadeFactory(processGroupFacadeFactory)
             .flowController(flowController)
+            .connectorStateTransition(stateTransition)
             .buildConnector();
 
         // Set up logging for the connector
