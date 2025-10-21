@@ -79,7 +79,7 @@ public class StandaloneProcessorFacade implements ProcessorFacade {
 
     @Override
     public List<ValidationResult> validate(final Map<String, String> propertyValues) {
-        final ValidationContext validationContext = processorNode.createValidationContext(propertyValues, processorNode.getAnnotationData(), parameterContext, true);
+        final ValidationContext validationContext = componentContextProvider.createValidationContext(processorNode, propertyValues, parameterContext);
         final ValidationState validationState = processorNode.performValidation(validationContext);
 
         return switch (validationState.getStatus()) {

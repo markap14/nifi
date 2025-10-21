@@ -70,7 +70,7 @@ public interface ComponentNode extends ComponentAuthorizable {
     void verifyCanUpdateProperties(final Map<String, String> properties);
 
     ValidationContext createValidationContext(Map<String, String> propertyValues, String annotationData,
-        ParameterContext parameterContext, boolean validateConnections);
+        ParameterLookup parameterLookup, boolean validateConnections);
 
     /**
      * @return the Set of names of all Parameters that are referenced by this component

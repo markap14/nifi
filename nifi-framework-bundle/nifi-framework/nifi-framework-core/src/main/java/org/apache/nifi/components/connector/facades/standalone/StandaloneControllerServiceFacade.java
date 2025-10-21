@@ -80,8 +80,7 @@ public class StandaloneControllerServiceFacade implements ControllerServiceFacad
     // TODO: Refactor to avoid duplicate code with StandaloneProcessorFacade
     @Override
     public List<ValidationResult> validate(final Map<String, String> propertyValues) {
-        final ValidationContext validationContext = controllerServiceNode.createValidationContext(propertyValues, controllerServiceNode.getAnnotationData(),
-            parameterContext, true);
+        final ValidationContext validationContext = componentContextProvider.createValidationContext(controllerServiceNode, propertyValues, parameterContext);
         final ValidationState validationState = controllerServiceNode.performValidation(validationContext);
 
         return switch (validationState.getStatus()) {

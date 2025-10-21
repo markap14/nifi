@@ -475,7 +475,7 @@ public abstract class AbstractComponentNode implements ComponentNode {
 
     @Override
     public ValidationContext createValidationContext(final Map<String, String> propertyValues, final String annotationData,
-                final ParameterContext parameterContext, final boolean validateConnections) {
+                final ParameterLookup parameterLookup, final boolean validateConnections) {
 
         final PropertyConfigurationMapper configurationMapper = new PropertyConfigurationMapper();
         final Map<PropertyDescriptor, PropertyConfiguration> descriptorToRawValueMap = new LinkedHashMap<>();
@@ -486,7 +486,7 @@ public abstract class AbstractComponentNode implements ComponentNode {
         }
 
         return getValidationContextFactory().newValidationContext(descriptorToRawValueMap, annotationData, getProcessGroupIdentifier(), getIdentifier(),
-            parameterContext, validateConnections);
+            parameterLookup, validateConnections);
     }
 
     private static Map<PropertyDescriptor, PropertyConfiguration> createDescriptorToConfigMap(final Map<PropertyDescriptor, String> propertyValues) {

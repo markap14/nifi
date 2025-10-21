@@ -4,12 +4,15 @@
 
 package org.apache.nifi.connectors.kafkas3;
 
+import org.apache.nifi.annotation.documentation.CapabilityDescription;
+import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ConfigVerificationResult.Outcome;
 import org.apache.nifi.components.connector.AbstractConnector;
 import org.apache.nifi.components.connector.ConfigurationStep;
 import org.apache.nifi.components.connector.ConnectorConfigurationContext;
 import org.apache.nifi.components.connector.FlowUpdateException;
+import org.apache.nifi.components.connector.InvocationFailedException;
 import org.apache.nifi.components.connector.components.ControllerServiceFacade;
 import org.apache.nifi.components.connector.components.ProcessorFacade;
 import org.apache.nifi.components.connector.util.VersionedFlowUtils;
@@ -25,6 +28,9 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+@CapabilityDescription("Provides the ability to ingest data from Apache Kafka topics, merge it together into an object of reasonable " +
+                       "size, and write that data to Amazon S3.")
+@Tags({"kafka", "s3"})
 public class KafkaToS3 extends AbstractConnector {
 
     @Override
@@ -32,7 +38,7 @@ public class KafkaToS3 extends AbstractConnector {
         return List.of(
             KafkaConnectionStep.KAFKA_CONNECTION_STEP,
             KafkaTopicsStep.createConfigurationStep(getAvailableTopics()),
-            S3Step.S3_STEP
+            S3Step.createConfigurationStep(getPossibleS3Regions())
         );
     }
 
@@ -189,5 +195,20 @@ public class KafkaToS3 extends AbstractConnector {
             .filter(service -> service.getDefinition().getType().endsWith("Kafka3ConnectionService"))
             .findFirst()
             .orElseThrow();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> getPossibleS3Regions() {
+        final ProcessorFacade processorFacade = getInitializationContext().getRootGroup().getProcessors().stream()
+            .filter(proc -> proc.getDefinition().getType().endsWith("PutS3Object"))
+            .findFirst()
+            .orElseThrow();
+
+        try {
+            return (List<String>) processorFacade.invokeConnectorMethod("getAvailableRegions", Map.of());
+        } catch (final InvocationFailedException e) {
+            getLogger().error("Failed to obtain list of available S3 regions", e);
+            return Collections.emptyList();
+        }
     }
 }

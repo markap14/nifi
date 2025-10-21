@@ -24,6 +24,7 @@ import org.apache.nifi.authorization.resource.ResourceType;
 import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
+import org.apache.nifi.components.validation.DisabledServiceValidationResult;
 import org.apache.nifi.components.validation.ValidationState;
 import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.groups.ProcessGroup;
@@ -594,14 +595,23 @@ public class StandardConnectorNode implements ConnectorNode {
     @Override
     public ValidationState performValidation() {
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
-            final List<ValidationResult> results = getConnector().validate();
-            if (results == null || results.isEmpty()) {
+            final List<ValidationResult> allResults = getConnector().validate();
+            if (allResults == null) {
                 return new ValidationState(ValidationStatus.VALID, Collections.emptyList());
             }
 
-            final boolean allValid = results.stream().allMatch(ValidationResult::isValid);
-            final ValidationStatus status = allValid ? ValidationStatus.VALID : ValidationStatus.INVALID;
-            return new ValidationState(status, results);
+            // Filter out any results that are 'valid' and any results that are invalid due to the fact that a Controller Service is disabled,
+            // since these will not be relevant when started.
+            final List<ValidationResult> relevantResults = allResults.stream()
+                .filter(result -> !result.isValid())
+                .filter(DisabledServiceValidationResult::isMatch)
+                .toList();
+
+            if (relevantResults.isEmpty()) {
+                return new ValidationState(ValidationStatus.VALID, Collections.emptyList());
+            }
+
+            return new ValidationState(ValidationStatus.INVALID, relevantResults);
         }
     }
 

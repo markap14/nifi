@@ -49,30 +49,26 @@ public class KafkaTopicsStep {
         .allowableValues("Avro", "JSON")
         .build();
 
+    public static final ConnectorPropertyGroup KAFKA_TOPICS_GROUP = new ConnectorPropertyGroup.Builder()
+        .name("Kafka Topics Configuration")
+        .description("Properties for configuring Kafka topics consumption.")
+        .properties(List.of(
+            TOPIC_NAMES,
+            CONSUMER_GROUP_ID,
+            OFFSET_RESET,
+            KAFKA_DATA_FORMAT
+        ))
+        .build();
+
+    public static final ConfigurationStep KAFKA_TOPICS_STEP = new ConfigurationStep.Builder()
+        .name(STEP_NAME)
+        .description("Kafka topics to consume from." )
+        .propertyGroups(List.of(
+            KAFKA_TOPICS_GROUP
+        ))
+        .build();
 
     public static ConfigurationStep createConfigurationStep(final List<String> possibleTopics) {
-        final ConnectorPropertyDescriptor topicsDescriptor = new ConnectorPropertyDescriptor.Builder()
-            .from(TOPIC_NAMES)
-            .allowableValues(possibleTopics)
-            .build();
-
-        final ConnectorPropertyGroup kafkaTopicsGroup = new ConnectorPropertyGroup.Builder()
-            .name("Kafka Topics Configuration")
-            .description("Properties for configuring Kafka topics consumption.")
-            .properties(List.of(
-                topicsDescriptor,
-                CONSUMER_GROUP_ID,
-                OFFSET_RESET,
-                KAFKA_DATA_FORMAT
-            ))
-            .build();
-
-        return new ConfigurationStep.Builder()
-            .name(STEP_NAME)
-            .description("Kafka topics to consume from." )
-            .propertyGroups(List.of(
-                kafkaTopicsGroup
-            ))
-            .build();
+        return KAFKA_TOPICS_STEP.withAllowableValues(TOPIC_NAMES.getName(), TOPIC_NAMES.getName(), possibleTopics);
     }
 }

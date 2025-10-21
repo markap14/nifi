@@ -11,6 +11,8 @@ import org.apache.nifi.components.ConfigVerificationResult.Outcome;
 import org.apache.nifi.components.DescribedValue;
 import org.apache.nifi.components.state.StateManagerProvider;
 import org.apache.nifi.components.validation.StandardValidationTrigger;
+import org.apache.nifi.components.validation.ValidationState;
+import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.components.validation.ValidationTrigger;
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.connectable.Connection;
@@ -18,6 +20,7 @@ import org.apache.nifi.connectable.StandardConnection;
 import org.apache.nifi.connectors.kafkas3.KafkaConnectionStep;
 import org.apache.nifi.connectors.kafkas3.KafkaToS3;
 import org.apache.nifi.connectors.kafkas3.KafkaTopicsStep;
+import org.apache.nifi.connectors.kafkas3.S3Step;
 import org.apache.nifi.controller.FlowController;
 import org.apache.nifi.controller.GarbageCollectionLog;
 import org.apache.nifi.controller.MockStateManagerProvider;
@@ -30,13 +33,17 @@ import org.apache.nifi.controller.queue.LoadBalanceCompression;
 import org.apache.nifi.controller.queue.LoadBalanceStrategy;
 import org.apache.nifi.controller.queue.QueueSize;
 import org.apache.nifi.controller.repository.ContentRepository;
+import org.apache.nifi.controller.repository.CounterRepository;
+import org.apache.nifi.controller.repository.FileSystemRepository;
 import org.apache.nifi.controller.repository.FlowFileEventRepository;
 import org.apache.nifi.controller.repository.FlowFileRecord;
 import org.apache.nifi.controller.repository.FlowFileRepository;
 import org.apache.nifi.controller.scheduling.LifecycleStateManager;
 import org.apache.nifi.controller.scheduling.RepositoryContextFactory;
+import org.apache.nifi.controller.scheduling.SchedulingAgent;
 import org.apache.nifi.controller.scheduling.StandardLifecycleStateManager;
 import org.apache.nifi.controller.scheduling.StandardProcessScheduler;
+import org.apache.nifi.controller.scheduling.TimerDrivenSchedulingAgent;
 import org.apache.nifi.controller.service.ControllerServiceProvider;
 import org.apache.nifi.controller.service.StandardControllerServiceProvider;
 import org.apache.nifi.engine.FlowEngine;
@@ -52,6 +59,7 @@ import org.apache.nifi.parameter.ParameterContextManager;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.provenance.ProvenanceRepository;
 import org.apache.nifi.reporting.BulletinRepository;
+import org.apache.nifi.scheduling.SchedulingStrategy;
 import org.apache.nifi.stateless.bootstrap.StatelessBootstrap;
 import org.apache.nifi.util.NiFiProperties;
 import org.junit.jupiter.api.AfterEach;
@@ -69,8 +77,11 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static java.util.Objects.requireNonNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -86,6 +97,8 @@ import static org.mockito.Mockito.when;
 
 // TODO: Delete this.
 public class KafkaToS3IT {
+    private static final BundleCoordinate BUNDLE_COORDINATE = new BundleCoordinate("org.apache.nifi", "nifi-kafka-to-s3-nar", "2.6.0-SNAPSHOT");
+
     private final ScheduledExecutorService threadPool = Executors.newScheduledThreadPool(4);
     private StandardProcessScheduler processScheduler;
     private StandardFlowManager flowManager;
@@ -128,13 +141,14 @@ public class KafkaToS3IT {
         when(flowController.getStateManagerProvider()).thenReturn(stateManagerProvider);
         when(flowController.getReloadComponent()).thenReturn(reloadComponent);
 
-        final RepositoryContextFactory repoContextFactory = mock(RepositoryContextFactory.class);
+        final NiFiProperties nifiProperties = NiFiProperties.createBasicNiFiProperties("src/test/resources/conf/nifi.properties");
+
+        final ContentRepository contentRepo = new FileSystemRepository(nifiProperties);
         final FlowFileRepository flowFileRepo = mock(FlowFileRepository.class);
         final ProvenanceRepository provRepo = mock(ProvenanceRepository.class);
-        final ContentRepository contentRepo = mock(ContentRepository.class);
-        when(repoContextFactory.getFlowFileRepository()).thenReturn(flowFileRepo);
-        when(repoContextFactory.getProvenanceRepository()).thenReturn(provRepo);
-        when(repoContextFactory.getContentRepository()).thenReturn(contentRepo);
+        final FlowFileEventRepository flowFileEventRepo = mock(FlowFileEventRepository.class);
+        final CounterRepository counterRepo = mock(CounterRepository.class);
+        final RepositoryContextFactory repoContextFactory = new RepositoryContextFactory(contentRepo, flowFileRepo, flowFileEventRepo, counterRepo, provRepo, stateManagerProvider, 1L);
 
         when(flowController.getRepositoryContextFactory()).thenReturn(repoContextFactory);
         when(flowController.getGarbageCollectionLog()).thenReturn(mock(GarbageCollectionLog.class));
@@ -151,8 +165,6 @@ public class KafkaToS3IT {
             return createConnection(invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2), invocation.getArgument(3), invocation.getArgument(4));
         }).when(flowController).createConnection(anyString(), nullable(String.class), any(Connectable.class), any(Connectable.class), anyCollection());
 
-        final NiFiProperties nifiProperties = NiFiProperties.createBasicNiFiProperties("src/test/resources/conf/nifi.properties");
-
         final FlowFileEventRepository flowFileEventRepository = mock(FlowFileEventRepository.class);
         final ParameterContextManager parameterContextManager = mock(ParameterContextManager.class);
 
@@ -162,6 +174,9 @@ public class KafkaToS3IT {
             reloadComponent, stateManagerProvider, nifiProperties, lifecycleStateManager);
         when(flowController.getProcessScheduler()).thenReturn(processScheduler);
 
+        final FlowEngine flowEngine = new FlowEngine(10, "Timer-Driven Thread Pool");
+        final SchedulingAgent timerDrivenSchedulingAgent = new TimerDrivenSchedulingAgent(flowController, flowEngine, repoContextFactory, nifiProperties);
+        processScheduler.setSchedulingAgent(SchedulingStrategy.TIMER_DRIVEN, timerDrivenSchedulingAgent);
 
         final File assemblyLibDir = new File("../../../nifi-assembly/target/nifi-2.6.0-SNAPSHOT-bin/nifi-2.6.0-SNAPSHOT/lib");
         final ClassLoader systemClassLoader = StatelessBootstrap.createExtensionRootClassLoader(assemblyLibDir, ClassLoader.getSystemClassLoader());
@@ -245,7 +260,13 @@ public class KafkaToS3IT {
     }
 
     @Test
-    public void testCreate() throws FlowUpdateException, IOException, InterruptedException {
+    public void testCreate() {
+        final ConnectorNode connectorNode = flowManager.createConnector(KafkaToS3.class.getName(), "kafka-to-s3", BUNDLE_COORDINATE, true, true);
+        assertNotNull(connectorNode);
+    }
+
+    @Test
+    public void testKafkaVerification() throws FlowUpdateException, IOException, InterruptedException {
         createKafkaTopics("topic-1", "topic-2", "topic-3", "topic-4", "topic-5", "Z-topic", "an-important-topic");
 
         produceRecordsToTopic("topic-1",
@@ -263,17 +284,14 @@ public class KafkaToS3IT {
             "Final plaintext record"
         );
 
-        final BundleCoordinate bundleCoordinate = new BundleCoordinate("org.apache.nifi", "nifi-kafka-to-s3-nar", "2.6.0-SNAPSHOT");
-        final ConnectorNode connectorNode = flowManager.createConnector(KafkaToS3.class.getName(), "kafka-to-s3", bundleCoordinate, true, true);
+        final ConnectorNode connectorNode = flowManager.createConnector(KafkaToS3.class.getName(), "kafka-to-s3", BUNDLE_COORDINATE, true, true);
         assertNotNull(connectorNode);
-
-        final String saslBootstrapServers = "localhost:9093";
 
         connectorNode.prepareForUpdate(threadPool);
 
         // Configure connection step
         final PropertyGroupConfiguration serverGroup = new PropertyGroupConfiguration(KafkaConnectionStep.KAFKA_SERVER_GROUP.getName(), Map.of(
-            KafkaConnectionStep.KAFKA_BROKERS.getName(), saslBootstrapServers,
+            KafkaConnectionStep.KAFKA_BROKERS.getName(), "localhost:9093",
             KafkaConnectionStep.SECURITY_PROTOCOL.getName(), "SASL_PLAINTEXT",
             KafkaConnectionStep.SASL_MECHANISM.getName(), "PLAIN",
             KafkaConnectionStep.USERNAME.getName(), SCRAM_USERNAME,
@@ -328,6 +346,70 @@ public class KafkaToS3IT {
         assertTrue(invalidResult.getExplanation().contains("parse"), "Unexpected validation reason: " + invalidResult.getExplanation());
 
         connectorNode.finishUpdate(threadPool);
+    }
+
+    @Test
+    public void testFullFlow() throws IOException, InterruptedException, FlowUpdateException, ExecutionException, TimeoutException {
+        createKafkaTopics("story");
+
+        produceRecordsToTopic("story",
+            """
+            {"page": 1, "words": "Once upon a time, there was a NiFi developer." }""",
+            """
+            {"page": 2, "words": "The developer wanted to build a connector to move data from Kafka to S3." }""",
+            """
+            {"page": 3, "words": "After much effort, the connector was complete and worked flawlessly!" }""",
+            """
+            {"page": 4, "words": "The end." }"""
+        );
+
+        produceRecordsToTopic("an-important-topic",
+            "This is a plaintext message",
+            "Another important message",
+            "Final plaintext record"
+        );
+
+        final ConnectorNode connectorNode = flowManager.createConnector(KafkaToS3.class.getName(), "kafka-to-s3", BUNDLE_COORDINATE, true, true);
+        assertNotNull(connectorNode);
+
+        final PropertyGroupConfiguration serverGroup = new PropertyGroupConfiguration(KafkaConnectionStep.KAFKA_SERVER_GROUP.getName(), Map.of(
+            KafkaConnectionStep.KAFKA_BROKERS.getName(), "localhost:9093",
+            KafkaConnectionStep.SECURITY_PROTOCOL.getName(), "SASL_PLAINTEXT",
+            KafkaConnectionStep.SASL_MECHANISM.getName(), "PLAIN",
+            KafkaConnectionStep.USERNAME.getName(), SCRAM_USERNAME,
+            KafkaConnectionStep.PASSWORD.getName(), SCRAM_PASSWORD
+        ));
+
+        final PropertyGroupConfiguration topicGroupConfig = new PropertyGroupConfiguration(KafkaTopicsStep.KAFKA_TOPICS_GROUP.getName(), Map.of(
+            KafkaTopicsStep.TOPIC_NAMES.getName(), "story",
+            KafkaTopicsStep.CONSUMER_GROUP_ID.getName(), "kafka-to-s3-test-group",
+            KafkaTopicsStep.OFFSET_RESET.getName(), "earliest",
+            KafkaTopicsStep.KAFKA_DATA_FORMAT.getName(), "JSON"
+        ));
+
+        final PropertyGroupConfiguration s3DestinationGroup = new PropertyGroupConfiguration(S3Step.S3_DESTINATION_GROUP.getName(), Map.of(
+            S3Step.S3_REGION.getName(), "us-west-2",
+            S3Step.S3_DATA_FORMAT.getName(), "Avro",
+            S3Step.S3_BUCKET.getName(), "mpayne-test-bucket"
+        ));
+        final PropertyGroupConfiguration s3AuthGroup = new PropertyGroupConfiguration(S3Step.S3_DESTINATION_GROUP.getName(), Map.of(
+            S3Step.S3_AUTHENTICATION_STRATEGY.getName(), S3Step.DEFAULT_CREDENTIALS
+        ));
+        final PropertyGroupConfiguration mergeGroup = new PropertyGroupConfiguration(S3Step.MERGE_GROUP.getName(), Map.of(
+            S3Step.TARGET_OBJECT_SIZE.getName(), "1 MB",
+            S3Step.MERGE_LATENCY.getName(), "5 sec"
+        ));
+
+        connectorNode.prepareForUpdate(threadPool);
+        connectorNode.setConfiguration(KafkaConnectionStep.STEP_NAME, List.of(serverGroup));
+        connectorNode.setConfiguration(KafkaTopicsStep.STEP_NAME, List.of(topicGroupConfig));
+        connectorNode.setConfiguration(S3Step.S3_STEP.getName(), List.of(s3DestinationGroup, s3AuthGroup, mergeGroup));
+        connectorNode.finishUpdate(threadPool);
+
+        final ValidationState validationState = connectorNode.performValidation();
+        assertEquals(ValidationStatus.VALID, validationState.getStatus(), "Connector is invalid due to: " + validationState.getValidationErrors());
+
+        connectorNode.start(threadPool).get(1, TimeUnit.MINUTES);
     }
 
     private Connection createConnection(final String id, final String name, final Connectable source, final Connectable destination, final Collection<String> relationshipNames) {

@@ -270,18 +270,23 @@ public class VersionedFlowUtils {
             }
         }
 
-        boolean referencesAdded = false;
-        do {
+        while (true) {
+            final Set<VersionedControllerService> newlyAddedServices = new HashSet<>();
+
             for (final VersionedControllerService service : referencedServices) {
                 for (final String propertyValue : service.getProperties().values()) {
                     final VersionedControllerService referencedService = serviceMap.get(propertyValue);
                     if (referencedService != null && !referencedServices.contains(referencedService)) {
-                        referencedServices.add(referencedService);
-                        referencesAdded = true;
+                        newlyAddedServices.add(referencedService);
                     }
                 }
             }
-        } while (referencesAdded);
+
+            referencedServices.addAll(newlyAddedServices);
+            if (newlyAddedServices.isEmpty()) {
+                break;
+            }
+        }
 
         for (final VersionedProcessGroup childGroup : group.getProcessGroups()) {
             collectReferencedControllerServices(childGroup, referencedServices);

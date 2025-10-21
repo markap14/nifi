@@ -180,9 +180,9 @@ public final class FlowAnalyzingRegistryClientNode implements FlowRegistryClient
 
     @Override
     public ValidationContext createValidationContext(final Map<String, String> propertyValues, final String annotationData,
-            final ParameterContext parameterContext, final boolean validateConnections) {
+            final ParameterLookup parameterLookup, final boolean validateConnections) {
 
-        return node.createValidationContext(propertyValues, annotationData, parameterContext, validateConnections);
+        return node.createValidationContext(propertyValues, annotationData, parameterLookup, validateConnections);
     }
 
     @Override

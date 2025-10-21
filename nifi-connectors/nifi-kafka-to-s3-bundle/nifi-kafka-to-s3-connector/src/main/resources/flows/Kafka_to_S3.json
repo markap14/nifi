@@ -27,16 +27,16 @@
           "version": "2.6.0-SNAPSHOT"
         },
         "properties": {
-          "max-bin-age": null,
+          "max-bin-age": "#{Merge Latency}",
           "correlation-attribute-name": "kafka.topic",
           "Attribute Strategy": "Keep Only Common Attributes",
           "min-records": "1",
-          "max-bin-size": null,
+          "max-bin-size": "#{Maximum Object size}",
           "record-writer": "d7380ae4-2807-3aa2-898c-56465ee50d7a",
           "merge-strategy": "Bin-Packing Algorithm",
           "record-reader": "919b2a35-4bc7-380c-b592-6ad2ffffbed5",
           "max-records": "1000000000",
-          "min-bin-size": "0 B",
+          "min-bin-size": "#{Target Object Size}",
           "max.bin.count": "10"
         },
         "propertyDescriptors": {
@@ -128,7 +128,8 @@
         "runDurationMillis": 0,
         "concurrentlySchedulableTaskCount": 1,
         "autoTerminatedRelationships": [
-          "original"
+          "original",
+          "failure"
         ],
         "scheduledState": "ENABLED",
         "retryCount": 10000,
@@ -892,7 +893,7 @@
           "version": "2.6.0-SNAPSHOT"
         },
         "properties": {
-          "schema-reference-reader": null,
+          "schema-reference-reader": "ecba6fe5-6beb-3b68-bad9-163a3f14c4c8",
           "schema-branch": null,
           "Max String Length": "20 MB",
           "schema-application-strategy": "SELECTED_PART",
@@ -901,10 +902,10 @@
           "Date Format": null,
           "schema-name": "${schema.name}",
           "starting-field-strategy": "ROOT_NODE",
-          "schema-registry": null,
+          "schema-registry": "34d29160-0744-373c-a1c7-39c548e7e6b1",
           "starting-field-name": null,
           "Time Format": null,
-          "schema-access-strategy": "infer-schema",
+          "schema-access-strategy": "schema-reference-reader",
           "schema-version": null,
           "schema-text": "${avro.schema}",
           "Allow Comments": "false"
@@ -2018,6 +2019,13 @@
           "value": "http://localhost:8081"
         },
         {
+          "name": "Merge Latency",
+          "description": "",
+          "sensitive": false,
+          "provided": false,
+          "value": "10 mins"
+        },
+        {
           "name": "Kafka Security Protocol",
           "description": "",
           "sensitive": false,
@@ -2030,6 +2038,13 @@
           "sensitive": false,
           "provided": false,
           "value": "us-west-2"
+        },
+        {
+          "name": "Maximum Object size",
+          "description": "",
+          "sensitive": false,
+          "provided": false,
+          "value": "300 MB"
         },
         {
           "name": "Kafka SASL Password",
@@ -2067,6 +2082,13 @@
           "description": "",
           "sensitive": true,
           "provided": false
+        },
+        {
+          "name": "Target Object Size",
+          "description": "",
+          "sensitive": false,
+          "provided": false,
+          "value": "256 MB"
         },
         {
           "name": "Topic Names",

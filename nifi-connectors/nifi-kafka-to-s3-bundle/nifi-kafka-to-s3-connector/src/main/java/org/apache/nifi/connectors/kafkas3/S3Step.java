@@ -14,6 +14,10 @@ import java.util.List;
 
 public class S3Step {
 
+    public static final String ACCESS_KEY_ID_SECRET_KEY = "Access Key ID and Secret Key";
+    public static final String DEFAULT_CREDENTIALS = "Default AWS Credentials";
+
+
     public static final ConnectorPropertyDescriptor S3_BUCKET = new ConnectorPropertyDescriptor.Builder()
         .name("S3 Bucket")
         .description("The name of the S3 bucket to write data to.")
@@ -23,7 +27,6 @@ public class S3Step {
     public static final ConnectorPropertyDescriptor S3_REGION = new ConnectorPropertyDescriptor.Builder()
         .name("S3 Region")
         .description("The AWS region where the S3 bucket is located.")
-        // TODO - Use Connector Method to get list of regions
         .required(true)
         .build();
 
@@ -42,11 +45,40 @@ public class S3Step {
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
         .build();
 
+    public static final ConnectorPropertyDescriptor TARGET_OBJECT_SIZE = new ConnectorPropertyDescriptor.Builder()
+        .name("Target Object Size")
+        .description("The target size for each object written to S3. The connector will attempt to " +
+                     "combine messages until this size is reached before writing an object to S3. Note that this size is approximate " +
+                     "and may vary from object to object.")
+        .required(true)
+        .defaultValue("256 MB")
+        .addValidator(StandardValidators.DATA_SIZE_VALIDATOR)
+        .build();
+
+    public static final ConnectorPropertyDescriptor MERGE_LATENCY = new ConnectorPropertyDescriptor.Builder()
+        .name("Merge Latency")
+        .description("The maximum amount of time to wait while merging messages before writing an object to S3. " +
+                     "If this time is reached before the target object size is met, the current set of merged messages " +
+                     "will be written to S3.")
+        .required(true)
+        .defaultValue("5 min")
+        .addValidator(StandardValidators.TIME_PERIOD_VALIDATOR)
+        .build();
+
+    public static final ConnectorPropertyDescriptor S3_AUTHENTICATION_STRATEGY = new ConnectorPropertyDescriptor.Builder()
+        .name("S3 Authentication Strategy")
+        .description("The authentication strategy to use when connecting to S3.")
+        .required(true)
+        .defaultValue(ACCESS_KEY_ID_SECRET_KEY)
+        .allowableValues(ACCESS_KEY_ID_SECRET_KEY, DEFAULT_CREDENTIALS)
+        .build();
+
     public static final ConnectorPropertyDescriptor S3_ACCESS_KEY_ID = new ConnectorPropertyDescriptor.Builder()
         .name("S3 Access Key ID")
         .description("The AWS Access Key ID used to authenticate to S3.")
         .required(true)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+        .dependsOn(S3_AUTHENTICATION_STRATEGY, ACCESS_KEY_ID_SECRET_KEY)
         .build();
 
     public static final ConnectorPropertyDescriptor S3_SECRET_ACCESS_KEY = new ConnectorPropertyDescriptor.Builder()
@@ -55,6 +87,7 @@ public class S3Step {
         .required(true)
         .type(PropertyType.PASSWORD)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+        .dependsOn(S3_AUTHENTICATION_STRATEGY, ACCESS_KEY_ID_SECRET_KEY)
         .build();
 
 
@@ -73,8 +106,18 @@ public class S3Step {
         .name("S3 Credentials")
         .description("Properties required to authenticate to S3.")
         .properties(List.of(
+            S3_AUTHENTICATION_STRATEGY,
             S3_ACCESS_KEY_ID,
             S3_SECRET_ACCESS_KEY
+        ))
+        .build();
+
+    public static final ConnectorPropertyGroup MERGE_GROUP = new ConnectorPropertyGroup.Builder()
+        .name("Merge Configuration")
+        .description("Configuration for how data should be merged together before being persisted to S3.")
+        .properties(List.of(
+            TARGET_OBJECT_SIZE,
+            MERGE_LATENCY
         ))
         .build();
 
@@ -83,7 +126,12 @@ public class S3Step {
         .description("Configure connection to S3 and target bucket details.")
         .propertyGroups(List.of(
             S3_DESTINATION_GROUP,
+            MERGE_GROUP,
             S3_CREDENTIALS_GROUP
         ))
         .build();
+
+    public static ConfigurationStep createConfigurationStep(final List<String> possibleRegions) {
+        return S3_STEP.withAllowableValues(S3_DESTINATION_GROUP.getName(), S3_REGION.getName(), possibleRegions);
+    }
 }

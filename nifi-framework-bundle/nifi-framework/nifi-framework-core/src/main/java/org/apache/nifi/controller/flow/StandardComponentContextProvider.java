@@ -5,6 +5,7 @@
 package org.apache.nifi.controller.flow;
 
 import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.components.ValidationContext;
 import org.apache.nifi.components.connector.facades.standalone.ComponentContextProvider;
 import org.apache.nifi.components.state.StateManager;
 import org.apache.nifi.controller.ComponentNode;
@@ -43,6 +44,12 @@ public class StandardComponentContextProvider implements ComponentContextProvide
         return new StandardProcessContext(processorNode, serviceReferencedProperties, null, parameterLookup, flowController.getControllerServiceProvider(), stateManager, taskTermination, flowController);
     }
 
+    @Override
+    public ValidationContext createValidationContext(final ProcessorNode processorNode, final Map<String, String> properties, final ParameterLookup parameterLookup) {
+        final Map<String, String> serviceReferencedProperties = resolveServiceReferences(processorNode, processorNode.getProcessGroup(), properties);
+        return processorNode.createValidationContext(serviceReferencedProperties, processorNode.getAnnotationData(), parameterLookup, true);
+    }
+
     private Map<String, String> resolveServiceReferences(final ComponentNode processorNode, final ProcessGroup processGroup, final Map<String, String> propertiesOverride) {
         final Map<String, String> versionedToInstanceIds = processGroup.findAllControllerServices().stream()
             .filter(cs -> cs.getVersionedComponentId().isPresent())
@@ -74,5 +81,11 @@ public class StandardComponentContextProvider implements ComponentContextProvide
     public ConfigurationContext createConfigurationContext(final ControllerServiceNode serviceNode, final Map<String, String> propertiesOverride, final ParameterLookup parameterLookup) {
         final Map<String, String> resolvedProperties = resolveServiceReferences(serviceNode, serviceNode.getProcessGroup(), propertiesOverride);
         return new StandardConfigurationContext(serviceNode, resolvedProperties, null, parameterLookup, flowController.getControllerServiceProvider(), null);
+    }
+
+    @Override
+    public ValidationContext createValidationContext(final ControllerServiceNode serviceNode, final Map<String, String> properties, final ParameterLookup parameterLookup) {
+        final Map<String, String> resolvedProperties = resolveServiceReferences(serviceNode, serviceNode.getProcessGroup(), properties);
+        return serviceNode.createValidationContext(resolvedProperties, serviceNode.getAnnotationData(), parameterLookup, true);
     }
 }

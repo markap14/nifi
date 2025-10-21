@@ -10,6 +10,7 @@ import org.apache.nifi.components.connector.util.VersionedFlowUtils;
 import org.apache.nifi.flow.VersionedControllerService;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.flow.VersionedProcessGroup;
+import org.apache.nifi.processor.DataUnit;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -158,10 +159,31 @@ public class KafkaToS3FlowBuilder {
         final String prefix = configContext.getProperty(S3Step.S3_STEP, S3Step.S3_PREFIX).getValue();
         VersionedFlowUtils.setParameterValue(externalFlow, "S3 Prefix", prefix);
 
-        final String accessKey = configContext.getProperty(S3Step.S3_STEP, S3Step.S3_ACCESS_KEY_ID).getValue();
-        VersionedFlowUtils.setParameterValue(externalFlow, "S3 Access Key ID", accessKey);
+        final String authStrategy = configContext.getProperty(S3Step.S3_STEP, S3Step.S3_AUTHENTICATION_STRATEGY).getValue();
+        if (authStrategy.equals(S3Step.DEFAULT_CREDENTIALS)) {
+            final VersionedControllerService credentialsService = externalFlow.getFlowContents().getControllerServices().stream()
+                .filter(service -> service.getType().endsWith("AWSCredentialsProviderControllerService"))
+                .findFirst()
+                .orElseThrow();
 
-        final String secretKey = configContext.getProperty(S3Step.S3_STEP, S3Step.S3_SECRET_ACCESS_KEY).getValue();
-        VersionedFlowUtils.setParameterValue(externalFlow, "S3 Secret Access Key", secretKey);
+            credentialsService.setProperties(Map.of("default-credentials", "true"));
+        } else {
+            final String accessKey = configContext.getProperty(S3Step.S3_STEP, S3Step.S3_ACCESS_KEY_ID).getValue();
+            VersionedFlowUtils.setParameterValue(externalFlow, "S3 Access Key ID", accessKey);
+
+            final String secretKey = configContext.getProperty(S3Step.S3_STEP, S3Step.S3_SECRET_ACCESS_KEY).getValue();
+            VersionedFlowUtils.setParameterValue(externalFlow, "S3 Secret Access Key", secretKey);
+        }
+
+        final long mergeBytes = configContext.getProperty(S3Step.S3_STEP, S3Step.TARGET_OBJECT_SIZE).asDataSize(DataUnit.B).longValue();
+        final String mergeSize = configContext.getProperty(S3Step.S3_STEP, S3Step.TARGET_OBJECT_SIZE).getValue();
+        VersionedFlowUtils.setParameterValue(externalFlow, "Target Object Size", mergeSize);
+
+        // Max Bin size will be either 10% more than target size or target size + 100MB, whichever is smaller
+        final long maxBinSize = (long) Math.min(mergeBytes + 100_000_000, mergeBytes * 1.1D);
+        VersionedFlowUtils.setParameterValue(externalFlow, "Maximum Object Size", maxBinSize + " B");
+
+        final String mergeLatency = configContext.getProperty(S3Step.S3_STEP, S3Step.MERGE_LATENCY).getValue();
+        VersionedFlowUtils.setParameterValue(externalFlow, "Merge Latency", mergeLatency);
     }
 }
