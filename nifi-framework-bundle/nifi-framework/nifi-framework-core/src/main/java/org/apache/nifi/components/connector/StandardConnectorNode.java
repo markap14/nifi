@@ -63,7 +63,6 @@ public class StandardConnectorNode implements ConnectorNode {
     private final AtomicReference<ConnectorState> updateResumeState = new AtomicReference<>(null);
 
     private volatile String name;
-    private volatile String description;
     private volatile boolean performValidation = true;
 
 
@@ -91,16 +90,6 @@ public class StandardConnectorNode implements ConnectorNode {
     @Override
     public void setName(final String name) {
         this.name = name;
-    }
-
-    @Override
-    public String getDescription() {
-        return description;
-    }
-
-    @Override
-    public void setDescription(final String description) {
-        this.description = description;
     }
 
     @Override

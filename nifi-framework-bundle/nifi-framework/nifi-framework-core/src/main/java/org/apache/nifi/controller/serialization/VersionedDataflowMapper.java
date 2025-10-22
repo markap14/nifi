@@ -17,6 +17,7 @@
 
 package org.apache.nifi.controller.serialization;
 
+import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.connectable.Port;
 import org.apache.nifi.controller.FlowAnalysisRuleNode;
 import org.apache.nifi.controller.FlowController;
@@ -25,6 +26,7 @@ import org.apache.nifi.controller.ProcessorNode;
 import org.apache.nifi.controller.ReportingTaskNode;
 import org.apache.nifi.controller.flow.VersionedDataflow;
 import org.apache.nifi.controller.flow.VersionedFlowEncodingVersion;
+import org.apache.nifi.flow.VersionedConnector;
 import org.apache.nifi.flow.VersionedFlowAnalysisRule;
 import org.apache.nifi.flow.VersionedFlowRegistryClient;
 import org.apache.nifi.controller.service.ControllerServiceNode;
@@ -87,9 +89,21 @@ public class VersionedDataflowMapper {
         dataflow.setReportingTasks(mapReportingTasks());
         dataflow.setFlowAnalysisRules(mapFlowAnalysisRules());
         dataflow.setParameterProviders(mapParameterProviders());
+        dataflow.setConnectors(mapConnectors());
         dataflow.setRootGroup(mapRootGroup());
 
         return dataflow;
+    }
+
+    private List<VersionedConnector> mapConnectors() {
+        final List<VersionedConnector> connectors = new ArrayList<>();
+
+        for (final ConnectorNode connectorNode : flowController.getConnectorRepository().getConnectors()) {
+            final VersionedConnector versionedConnector = flowMapper.mapConnector(connectorNode);
+            connectors.add(versionedConnector);
+        }
+
+        return connectors;
     }
 
     private List<VersionedControllerService> mapControllerServices() {

@@ -22,6 +22,12 @@ import org.apache.nifi.asset.Asset;
 import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.listen.ListenPortDefinition;
+import org.apache.nifi.components.connector.ConfigurationStepConfiguration;
+import org.apache.nifi.components.connector.ConnectorConfiguration;
+import org.apache.nifi.components.connector.ConnectorNode;
+import org.apache.nifi.components.connector.ConnectorState;
+import org.apache.nifi.components.connector.FlowUpdateException;
+import org.apache.nifi.components.connector.PropertyGroupConfiguration;
 import org.apache.nifi.components.resource.ResourceCardinality;
 import org.apache.nifi.components.resource.ResourceDefinition;
 import org.apache.nifi.connectable.Connectable;
@@ -53,7 +59,10 @@ import org.apache.nifi.flow.ParameterProviderReference;
 import org.apache.nifi.flow.PortType;
 import org.apache.nifi.flow.Position;
 import org.apache.nifi.flow.VersionedAsset;
+import org.apache.nifi.flow.VersionedConfigurationStep;
 import org.apache.nifi.flow.VersionedConnection;
+import org.apache.nifi.flow.VersionedConnector;
+import org.apache.nifi.flow.VersionedConnectorPropertyGroup;
 import org.apache.nifi.flow.VersionedControllerService;
 import org.apache.nifi.flow.VersionedFlowAnalysisRule;
 import org.apache.nifi.flow.VersionedFlowCoordinates;
@@ -1020,5 +1029,53 @@ public class VersionedComponentFlowMapper {
          return scheduledState == ScheduledState.DISABLED
                  ? org.apache.nifi.flow.ScheduledState.DISABLED
                  : org.apache.nifi.flow.ScheduledState.ENABLED;
+    }
+
+    public VersionedConnector mapConnector(final ConnectorNode connectorNode) {
+        final VersionedConnector versionedConnector = new VersionedConnector();
+        versionedConnector.setInstanceIdentifier(connectorNode.getIdentifier());
+        versionedConnector.setName(connectorNode.getName());
+        versionedConnector.setScheduledState(mapConnectorState(connectorNode.getDesiredState()));
+        versionedConnector.setType(connectorNode.getComponentType());
+        versionedConnector.setBundle(mapBundle(connectorNode.getBundleCoordinate()));
+
+        try {
+            final ConnectorConfiguration configuration = connectorNode.getConfiguration();
+            final List<VersionedConfigurationStep> configurationSteps = new ArrayList<>();
+
+            for (final ConfigurationStepConfiguration stepConfiguration : configuration.getConfigurationStepConfigurations()) {
+                final VersionedConfigurationStep versionedConfigurationStep = new VersionedConfigurationStep();
+                versionedConfigurationStep.setName(stepConfiguration.getConfigurationStepName());
+                configurationSteps.add(versionedConfigurationStep);
+
+                final List<VersionedConnectorPropertyGroup> propertyGroups = new ArrayList<>();
+                versionedConfigurationStep.setPropertyGroups(propertyGroups);
+
+                for (final PropertyGroupConfiguration groupConfiguration : stepConfiguration.getPropertyGroupConfigurations()) {
+                    final VersionedConnectorPropertyGroup versionedGroup = new VersionedConnectorPropertyGroup();
+                    versionedGroup.setName(groupConfiguration.getPropertyGroupName());
+                    versionedGroup.setProperties(groupConfiguration.getPropertyValues());
+                    propertyGroups.add(versionedGroup);
+                }
+            }
+
+            versionedConnector.setConfigurationSteps(configurationSteps);
+        } catch (final FlowUpdateException e) {
+            throw new RuntimeException("Failed to retrieve configuration for connector " + connectorNode, e);
+        }
+
+        return versionedConnector;
+    }
+
+    private org.apache.nifi.flow.ScheduledState mapConnectorState(final ConnectorState connectorState) {
+        if (connectorState == null) {
+            return null;
+        }
+
+        return switch (connectorState) {
+            case DISABLED -> org.apache.nifi.flow.ScheduledState.DISABLED;
+            case RUNNING, STARTING -> org.apache.nifi.flow.ScheduledState.RUNNING;
+            default -> org.apache.nifi.flow.ScheduledState.ENABLED;
+        };
     }
 }

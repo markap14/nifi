@@ -34,9 +34,7 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
 
     String getName();
 
-    String getDescription();
-
-    ConnectorConfiguration getConfiguration() throws FlowUpdateException;
+    ConnectorConfiguration getConfiguration();
 
     ConnectorState getCurrentState();
 
@@ -113,12 +111,6 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
      * @param name the Connector's name
      */
     void setName(String name);
-
-    /**
-     * Sets the description of the Connector. This method should only be invoked via the ConnectorRepository.
-     * @param description the Connector's description
-     */
-    void setDescription(String description);
 
     /**
      * Performs validation logic that is defined by the Connector.
