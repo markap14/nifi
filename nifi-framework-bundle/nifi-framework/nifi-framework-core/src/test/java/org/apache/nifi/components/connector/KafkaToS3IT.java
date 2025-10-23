@@ -6,6 +6,7 @@ package org.apache.nifi.components.connector;
 
 import org.apache.nifi.bundle.Bundle;
 import org.apache.nifi.bundle.BundleCoordinate;
+import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ConfigVerificationResult.Outcome;
 import org.apache.nifi.components.DescribedValue;
@@ -87,6 +88,7 @@ import java.util.concurrent.TimeoutException;
 import static java.util.Objects.requireNonNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
@@ -324,8 +326,12 @@ public class KafkaToS3IT {
         assertEquals("Topic Names", topicNamesDescriptor.getName());
 
         final List<DescribedValue> allowedTopicValues = topicNamesDescriptor.getAllowableValues();
-        assertNotNull(allowedTopicValues);
-        final List<String> topicNames = allowedTopicValues.stream().map(DescribedValue::getValue).toList();
+        assertNull(allowedTopicValues);
+        assertTrue(topicNamesDescriptor.isAllowableValuesFetchable());
+
+        final List<AllowableValue> fetchedAllowedTopicValues = connectorNode.fetchAllowableValues(KafkaTopicsStep.STEP_NAME, topicsGroup.getName(), topicNamesDescriptor.getName());
+        assertNotNull(fetchedAllowedTopicValues);
+        final List<String> topicNames = fetchedAllowedTopicValues.stream().map(DescribedValue::getValue).toList();
         assertEquals(List.of("an-important-topic", "topic-1", "topic-2", "topic-3", "topic-4", "topic-5", "Z-topic"), topicNames);
 
         // Create configuration to point to "topic-1" topic.

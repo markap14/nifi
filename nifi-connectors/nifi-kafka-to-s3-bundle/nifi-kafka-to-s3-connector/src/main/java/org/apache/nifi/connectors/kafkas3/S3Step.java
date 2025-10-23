@@ -13,7 +13,7 @@ import org.apache.nifi.processor.util.StandardValidators;
 import java.util.List;
 
 public class S3Step {
-
+    public static final String S3_STEP_NAME = "S3 Configuration";
     public static final String ACCESS_KEY_ID_SECRET_KEY = "Access Key ID and Secret Key";
     public static final String DEFAULT_CREDENTIALS = "Default AWS Credentials";
 
@@ -27,6 +27,7 @@ public class S3Step {
     public static final ConnectorPropertyDescriptor S3_REGION = new ConnectorPropertyDescriptor.Builder()
         .name("S3 Region")
         .description("The AWS region where the S3 bucket is located.")
+        .allowableValuesFetchable(true)
         .required(true)
         .build();
 
@@ -122,7 +123,7 @@ public class S3Step {
         .build();
 
     public static final ConfigurationStep S3_STEP = new ConfigurationStep.Builder()
-        .name("S3 Configuration")
+        .name(S3_STEP_NAME)
         .description("Configure connection to S3 and target bucket details.")
         .propertyGroups(List.of(
             S3_DESTINATION_GROUP,
@@ -130,8 +131,4 @@ public class S3Step {
             S3_CREDENTIALS_GROUP
         ))
         .build();
-
-    public static ConfigurationStep createConfigurationStep(final List<String> possibleRegions) {
-        return S3_STEP.withAllowableValues(S3_DESTINATION_GROUP.getName(), S3_REGION.getName(), possibleRegions);
-    }
 }

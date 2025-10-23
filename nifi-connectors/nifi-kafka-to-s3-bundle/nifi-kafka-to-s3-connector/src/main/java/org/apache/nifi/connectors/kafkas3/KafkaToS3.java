@@ -6,6 +6,7 @@ package org.apache.nifi.connectors.kafkas3;
 
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
+import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ConfigVerificationResult.Outcome;
 import org.apache.nifi.components.connector.AbstractConnector;
@@ -14,8 +15,6 @@ import org.apache.nifi.components.connector.ConnectorConfigurationContext;
 import org.apache.nifi.components.connector.FlowUpdateException;
 import org.apache.nifi.components.connector.InvocationFailedException;
 import org.apache.nifi.components.connector.components.ControllerServiceFacade;
-import org.apache.nifi.components.connector.components.ControllerServiceReferenceHierarchy;
-import org.apache.nifi.components.connector.components.ControllerServiceReferenceScope;
 import org.apache.nifi.components.connector.components.ProcessorFacade;
 import org.apache.nifi.components.connector.util.VersionedFlowUtils;
 import org.apache.nifi.flow.VersionedControllerService;
@@ -39,8 +38,8 @@ public class KafkaToS3 extends AbstractConnector {
     public List<ConfigurationStep> getConfigurationSteps() {
         return List.of(
             KafkaConnectionStep.KAFKA_CONNECTION_STEP,
-            KafkaTopicsStep.createConfigurationStep(getAvailableTopics()),
-            S3Step.createConfigurationStep(getPossibleS3Regions())
+            KafkaTopicsStep.KAFKA_TOPICS_STEP,
+            S3Step.S3_STEP
         );
     }
 
@@ -52,7 +51,7 @@ public class KafkaToS3 extends AbstractConnector {
     }
 
     @Override
-    public void onConfigurationStepConfigured(final String stepName) throws FlowUpdateException {
+    public void onStepConfigured(final String stepName) throws FlowUpdateException {
         final VersionedExternalFlow flow = buildFlow(getInitializationContext().getConfigurationContext());
         getInitializationContext().updateFlow(flow);
     }
@@ -125,7 +124,6 @@ public class KafkaToS3 extends AbstractConnector {
     }
 
 
-    @SuppressWarnings("unchecked")
     private List<ConfigVerificationResult> verifyTopicsExists(ConnectorConfigurationContext configurationContext) {
         final List<String> topicsAvailable;
         try {
@@ -180,6 +178,25 @@ public class KafkaToS3 extends AbstractConnector {
     private VersionedExternalFlow buildFlow(final ConnectorConfigurationContext configurationContext) {
         final KafkaToS3FlowBuilder flowBuilder = new KafkaToS3FlowBuilder(configurationContext);
         return flowBuilder.buildFlow();
+    }
+
+    @Override
+    public List<AllowableValue> fetchAllAllowableValues(final String stepName, final String groupName, final String propertyName) {
+        if (stepName.equals(KafkaTopicsStep.STEP_NAME) && propertyName.equals(KafkaTopicsStep.TOPIC_NAMES.getName())) {
+            return createAllowableValues(getAvailableTopics());
+        } else if (stepName.equals(S3Step.S3_STEP_NAME) && propertyName.equals(S3Step.S3_REGION.getName())) {
+            return createAllowableValues(getPossibleS3Regions());
+        }
+
+        return super.fetchAllowableValues(stepName, groupName, propertyName);
+    }
+
+    private List<AllowableValue> createAllowableValues(final List<String> values) {
+        return values.stream().map(this::createAllowableValue).collect(Collectors.toList());
+    }
+
+    private AllowableValue createAllowableValue(final String value) {
+        return new AllowableValue(value, value, value);
     }
 
     @SuppressWarnings("unchecked")

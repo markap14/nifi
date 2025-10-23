@@ -22,6 +22,7 @@ import org.apache.nifi.authorization.resource.Authorizable;
 import org.apache.nifi.authorization.resource.ResourceFactory;
 import org.apache.nifi.authorization.resource.ResourceType;
 import org.apache.nifi.bundle.BundleCoordinate;
+import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.validation.DisabledServiceValidationResult;
@@ -417,6 +418,20 @@ public class StandardConnectorNode implements ConnectorNode {
     @Override
     public BundleCoordinate getBundleCoordinate() {
         return bundleCoordinate;
+    }
+
+    @Override
+    public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName) {
+        try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
+            return getConnector().fetchAllowableValues(stepName, groupName, propertyName);
+        }
+    }
+
+    @Override
+    public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName, final String filter) {
+        try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
+            return getConnector().fetchAllowableValues(stepName, groupName, propertyName, filter);
+        }
     }
 
     @Override

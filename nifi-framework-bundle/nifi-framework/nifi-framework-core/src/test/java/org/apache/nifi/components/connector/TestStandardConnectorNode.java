@@ -17,6 +17,7 @@
 
 package org.apache.nifi.components.connector;
 
+import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.engine.FlowEngine;
@@ -435,7 +436,6 @@ public class TestStandardConnectorNode {
         final StandardConnectorNode connectorNode = createConnectorNode();
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
 
-        final ConnectorConfiguration initialConfiguration = createTestConfiguration("propertyGroup1", "prop1", "value1");
         connectorNode.prepareForUpdate(null);
         connectorNode.setConfiguration("step1", createGroupConfig("propertyGroup1", Map.of("prop1", "value1")));
         connectorNode.finishUpdate(scheduler);
@@ -454,7 +454,6 @@ public class TestStandardConnectorNode {
         final StandardConnectorNode connectorNode = createConnectorNode();
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
 
-        final ConnectorConfiguration initialConfiguration = createTestConfiguration("configurationStep1", "prop1", "value1");
         connectorNode.prepareForUpdate(null);
         connectorNode.setConfiguration("configurationStep1", createGroupConfig("propertyGroup1", Map.of("prop1", "value1")));
         connectorNode.finishUpdate(scheduler);
@@ -499,8 +498,6 @@ public class TestStandardConnectorNode {
         final TrackingConnector trackingConnector = new TrackingConnector();
         final StandardConnectorNode connectorNode = createConnectorNode(trackingConnector);
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
-
-        final ConnectorConfiguration newConfiguration = createTestConfiguration();
 
         connectorNode.prepareForUpdate(null);
         connectorNode.setConfiguration("testGroup", createGroupConfig());
@@ -580,7 +577,6 @@ public class TestStandardConnectorNode {
      * Test connector that tracks method calls for verification
      */
     private static class TrackingConnector implements Connector {
-        private boolean finishUpdateCalled = false;
         private final Set<String> onConfigurationStepConfiguredCalls = new HashSet<>();
 
         @Override
@@ -621,7 +617,6 @@ public class TestStandardConnectorNode {
 
         @Override
         public void finishUpdate() {
-            this.finishUpdateCalled = true;
         }
 
         @Override
@@ -634,8 +629,14 @@ public class TestStandardConnectorNode {
             return List.of();
         }
 
-        public boolean wasFinishUpdateCalled() {
-            return finishUpdateCalled;
+        @Override
+        public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName) {
+            return List.of();
+        }
+
+        @Override
+        public List<AllowableValue> fetchAllowableValues(final String s, final String s1, final String s2, final String s3) {
+            return List.of();
         }
 
         public boolean wasOnPropertyGroupConfiguredCalled(final String stepName) {
@@ -643,7 +644,6 @@ public class TestStandardConnectorNode {
         }
 
         public void reset() {
-            finishUpdateCalled = false;
             onConfigurationStepConfiguredCalls.clear();
         }
     }

@@ -130,7 +130,7 @@ public class DynamicFlowConnector extends AbstractConnector {
     }
 
     @Override
-    public void onConfigurationStepConfigured(final String stepName) throws FlowUpdateException {
+    public void onStepConfigured(final String stepName) throws FlowUpdateException {
         // Now that configuration is available, update the flow based on configured properties
         final VersionedProcessGroup versionedProcessGroup = getFlow();
         getInitializationContext().updateFlow(versionedProcessGroup);

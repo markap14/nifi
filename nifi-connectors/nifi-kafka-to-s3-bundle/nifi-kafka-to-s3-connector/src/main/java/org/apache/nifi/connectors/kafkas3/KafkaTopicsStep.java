@@ -20,6 +20,7 @@ public class KafkaTopicsStep {
         .description("A comma-separated list of Kafka topics to consume from.")
         .required(true)
         .type(PropertyType.STRING_LIST)
+        .allowableValuesFetchable(true)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
         .build();
 
@@ -68,7 +69,4 @@ public class KafkaTopicsStep {
         ))
         .build();
 
-    public static ConfigurationStep createConfigurationStep(final List<String> possibleTopics) {
-        return KAFKA_TOPICS_STEP.withAllowableValues(KAFKA_TOPICS_GROUP.getName(), TOPIC_NAMES.getName(), possibleTopics);
-    }
 }

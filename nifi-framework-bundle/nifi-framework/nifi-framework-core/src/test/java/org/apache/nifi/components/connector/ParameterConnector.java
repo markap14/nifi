@@ -85,7 +85,7 @@ public class ParameterConnector extends AbstractConnector {
     }
 
     @Override
-    public void onConfigurationStepConfigured(final String stepName) {
+    public void onStepConfigured(final String stepName) {
     }
 
     @Override

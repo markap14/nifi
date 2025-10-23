@@ -19,6 +19,7 @@ package org.apache.nifi.components.connector;
 
 import org.apache.nifi.authorization.resource.ComponentAuthorizable;
 import org.apache.nifi.bundle.BundleCoordinate;
+import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.VersionedComponent;
 import org.apache.nifi.components.validation.ValidationState;
@@ -64,6 +65,11 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
     ProcessGroup getManagedProcessGroup();
 
     BundleCoordinate getBundleCoordinate();
+
+    List<AllowableValue> fetchAllowableValues(String stepName, String groupName, String propertyName);
+
+    List<AllowableValue> fetchAllowableValues(String stepName, String groupName, String propertyName, String filter);
+
 
     /**
      * <p>
