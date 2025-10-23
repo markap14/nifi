@@ -14,6 +14,8 @@ import org.apache.nifi.components.connector.ConnectorConfigurationContext;
 import org.apache.nifi.components.connector.FlowUpdateException;
 import org.apache.nifi.components.connector.InvocationFailedException;
 import org.apache.nifi.components.connector.components.ControllerServiceFacade;
+import org.apache.nifi.components.connector.components.ControllerServiceReferenceHierarchy;
+import org.apache.nifi.components.connector.components.ControllerServiceReferenceScope;
 import org.apache.nifi.components.connector.components.ProcessorFacade;
 import org.apache.nifi.components.connector.util.VersionedFlowUtils;
 import org.apache.nifi.flow.VersionedControllerService;
@@ -84,7 +86,12 @@ public class KafkaToS3 extends AbstractConnector {
     }
 
     private List<ConfigVerificationResult> verifyKafkaParsability(final VersionedExternalFlow flow) {
-        // Enable necessary Controller Services for parsing records.
+        // Enable Controller Services necessary for parsing records.
+        // We determine which Controller Services are referenced by the flow and enable them, but we do not use
+        // getRootGroup().getLifecycle().enableReferencedControllerServices(ControllerServiceReferenceScope.INCLUDE_REFERENCED_SERVICES_ONLY)
+        // because that would include the Controller Services that are referenced by the currently configured flow, and it's possible that the
+        // what is being verified uses a different set of Controller Services (e.g., the verified flow may use a JSON Reader while the current
+        // flow uses an Avro Reader).
         final Set<VersionedControllerService> referencedServices = VersionedFlowUtils.getReferencedControllerServices(flow.getFlowContents());
         final Set<String> serviceIds = referencedServices.stream()
             .map(VersionedControllerService::getIdentifier)

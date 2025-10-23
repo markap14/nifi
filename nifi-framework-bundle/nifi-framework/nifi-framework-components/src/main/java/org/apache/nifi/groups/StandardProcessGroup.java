@@ -34,11 +34,13 @@ import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.connectable.ConnectableType;
 import org.apache.nifi.connectable.Connection;
+import org.apache.nifi.connectable.FlowFileActivity;
 import org.apache.nifi.connectable.Funnel;
 import org.apache.nifi.connectable.LocalPort;
 import org.apache.nifi.connectable.Port;
 import org.apache.nifi.connectable.Position;
 import org.apache.nifi.connectable.Positionable;
+import org.apache.nifi.connectable.ProcessGroupFlowFileActivity;
 import org.apache.nifi.controller.ComponentNode;
 import org.apache.nifi.controller.ConfigurationContext;
 import org.apache.nifi.controller.ControllerService;
@@ -196,6 +198,7 @@ public final class StandardProcessGroup implements ProcessGroup {
     private volatile ExecutionEngine executionEngine = ExecutionEngine.INHERITED;
     private volatile int maxConcurrentTasks = 1;
     private volatile String statelessFlowTimeout = "1 min";
+    private final FlowFileActivity flowFileActivity = new ProcessGroupFlowFileActivity(this);
 
     private FlowFileConcurrency flowFileConcurrency = FlowFileConcurrency.UNBOUNDED;
     private volatile FlowFileGate flowFileGate = new UnboundedFlowFileGate();
@@ -4549,6 +4552,11 @@ public final class StandardProcessGroup implements ProcessGroup {
     @Override
     public String getStatelessFlowTimeout() {
         return statelessFlowTimeout;
+    }
+
+    @Override
+    public FlowFileActivity getFlowFileActivity() {
+        return flowFileActivity;
     }
 
     @Override

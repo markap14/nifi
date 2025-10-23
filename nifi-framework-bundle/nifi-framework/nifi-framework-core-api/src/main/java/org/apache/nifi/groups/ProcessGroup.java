@@ -20,6 +20,7 @@ import org.apache.nifi.authorization.resource.ComponentAuthorizable;
 import org.apache.nifi.components.VersionedComponent;
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.connectable.Connection;
+import org.apache.nifi.connectable.FlowFileActivity;
 import org.apache.nifi.connectable.Funnel;
 import org.apache.nifi.connectable.Port;
 import org.apache.nifi.connectable.Positionable;
@@ -1269,4 +1270,9 @@ public interface ProcessGroup extends ComponentAuthorizable, Positionable, Versi
      * @return the configured maximum amount of time that a Stateless Flow can run before it times out and is considered a failure
      */
     String getStatelessFlowTimeout();
+
+    /**
+     * @return the FlowFileActivity for this Process Group
+     */
+    FlowFileActivity getFlowFileActivity();
 }

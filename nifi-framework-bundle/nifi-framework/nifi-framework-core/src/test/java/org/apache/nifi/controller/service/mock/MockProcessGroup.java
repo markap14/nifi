@@ -21,10 +21,12 @@ import org.apache.nifi.authorization.Resource;
 import org.apache.nifi.authorization.resource.Authorizable;
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.connectable.Connection;
+import org.apache.nifi.connectable.FlowFileActivity;
 import org.apache.nifi.connectable.Funnel;
 import org.apache.nifi.connectable.Port;
 import org.apache.nifi.connectable.Position;
 import org.apache.nifi.connectable.Positionable;
+import org.apache.nifi.connectable.ProcessGroupFlowFileActivity;
 import org.apache.nifi.controller.ProcessorNode;
 import org.apache.nifi.controller.Snippet;
 import org.apache.nifi.controller.flow.FlowManager;
@@ -901,6 +903,11 @@ public class MockProcessGroup implements ProcessGroup {
     @Override
     public String getStatelessFlowTimeout() {
         return null;
+    }
+
+    @Override
+    public FlowFileActivity getFlowFileActivity() {
+        return new ProcessGroupFlowFileActivity(this);
     }
 
     @Override

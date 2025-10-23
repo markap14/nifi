@@ -27,6 +27,8 @@ import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.validation.DisabledServiceValidationResult;
 import org.apache.nifi.components.validation.ValidationState;
 import org.apache.nifi.components.validation.ValidationStatus;
+import org.apache.nifi.connectable.FlowFileActivity;
+import org.apache.nifi.connectable.FlowFileTransferCounts;
 import org.apache.nifi.engine.FlowEngine;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
@@ -35,12 +37,14 @@ import org.apache.nifi.nar.NarCloseable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -232,6 +236,27 @@ public class StandardConnectorNode implements ConnectorNode {
         }
 
         logger.info("{} disabled but not in a state that can immediately transition to DISABLED so set desired state to DISABLED; current state is {}", this, currentState);
+    }
+
+    @Override
+    public Optional<Duration> getIdleDuration() {
+        final FlowFileActivity activity = getManagedProcessGroup().getFlowFileActivity();
+        final OptionalLong lastActivityTimestamp = activity.getLatestActivityTime();
+        if (lastActivityTimestamp.isEmpty()) {
+            return Optional.empty();
+        }
+
+        if (getManagedProcessGroup().isDataQueued()) {
+            return Optional.empty();
+        }
+
+        final Duration idleDuration = Duration.ofMillis(System.currentTimeMillis() - lastActivityTimestamp.getAsLong());
+        return Optional.of(idleDuration);
+    }
+
+    @Override
+    public FlowFileTransferCounts getFlowFileTransferCounts() {
+        return getManagedProcessGroup().getFlowFileActivity().getTransferCounts();
     }
 
     @Override

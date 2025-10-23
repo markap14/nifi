@@ -26,7 +26,6 @@ import org.apache.nifi.components.connector.ConfigurationStepConfiguration;
 import org.apache.nifi.components.connector.ConnectorConfiguration;
 import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.components.connector.ConnectorState;
-import org.apache.nifi.components.connector.FlowUpdateException;
 import org.apache.nifi.components.connector.PropertyGroupConfiguration;
 import org.apache.nifi.components.resource.ResourceCardinality;
 import org.apache.nifi.components.resource.ResourceDefinition;
@@ -1039,30 +1038,26 @@ public class VersionedComponentFlowMapper {
         versionedConnector.setType(connectorNode.getComponentType());
         versionedConnector.setBundle(mapBundle(connectorNode.getBundleCoordinate()));
 
-        try {
-            final ConnectorConfiguration configuration = connectorNode.getConfiguration();
-            final List<VersionedConfigurationStep> configurationSteps = new ArrayList<>();
+        final ConnectorConfiguration configuration = connectorNode.getConfiguration();
+        final List<VersionedConfigurationStep> configurationSteps = new ArrayList<>();
 
-            for (final ConfigurationStepConfiguration stepConfiguration : configuration.getConfigurationStepConfigurations()) {
-                final VersionedConfigurationStep versionedConfigurationStep = new VersionedConfigurationStep();
-                versionedConfigurationStep.setName(stepConfiguration.getConfigurationStepName());
-                configurationSteps.add(versionedConfigurationStep);
+        for (final ConfigurationStepConfiguration stepConfiguration : configuration.getConfigurationStepConfigurations()) {
+            final VersionedConfigurationStep versionedConfigurationStep = new VersionedConfigurationStep();
+            versionedConfigurationStep.setName(stepConfiguration.getConfigurationStepName());
+            configurationSteps.add(versionedConfigurationStep);
 
-                final List<VersionedConnectorPropertyGroup> propertyGroups = new ArrayList<>();
-                versionedConfigurationStep.setPropertyGroups(propertyGroups);
+            final List<VersionedConnectorPropertyGroup> propertyGroups = new ArrayList<>();
+            versionedConfigurationStep.setPropertyGroups(propertyGroups);
 
-                for (final PropertyGroupConfiguration groupConfiguration : stepConfiguration.getPropertyGroupConfigurations()) {
-                    final VersionedConnectorPropertyGroup versionedGroup = new VersionedConnectorPropertyGroup();
-                    versionedGroup.setName(groupConfiguration.getPropertyGroupName());
-                    versionedGroup.setProperties(groupConfiguration.getPropertyValues());
-                    propertyGroups.add(versionedGroup);
-                }
+            for (final PropertyGroupConfiguration groupConfiguration : stepConfiguration.getPropertyGroupConfigurations()) {
+                final VersionedConnectorPropertyGroup versionedGroup = new VersionedConnectorPropertyGroup();
+                versionedGroup.setName(groupConfiguration.getPropertyGroupName());
+                versionedGroup.setProperties(groupConfiguration.getPropertyValues());
+                propertyGroups.add(versionedGroup);
             }
-
-            versionedConnector.setConfigurationSteps(configurationSteps);
-        } catch (final FlowUpdateException e) {
-            throw new RuntimeException("Failed to retrieve configuration for connector " + connectorNode, e);
         }
+
+        versionedConnector.setConfigurationSteps(configurationSteps);
 
         return versionedConnector;
     }

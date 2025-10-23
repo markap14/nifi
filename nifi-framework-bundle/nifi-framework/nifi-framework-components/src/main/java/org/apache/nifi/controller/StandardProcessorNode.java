@@ -50,8 +50,10 @@ import org.apache.nifi.components.validation.ValidationState;
 import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.components.validation.ValidationTrigger;
 import org.apache.nifi.connectable.Connectable;
+import org.apache.nifi.connectable.ConnectableFlowFileActivity;
 import org.apache.nifi.connectable.ConnectableType;
 import org.apache.nifi.connectable.Connection;
+import org.apache.nifi.connectable.FlowFileActivity;
 import org.apache.nifi.connectable.Position;
 import org.apache.nifi.controller.exception.ProcessorInstantiationException;
 import org.apache.nifi.controller.scheduling.LifecycleState;
@@ -181,6 +183,8 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
     private volatile Set<String> retriedRelationships;
     private volatile BackoffMechanism backoffMechanism;
     private volatile String maxBackoffPeriod;
+
+    private final ConnectableFlowFileActivity flowFileActivity = new ConnectableFlowFileActivity();
 
     public StandardProcessorNode(final LoggableComponent<Processor> processor, final String uuid,
                                  final ValidationContextFactory validationContextFactory, final ProcessScheduler scheduler,
@@ -1634,6 +1638,9 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
         // Completion Timestamp is set to MAX_VALUE because we don't want to timeout until the task has a chance to run.
         final AtomicLong completionTimestampRef = new AtomicLong(Long.MAX_VALUE);
 
+        // Mark current time as latest activity time so that we don't show as idle when the processor was stopped.
+        flowFileActivity.reset();
+
         // Create a task to invoke the @OnScheduled annotation of the processor
         final Callable<Void> startupTask = () -> {
             final ScheduledState currentScheduleState = scheduledState.get();
@@ -2252,5 +2259,10 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
 
             serviceNode.updateReference(this, descriptor);
         }
+    }
+
+    @Override
+    public FlowFileActivity getFlowFileActivity() {
+        return flowFileActivity;
     }
 }

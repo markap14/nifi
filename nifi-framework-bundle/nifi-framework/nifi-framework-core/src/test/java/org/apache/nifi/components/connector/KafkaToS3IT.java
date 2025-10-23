@@ -375,12 +375,6 @@ public class KafkaToS3IT {
             {"page": 4, "words": "The end." }"""
         );
 
-        produceRecordsToTopic("an-important-topic",
-            "This is a plaintext message",
-            "Another important message",
-            "Final plaintext record"
-        );
-
         final ConnectorNode connectorNode = flowManager.createConnector(KafkaToS3.class.getName(), "kafka-to-s3", BUNDLE_COORDINATE, true, true);
         assertNotNull(connectorNode);
 
@@ -423,8 +417,19 @@ public class KafkaToS3IT {
 
         connectorNode.start(flowEngine).get(1, TimeUnit.MINUTES);
 
-        Thread.sleep(Duration.ofSeconds(30));
+        // wait for some data to be received
+        while (connectorNode.getFlowFileTransferCounts().getReceivedCount() == 0) {
+            Thread.sleep(100L);
+        }
+
+        // Wait for Connector to be idle for at least 1 second
+        while (connectorNode.getIdleDuration().orElse(Duration.ZERO).toSeconds() < 1) {
+            Thread.sleep(100L);
+        }
+
         connectorNode.stop(flowEngine).get(1, TimeUnit.MINUTES);
+
+        assertEquals(1, connectorNode.getFlowFileTransferCounts().getSentCount());
     }
 
     private Connection createConnection(final String id, final String name, final Connectable source, final Connectable destination, final Collection<String> relationshipNames) {

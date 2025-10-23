@@ -23,11 +23,15 @@ import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.VersionedComponent;
 import org.apache.nifi.components.validation.ValidationState;
 import org.apache.nifi.components.validation.ValidationStatus;
+import org.apache.nifi.connectable.FlowFileActivity;
+import org.apache.nifi.connectable.FlowFileTransferCounts;
 import org.apache.nifi.engine.FlowEngine;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 
+import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.Future;
 
 public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent {
@@ -127,6 +131,22 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
      * Disables the Connector. This method should only be invoked via the ConnectorRepository.
      */
     void disable();
+
+    /**
+     * Returns an Optional Duration indicating how long the Connector has been idle (i.e., not processed any FlowFiles and with no FlowFiles queued).
+     * If there is any FlowFile queued, the Optional will be empty. Otherwise, the duration will indicate how long it has been since the
+     * last FlowFile was acted upon.
+     *
+     * @return an Optional Duration indicating how long the Connector has been idle
+     */
+    Optional<Duration> getIdleDuration();
+
+    /**
+     * Returns the FlowFileTransferCounts that represents that amount of data sent and received
+     * by this Connector since it was started.
+     * @return the FlowFileTransferCounts for this Connector
+     */
+    FlowFileTransferCounts getFlowFileTransferCounts();
 
     /**
      * Starts the Connector. This method should only be invoked via the ConnectorRepository.
