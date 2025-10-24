@@ -24,7 +24,7 @@
         "bundle": {
           "group": "org.apache.nifi",
           "artifact": "nifi-standard-nar",
-          "version": "2.6.0-SNAPSHOT"
+          "version": "2.7.0-SNAPSHOT"
         },
         "properties": {
           "max-bin-age": "#{Merge Latency}",
@@ -154,7 +154,7 @@
         "bundle": {
           "group": "org.apache.nifi",
           "artifact": "nifi-kafka-nar",
-          "version": "2.6.0-SNAPSHOT"
+          "version": "2.7.0-SNAPSHOT"
         },
         "properties": {
           "Topics": "#{Topic Names}",
@@ -345,7 +345,7 @@
         "bundle": {
           "group": "org.apache.nifi",
           "artifact": "nifi-aws-nar",
-          "version": "2.6.0-SNAPSHOT"
+          "version": "2.7.0-SNAPSHOT"
         },
         "properties": {
           "FullControl User List": "${s3.permissions.full.users}",
@@ -758,7 +758,7 @@
         "bundle": {
           "group": "org.apache.nifi",
           "artifact": "nifi-record-serialization-services-nar",
-          "version": "2.6.0-SNAPSHOT"
+          "version": "2.7.0-SNAPSHOT"
         },
         "properties": {
           "schema-reference-reader": null,
@@ -874,7 +874,7 @@
             "bundle": {
               "group": "org.apache.nifi",
               "artifact": "nifi-standard-services-api-nar",
-              "version": "2.6.0-SNAPSHOT"
+              "version": "2.7.0-SNAPSHOT"
             }
           }
         ],
@@ -892,7 +892,7 @@
         "bundle": {
           "group": "org.apache.nifi",
           "artifact": "nifi-record-serialization-services-nar",
-          "version": "2.6.0-SNAPSHOT"
+          "version": "2.7.0-SNAPSHOT"
         },
         "properties": {
           "schema-reference-reader": "ecba6fe5-6beb-3b68-bad9-163a3f14c4c8",
@@ -1032,7 +1032,7 @@
             "bundle": {
               "group": "org.apache.nifi",
               "artifact": "nifi-standard-services-api-nar",
-              "version": "2.6.0-SNAPSHOT"
+              "version": "2.7.0-SNAPSHOT"
             }
           }
         ],
@@ -1050,7 +1050,7 @@
         "bundle": {
           "group": "org.apache.nifi",
           "artifact": "nifi-record-serialization-services-nar",
-          "version": "2.6.0-SNAPSHOT"
+          "version": "2.7.0-SNAPSHOT"
         },
         "properties": {
           "schema-reference-reader": null,
@@ -1214,7 +1214,7 @@
             "bundle": {
               "group": "org.apache.nifi",
               "artifact": "nifi-standard-services-api-nar",
-              "version": "2.6.0-SNAPSHOT"
+              "version": "2.7.0-SNAPSHOT"
             }
           }
         ],
@@ -1232,7 +1232,7 @@
         "bundle": {
           "group": "org.apache.nifi",
           "artifact": "nifi-aws-nar",
-          "version": "2.6.0-SNAPSHOT"
+          "version": "2.7.0-SNAPSHOT"
         },
         "properties": {
           "profile-name": null,
@@ -1393,7 +1393,7 @@
             "bundle": {
               "group": "org.apache.nifi",
               "artifact": "nifi-aws-service-api-nar",
-              "version": "2.6.0-SNAPSHOT"
+              "version": "2.7.0-SNAPSHOT"
             }
           },
           {
@@ -1401,7 +1401,7 @@
             "bundle": {
               "group": "org.apache.nifi",
               "artifact": "nifi-aws-service-api-nar",
-              "version": "2.6.0-SNAPSHOT"
+              "version": "2.7.0-SNAPSHOT"
             }
           }
         ],
@@ -1419,7 +1419,7 @@
         "bundle": {
           "group": "org.apache.nifi",
           "artifact": "nifi-record-serialization-services-nar",
-          "version": "2.6.0-SNAPSHOT"
+          "version": "2.7.0-SNAPSHOT"
         },
         "properties": {
           "schema-reference-reader": "ecba6fe5-6beb-3b68-bad9-163a3f14c4c8",
@@ -1495,7 +1495,7 @@
             "bundle": {
               "group": "org.apache.nifi",
               "artifact": "nifi-standard-services-api-nar",
-              "version": "2.6.0-SNAPSHOT"
+              "version": "2.7.0-SNAPSHOT"
             }
           }
         ],
@@ -1513,7 +1513,7 @@
         "bundle": {
           "group": "org.apache.nifi",
           "artifact": "nifi-confluent-platform-nar",
-          "version": "2.6.0-SNAPSHOT"
+          "version": "2.7.0-SNAPSHOT"
         },
         "properties": {
           "cache-expiration": "1 hour",
@@ -1589,7 +1589,7 @@
             "bundle": {
               "group": "org.apache.nifi",
               "artifact": "nifi-standard-services-api-nar",
-              "version": "2.6.0-SNAPSHOT"
+              "version": "2.7.0-SNAPSHOT"
             }
           }
         ],
@@ -1607,7 +1607,7 @@
         "bundle": {
           "group": "org.apache.nifi",
           "artifact": "nifi-confluent-platform-nar",
-          "version": "2.6.0-SNAPSHOT"
+          "version": "2.7.0-SNAPSHOT"
         },
         "properties": {},
         "propertyDescriptors": {},
@@ -1617,7 +1617,7 @@
             "bundle": {
               "group": "org.apache.nifi",
               "artifact": "nifi-standard-services-api-nar",
-              "version": "2.6.0-SNAPSHOT"
+              "version": "2.7.0-SNAPSHOT"
             }
           }
         ],
@@ -1635,7 +1635,7 @@
         "bundle": {
           "group": "org.apache.nifi",
           "artifact": "nifi-kafka-3-service-nar",
-          "version": "2.6.0-SNAPSHOT"
+          "version": "2.7.0-SNAPSHOT"
         },
         "properties": {
           "ack.wait.time": "10 sec",
@@ -1759,7 +1759,7 @@
             "bundle": {
               "group": "org.apache.nifi",
               "artifact": "nifi-kafka-service-api-nar",
-              "version": "2.6.0-SNAPSHOT"
+              "version": "2.7.0-SNAPSHOT"
             }
           }
         ],
@@ -1777,7 +1777,7 @@
         "bundle": {
           "group": "org.apache.nifi",
           "artifact": "nifi-record-serialization-services-nar",
-          "version": "2.6.0-SNAPSHOT"
+          "version": "2.7.0-SNAPSHOT"
         },
         "properties": {
           "schema-reference-reader": null,
@@ -1941,7 +1941,7 @@
             "bundle": {
               "group": "org.apache.nifi",
               "artifact": "nifi-standard-services-api-nar",
-              "version": "2.6.0-SNAPSHOT"
+              "version": "2.7.0-SNAPSHOT"
             }
           }
         ],

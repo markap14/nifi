@@ -17,6 +17,7 @@
 package org.apache.nifi.nar;
 
 import org.apache.nifi.annotation.documentation.Tags;
+import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.ConfigurationStep;
@@ -84,6 +85,14 @@ public class DummyConnector implements Connector {
     public ConnectorInitializationContext getContext() {
         return context;
     }
+
+    @Override
+    public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName, final String filter) {
+        return List.of();
+    }
+
+    @Override
+    public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName) {
+        return List.of();
+    }
 }
-
-

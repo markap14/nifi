@@ -327,7 +327,7 @@ public class StandardNiFiServiceFacadeTest {
         when(flowController.getExtensionManager()).thenReturn(extensionManager);
 
         final StandardNiFiServiceFacade serviceFacadeSpy = spy(serviceFacade);
-        final NiFiRegistryFlowMapper flowMapper = mock(NiFiRegistryFlowMapper.class);
+        final VersionedComponentFlowMapper flowMapper = mock(VersionedComponentFlowMapper.class);
         doReturn(flowMapper).when(serviceFacadeSpy).makeNiFiRegistryFlowMapper(extensionManager);
 
         final InstantiatedVersionedProcessGroup localRoot = new InstantiatedVersionedProcessGroup("local-root-instance", groupId);

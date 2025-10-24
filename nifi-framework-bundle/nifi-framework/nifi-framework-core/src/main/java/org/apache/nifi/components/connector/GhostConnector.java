@@ -4,10 +4,10 @@
 
 package org.apache.nifi.components.connector;
 
+import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ConfigVerificationResult.Outcome;
 import org.apache.nifi.components.ValidationResult;
-import org.eclipse.tags.shaded.org.apache.bcel.verifier.VerificationResult;
 
 import java.util.List;
 import java.util.Map;
@@ -86,6 +86,16 @@ public class GhostConnector implements Connector {
     @Override
     public List<ValidationResult> validate(final ConnectorConfigurationContext connectorConfigurationContext) {
         return validationResults;
+    }
+
+    @Override
+    public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName, final String filter) {
+        return List.of();
+    }
+
+    @Override
+    public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName) {
+        return List.of();
     }
 
     @Override

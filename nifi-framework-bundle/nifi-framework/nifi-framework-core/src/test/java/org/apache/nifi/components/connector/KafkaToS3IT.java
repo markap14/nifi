@@ -100,7 +100,7 @@ import static org.mockito.Mockito.when;
 
 // TODO: Delete this.
 public class KafkaToS3IT {
-    private static final BundleCoordinate BUNDLE_COORDINATE = new BundleCoordinate("org.apache.nifi", "nifi-kafka-to-s3-nar", "2.6.0-SNAPSHOT");
+    private static final BundleCoordinate BUNDLE_COORDINATE = new BundleCoordinate("org.apache.nifi", "nifi-kafka-to-s3-nar", "2.7.0-SNAPSHOT");
 
     private final FlowEngine flowEngine = new FlowEngine(4, "flow-engine");
     private StandardProcessScheduler processScheduler;
@@ -188,7 +188,7 @@ public class KafkaToS3IT {
         final SchedulingAgent timerDrivenSchedulingAgent = new TimerDrivenSchedulingAgent(flowController, flowEngine, repoContextFactory, nifiProperties);
         processScheduler.setSchedulingAgent(SchedulingStrategy.TIMER_DRIVEN, timerDrivenSchedulingAgent);
 
-        final File assemblyLibDir = new File("../../../nifi-assembly/target/nifi-2.6.0-SNAPSHOT-bin/nifi-2.6.0-SNAPSHOT/lib");
+        final File assemblyLibDir = new File("../../../nifi-assembly/target/nifi-2.7.0-SNAPSHOT-bin/nifi-2.7.0-SNAPSHOT/lib");
         final ClassLoader systemClassLoader = StatelessBootstrap.createExtensionRootClassLoader(assemblyLibDir, ClassLoader.getSystemClassLoader());
         final String narLibraryDirectory = assemblyLibDir.getAbsolutePath();
         final Bundle systemBundle = SystemBundle.create(narLibraryDirectory, systemClassLoader);

@@ -485,7 +485,7 @@ public class ExtensionBuilder {
            componentType = "(Missing) " + simpleClassName;
        }
 
-       final ComponentLog logger = new SimpleProcessLogger(identifier, connector, new StandardLoggingContext(null));
+       final ComponentLog logger = new SimpleProcessLogger(identifier, connector, new StandardLoggingContext());
        final ConnectorDetails connectorDetails = new ConnectorDetails(connector, bundleCoordinate, logger);
        final StandardConnectorConfigurationContext configurationContext = new StandardConnectorConfigurationContext();
 
