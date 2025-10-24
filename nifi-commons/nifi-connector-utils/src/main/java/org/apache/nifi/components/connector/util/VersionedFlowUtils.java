@@ -332,4 +332,22 @@ public class VersionedFlowUtils {
             }
         }
     }
+
+    public static void removeUnreferencedControllerServices(final VersionedProcessGroup processGroup) {
+        final Set<VersionedControllerService> referencedServices = getReferencedControllerServices(processGroup);
+        final Set<String> referencedServiceIds = new HashSet<>();
+        for (final VersionedControllerService service : referencedServices) {
+            referencedServiceIds.add(service.getIdentifier());
+        }
+
+        removeUnreferencedControllerServices(processGroup, referencedServiceIds);
+    }
+
+    private static void removeUnreferencedControllerServices(final VersionedProcessGroup processGroup, final Set<String> referencedServiceIds) {
+        processGroup.getControllerServices().removeIf(service -> !referencedServiceIds.contains(service.getIdentifier()));
+
+        for (final VersionedProcessGroup childGroup : processGroup.getProcessGroups()) {
+            removeUnreferencedControllerServices(childGroup, referencedServiceIds);
+        }
+    }
 }
