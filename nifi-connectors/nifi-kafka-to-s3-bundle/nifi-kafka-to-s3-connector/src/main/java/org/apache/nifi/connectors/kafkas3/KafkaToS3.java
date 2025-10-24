@@ -57,14 +57,6 @@ public class KafkaToS3 extends AbstractConnector {
     }
 
     @Override
-    public void abortUpdatePreparation(final Throwable throwable) {
-    }
-
-    @Override
-    public void finishUpdate() {
-    }
-
-    @Override
     public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
         // Get the current ConfigurationContext and then create a new one that contains the provided property values
         final ConnectorConfigurationContext configurationContext = getInitializationContext().getConfigurationContext().createWithOverrides(stepName, propertyValues);
