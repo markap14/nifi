@@ -32,6 +32,7 @@
         <module>nifi-bootstrap</module>
         <module>nifi-code-coverage</module>
         <module>nifi-mock</module>
+        <module>nifi-connector-mock-bundle</module>
         <module>nifi-extension-bundles</module>
         <module>nifi-extension-bom</module>
         <module>nifi-assembly</module>

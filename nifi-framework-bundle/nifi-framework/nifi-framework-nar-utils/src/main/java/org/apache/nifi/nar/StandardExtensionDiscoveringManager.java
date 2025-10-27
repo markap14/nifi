@@ -425,7 +425,7 @@ public class StandardExtensionDiscoveringManager implements ExtensionDiscovering
     }
 
     protected void registerExtensionClass(final Class<?> extensionType, final String implementationClassName, final Bundle bundle) {
-        final Set<ExtensionDefinition> registeredClasses = definitionMap.get(extensionType);
+        final Set<ExtensionDefinition> registeredClasses = definitionMap.computeIfAbsent(extensionType, type -> new HashSet<>());
         registerServiceClass(implementationClassName, extensionType, classNameBundleLookup, bundleCoordinateClassesLookup, bundle, registeredClasses);
     }
 

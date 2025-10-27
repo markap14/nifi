@@ -29,6 +29,7 @@
     <modules>
         <module>nifi-kafka-to-s3-connector</module>
         <module>nifi-kafka-to-s3-nar</module>
+        <module>nifi-kafka-to-s3-integration-tests</module>
     </modules>
 
     <dependencyManagement>

@@ -1025,20 +1025,22 @@ public class VersionedFlowSynchronizer implements FlowSynchronizer {
         final ConnectorRepository connectorRepository = flowController.getConnectorRepository();
 
         final Set<String> proposedConnectorIds = new HashSet<>();
-        for (final VersionedConnector versionedConnector : dataflow.getConnectors()) {
-            proposedConnectorIds.add(versionedConnector.getInstanceIdentifier());
+        if (dataflow.getConnectors() != null) {
+            for (final VersionedConnector versionedConnector : dataflow.getConnectors()) {
+                proposedConnectorIds.add(versionedConnector.getInstanceIdentifier());
 
-            final ConnectorNode existingConnector = connectorRepository.getConnector(versionedConnector.getInstanceIdentifier());
-            if (existingConnector == null) {
-                logger.info("Connector {} of type {} with name {} is not in the current flow. Will add Connector.",
-                    versionedConnector.getInstanceIdentifier(), versionedConnector.getType(), versionedConnector.getName());
+                final ConnectorNode existingConnector = connectorRepository.getConnector(versionedConnector.getInstanceIdentifier());
+                if (existingConnector == null) {
+                    logger.info("Connector {} of type {} with name {} is not in the current flow. Will add Connector.",
+                        versionedConnector.getInstanceIdentifier(), versionedConnector.getType(), versionedConnector.getName());
 
-                addConnector(versionedConnector, connectorRepository, flowController.getFlowManager());
-            } else if (isConnectorConfigurationUpdated(existingConnector, versionedConnector)) {
-                logger.info("{} configuration has changed, updating configuration", existingConnector);
-                updateConnector(versionedConnector, connectorRepository);
-            } else {
-                logger.debug("{} configuration is up to date, no update necessary", existingConnector);
+                    addConnector(versionedConnector, connectorRepository, flowController.getFlowManager());
+                } else if (isConnectorConfigurationUpdated(existingConnector, versionedConnector)) {
+                    logger.info("{} configuration has changed, updating configuration", existingConnector);
+                    updateConnector(versionedConnector, connectorRepository);
+                } else {
+                    logger.debug("{} configuration is up to date, no update necessary", existingConnector);
+                }
             }
         }
 

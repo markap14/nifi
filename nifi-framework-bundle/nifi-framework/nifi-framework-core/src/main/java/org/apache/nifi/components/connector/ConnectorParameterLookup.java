@@ -145,7 +145,7 @@ public class ConnectorParameterLookup implements ParameterLookup {
                     .value(versionedParameter.getValue())
                     .sensitive(versionedParameter.isSensitive());
 
-                if (assetManager != null) {
+                if (assetManager != null && versionedParameter.getReferencedAssets() != null) {
                     for (final VersionedAsset versionedAsset : versionedParameter.getReferencedAssets()) {
                         assetManager.getAsset(versionedAsset.getIdentifier()).ifPresent(builder::addReferencedAsset);
                     }
