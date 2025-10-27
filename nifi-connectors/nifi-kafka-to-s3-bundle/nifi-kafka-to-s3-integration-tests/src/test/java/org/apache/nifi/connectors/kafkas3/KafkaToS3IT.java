@@ -4,24 +4,48 @@
 
 package org.apache.nifi.connectors.kafkas3;
 
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.AdminClientConfig;
+import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.config.SaslConfigs;
+import org.apache.kafka.common.serialization.StringSerializer;
+import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.FlowUpdateException;
+import org.apache.nifi.components.connector.PropertyGroupConfiguration;
 import org.apache.nifi.mock.connector.StandardConnectorTestRunner;
 import org.apache.nifi.mock.connector.server.ConnectorTestRunner;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.Container.ExecResult;
 import org.testcontainers.containers.localstack.LocalStackContainer;
 import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.utility.DockerImageName;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
+import software.amazon.awssdk.services.s3.model.S3Object;
 
 import java.io.File;
 import java.io.IOException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.ExecutionException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -35,6 +59,8 @@ public class KafkaToS3IT {
     private static ConfluentKafkaContainer kafkaContainer;
 
     private static LocalStackContainer localStackContainer;
+
+    private static S3Client s3Client;
 
     private static final String SCRAM_USERNAME = "testuser";
     private static final String SCRAM_PASSWORD = "testpassword";
@@ -59,7 +85,7 @@ public class KafkaToS3IT {
 
 
     @BeforeAll
-    public static void setupTestRunner() throws IOException, InterruptedException {
+    public static void setupTestRunner() {
         runner = new StandardConnectorTestRunner.Builder()
             .connectorClassName("org.apache.nifi.connectors.kafkas3.KafkaToS3")
             .narLibraryDirectory(new File("target/libDir"))
@@ -91,13 +117,25 @@ public class KafkaToS3IT {
 
         localStackContainer.start();
 
-        createS3Bucket();
+        s3Client = S3Client.builder()
+            .endpointOverride(localStackContainer.getEndpoint())
+            .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(localStackContainer.getAccessKey(), localStackContainer.getSecretKey())))
+            .region(Region.of(S3_REGION))
+            .httpClient(UrlConnectionHttpClient.builder().build())
+            .forcePathStyle(true)
+            .build();
+
+        s3Client.createBucket(CreateBucketRequest.builder().bucket(S3_BUCKET_NAME).build());
     }
 
     @AfterAll
     public static void cleanup() throws IOException {
         if (runner != null) {
             runner.close();
+        }
+
+        if (s3Client != null) {
+            s3Client.close();
         }
 
         if (localStackContainer != null) {
@@ -109,46 +147,73 @@ public class KafkaToS3IT {
         }
     }
 
-    private void createKafkaTopics(final String... topicNames) throws IOException, InterruptedException {
-        for (final String topicName : topicNames) {
-            kafkaContainer.execInContainer(
-                "kafka-topics",
-                "--create",
-                "--topic", topicName,
-                "--bootstrap-server", "localhost:9092",
-                "--partitions", "1",
-                "--replication-factor", "1"
-            );
+    private void createKafkaTopics(final String... topicNames) throws ExecutionException, InterruptedException {
+        final Properties adminProps = new Properties();
+        adminProps.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9093");
+        adminProps.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, "SASL_PLAINTEXT");
+        adminProps.put(SaslConfigs.SASL_MECHANISM, "PLAIN");
+        adminProps.put(SaslConfigs.SASL_JAAS_CONFIG, String.format(
+            "org.apache.kafka.common.security.plain.PlainLoginModule required username=\"%s\" password=\"%s\";",
+            SCRAM_USERNAME, SCRAM_PASSWORD
+        ));
+
+        try (final AdminClient adminClient = AdminClient.create(adminProps)) {
+            final List<NewTopic> topics = new ArrayList<>();
+            for (final String topicName : topicNames) {
+                topics.add(new NewTopic(topicName, 1, (short) 1));
+            }
+
+            adminClient.createTopics(topics).all().get();
         }
     }
 
-    private void produceRecordsToTopic(final String topicName, final String... records) throws IOException, InterruptedException {
-        final String recordsData = String.join("\n", records);
-        final ExecResult result = kafkaContainer.execInContainer(
-            "sh", "-c",
-            "echo '" + recordsData + "' | kafka-console-producer --bootstrap-server localhost:9092 --topic " + topicName
-        );
+    private void produceRecordsToTopic(final String topicName, final String... records) throws ExecutionException, InterruptedException {
+        final Properties producerProps = new Properties();
+        producerProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9093");
+        producerProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        producerProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        producerProps.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, "SASL_PLAINTEXT");
+        producerProps.put(SaslConfigs.SASL_MECHANISM, "PLAIN");
+        producerProps.put(SaslConfigs.SASL_JAAS_CONFIG, String.format(
+            "org.apache.kafka.common.security.plain.PlainLoginModule required username=\"%s\" password=\"%s\";",
+            SCRAM_USERNAME, SCRAM_PASSWORD
+        ));
 
-        assertEquals(0, result.getExitCode());
-    }
+        try (final KafkaProducer<String, String> producer = new KafkaProducer<>(producerProps)) {
+            for (final String record : records) {
+                final ProducerRecord<String, String> producerRecord = new ProducerRecord<>(topicName, record);
+                producer.send(producerRecord).get();
+            }
 
-    private static void createS3Bucket() throws IOException, InterruptedException {
-        final ExecResult result = localStackContainer.execInContainer(
-            "awslocal", "s3", "mb", "s3://" + S3_BUCKET_NAME, "--region", S3_REGION
-        );
-
-        assertEquals(0, result.getExitCode(), "Failed to create S3 bucket: " + result.getStderr());
+            producer.flush();
+        }
     }
 
 
     @Test
-    public void testValidate() {
-        final List<ValidationResult> validationResults = runner.validate();
-        assertEquals(List.of(), validationResults);
+    public void testVerification() throws ExecutionException, InterruptedException {
+        createKafkaTopics("topic-1", "topic-2", "topic-3", "topic-4", "topic-5", "Z-topic", "an-important-topic");
+
+        produceRecordsToTopic("topic-1",
+            """
+            {"id": 1, "name": "Alice", "age": 30}""",
+            """
+            {"id": 2, "name": "Bob", "age": 25}""",
+            """
+            {"id": 3, "name": "Charlie", "age": 35}"""
+        );
+
+        produceRecordsToTopic("an-important-topic",
+            "This is a plaintext message",
+            "Another important message",
+            "Final plaintext record"
+        );
+
+//        runner.verifyConfigurationStep("Kafka Connection", List.of())
     }
 
     @Test
-    public void testSuccessfulFlow() throws IOException, InterruptedException, FlowUpdateException {
+    public void testSuccessfulFlow() throws IOException, ExecutionException, InterruptedException, FlowUpdateException {
         createKafkaTopics("story");
 
         produceRecordsToTopic("story",
@@ -162,35 +227,41 @@ public class KafkaToS3IT {
             {"page": 4, "words": "The end." }"""
         );
 
-        runner.prepareForUpdate();
-        runner.configure("Kafka Connection", "Kafka Server Settings", Map.of(
+        final PropertyGroupConfiguration kafkaServerConfig = new PropertyGroupConfiguration("Kafka Server Settings", Map.of(
             "Kafka Brokers", "localhost:9093",
             "Security Protocol", "SASL_PLAINTEXT",
             "SASL Mechanism", "PLAIN",
             "Username", SCRAM_USERNAME,
             "Password", SCRAM_PASSWORD
         ));
-        runner.configure("Kafka Topics", "Kafka Topics Configuration", Map.of(
+
+        final PropertyGroupConfiguration kafkaTopicConfig = new PropertyGroupConfiguration("Kafka Topics Configuration", Map.of(
             "Topic Names", "story",
             "Consumer Group ID", "nifi-kafka-to-s3-testSuccessfulFlow",
             "Offset Reset", "earliest",
             "Kafka Data Format", "JSON"
         ));
-        runner.configure("S3 Configuration", "S3 Destination Configuration", Map.of(
+
+        final PropertyGroupConfiguration s3DestinationConfig = new PropertyGroupConfiguration("S3 Destination Configuration", Map.of(
             "S3 Region", S3_REGION,
             "S3 Data Format", "Avro",
             "S3 Bucket", S3_BUCKET_NAME,
             "S3 Endpoint Override URL", localStackContainer.getEndpoint().toString()
         ));
-        runner.configure("S3 Configuration", "Merge Configuration", Map.of(
-            "Target Object Size", "1 MB",
-            "Merge Latency", "5 sec"
-        ));
-        runner.configure("S3 Configuration", "S3 Credentials", Map.of(
+        final PropertyGroupConfiguration s3CredentialsConfig = new PropertyGroupConfiguration("S3 Credentials", Map.of(
             "S3 Authentication Strategy", "Static Credentials",
             "Access Key ID", localStackContainer.getAccessKey(),
             "Secret Access Key", localStackContainer.getSecretKey()
         ));
+        final PropertyGroupConfiguration s3MergeConfig = new PropertyGroupConfiguration("Merge Configuration", Map.of(
+            "Target Object Size", "1 MB",
+            "Merge Latency", "5 sec"
+        ));
+
+        runner.prepareForUpdate();
+        runner.configure("Kafka Connection", List.of(kafkaServerConfig));
+        runner.configure("Kafka Topics", List.of(kafkaTopicConfig));
+        runner.configure("S3 Configuration", List.of(s3DestinationConfig, s3MergeConfig, s3CredentialsConfig));
         runner.finishUpdate();
 
         final List<ValidationResult> validationResults = runner.validate();
@@ -198,31 +269,24 @@ public class KafkaToS3IT {
 
         runner.startConnector();
         runner.waitForDataIngested(Duration.ofSeconds(10));
-        runner.waitForIdle(Duration.ofSeconds(5), Duration.ofSeconds(30));
+        runner.waitForIdle(Duration.ofSeconds(30));
         runner.stopConnector();
 
         verifyS3ObjectsCreated();
     }
 
-    private void verifyS3ObjectsCreated() throws IOException, InterruptedException {
-        final ExecResult listResult = localStackContainer.execInContainer(
-            "awslocal", "s3", "ls", "s3://" + S3_BUCKET_NAME + "/", "--region", S3_REGION
-        );
+    private void verifyS3ObjectsCreated() throws IOException {
+        final ListObjectsV2Response listResponse = s3Client.listObjectsV2(ListObjectsV2Request.builder().bucket(S3_BUCKET_NAME).build());
+        final List<S3Object> objects = listResponse.contents();
 
-        assertEquals(0, listResult.getExitCode(), "Failed to list S3 objects: " + listResult.getStderr());
+        assertFalse(objects.isEmpty(), "Expected at least one object in S3 bucket");
 
-        final String stdout = listResult.getStdout();
-        assertFalse(stdout.trim().isEmpty(), "Expected at least one object in S3 bucket");
-
-        final String[] lines = stdout.trim().split("\n");
-        assertTrue(lines.length > 0, "Expected at least one object in S3 bucket");
-
-        for (final String line : lines) {
-            final String[] parts = line.trim().split("\\s+");
-            assertTrue(parts.length >= 4, "Expected S3 object listing to have at least 4 parts: " + line);
-            final String sizeStr = parts[2];
-            final long size = Long.parseLong(sizeStr);
-            assertTrue(size > 0, "Expected S3 object to have size greater than 0, but was: " + size);
+        for (final S3Object s3Object : objects) {
+            final GetObjectRequest getObjectRequest = GetObjectRequest.builder().bucket(S3_BUCKET_NAME).key(s3Object.key()).build();
+            try (final ResponseInputStream<GetObjectResponse> objectContent = s3Client.getObject(getObjectRequest)) {
+                final long objectSize = objectContent.response().contentLength();
+                assertTrue(objectSize > 0, "Expected S3 object " + s3Object.key() + " to have content");
+            }
         }
     }
 

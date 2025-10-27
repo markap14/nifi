@@ -4,14 +4,13 @@
 
 package org.apache.nifi.mock.connector.server;
 
-import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.FlowUpdateException;
+import org.apache.nifi.components.connector.PropertyGroupConfiguration;
 
 import java.io.Closeable;
 import java.time.Duration;
 import java.util.List;
-import java.util.Map;
 
 public interface ConnectorTestRunner extends Closeable {
 
@@ -19,13 +18,19 @@ public interface ConnectorTestRunner extends Closeable {
 
     void finishUpdate() throws FlowUpdateException;
 
-    void configure(String stepName, String propertyGroupName, Map<String, String> properties) throws FlowUpdateException;
+    default void configure(String stepName, PropertyGroupConfiguration groupConfiguration) throws FlowUpdateException {
+        configure(stepName, List.of(groupConfiguration));
+    }
+
+    void configure(String stepName, List<PropertyGroupConfiguration> groupConfigurations) throws FlowUpdateException;
 
     void startConnector();
 
     void stopConnector();
 
     void waitForDataIngested(Duration maxWaitTime);
+
+    void waitForIdle(Duration maxWaitTime);
 
     void waitForIdle(Duration minimumIdleTime, Duration maxWaitTime);
 

@@ -38,7 +38,6 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -159,8 +158,8 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
     }
 
     @Override
-    public void configure(final String stepName, final String propertyGroupName, final Map<String, String> properties) throws FlowUpdateException {
-        connectorNode.setConfiguration(stepName, List.of(new PropertyGroupConfiguration(propertyGroupName, properties)));
+    public void configure(final String stepName, final List<PropertyGroupConfiguration> groupConfigurations) throws FlowUpdateException {
+        connectorNode.setConfiguration(stepName, groupConfigurations);
     }
 
     @Override
@@ -193,6 +192,11 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
     }
 
     @Override
+    public void waitForIdle(final Duration maxWaitTime) {
+        waitForIdle(Duration.ofMillis(0L), maxWaitTime);
+    }
+
+    @Override
     public void waitForIdle(final Duration minimumIdleTime, final Duration maxWaitTime) {
         Optional<Duration> idleTime = connectorNode.getIdleDuration();
 
@@ -200,7 +204,7 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
         final long startTime = System.currentTimeMillis();
         final long expirationTime = startTime + maxWaitTime.toMillis();
 
-        while (idleTime.isEmpty() || idleTime.get().compareTo(minimumIdleTime) < 0) {
+        while (idleTime.isEmpty() || idleTime.get().compareTo(minimumIdleTime) <= 0) {
             if (System.currentTimeMillis() > expirationTime) {
                 throw new RuntimeException("Timed out waiting for Connector to be idle");
             }

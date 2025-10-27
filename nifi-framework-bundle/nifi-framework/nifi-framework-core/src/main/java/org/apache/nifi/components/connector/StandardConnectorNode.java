@@ -453,7 +453,7 @@ public class StandardConnectorNode implements ConnectorNode {
 
         final Map<String, String> properties = new HashMap<>();
         for (final PropertyGroupConfiguration groupConfiguration : groupConfigurations) {
-            properties.putAll(groupConfiguration.getPropertyValues());
+            properties.putAll(groupConfiguration.propertyValues());
         }
 
         try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {

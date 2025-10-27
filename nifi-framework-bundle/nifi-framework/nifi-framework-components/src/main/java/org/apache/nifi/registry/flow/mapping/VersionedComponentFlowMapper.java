@@ -1043,16 +1043,16 @@ public class VersionedComponentFlowMapper {
 
         for (final ConfigurationStepConfiguration stepConfiguration : configuration.getConfigurationStepConfigurations()) {
             final VersionedConfigurationStep versionedConfigurationStep = new VersionedConfigurationStep();
-            versionedConfigurationStep.setName(stepConfiguration.getConfigurationStepName());
+            versionedConfigurationStep.setName(stepConfiguration.stepName());
             configurationSteps.add(versionedConfigurationStep);
 
             final List<VersionedConnectorPropertyGroup> propertyGroups = new ArrayList<>();
             versionedConfigurationStep.setPropertyGroups(propertyGroups);
 
-            for (final PropertyGroupConfiguration groupConfiguration : stepConfiguration.getPropertyGroupConfigurations()) {
+            for (final PropertyGroupConfiguration groupConfiguration : stepConfiguration.propertyGroupConfigurations()) {
                 final VersionedConnectorPropertyGroup versionedGroup = new VersionedConnectorPropertyGroup();
-                versionedGroup.setName(groupConfiguration.getPropertyGroupName());
-                versionedGroup.setProperties(groupConfiguration.getPropertyValues());
+                versionedGroup.setName(groupConfiguration.groupName());
+                versionedGroup.setProperties(groupConfiguration.propertyValues());
                 propertyGroups.add(versionedGroup);
             }
         }

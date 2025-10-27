@@ -223,7 +223,7 @@ public class StandardConnectorNodeIT {
         try (final FlowEngine flowEngine = new FlowEngine(1, "flow-engine")) {
             connectorNode.prepareForUpdate(flowEngine);
             for (final ConfigurationStepConfiguration stepConfig : configuration.getConfigurationStepConfigurations()) {
-                connectorNode.setConfiguration(stepConfig.getConfigurationStepName(), stepConfig.getPropertyGroupConfigurations());
+                connectorNode.setConfiguration(stepConfig.stepName(), stepConfig.propertyGroupConfigurations());
             }
             connectorNode.finishUpdate(flowEngine);
         }
@@ -366,7 +366,7 @@ public class StandardConnectorNodeIT {
             final ConfigurationStepConfiguration firstStepConfig = configuration.getConfigurationStepConfigurations().iterator().next();
 
             assertThrows(IllegalStateException.class, () ->
-                connectorNode.setConfiguration(firstStepConfig.getConfigurationStepName(), firstStepConfig.getPropertyGroupConfigurations()));
+                connectorNode.setConfiguration(firstStepConfig.stepName(), firstStepConfig.propertyGroupConfigurations()));
         }
     }
 
@@ -384,7 +384,7 @@ public class StandardConnectorNodeIT {
             final ConnectorConfiguration configuration = createConnectorConfiguration("Second Iteration", 5, true, false);
             final ConfigurationStepConfiguration firstStepConfig = configuration.getConfigurationStepConfigurations().iterator().next();
             assertThrows(IllegalStateException.class, () ->
-                connectorNode.setConfiguration(firstStepConfig.getConfigurationStepName(), firstStepConfig.getPropertyGroupConfigurations()));
+                connectorNode.setConfiguration(firstStepConfig.stepName(), firstStepConfig.propertyGroupConfigurations()));
         }
     }
 

@@ -51,7 +51,7 @@ public class StandardConnectorConfigurationContext implements ConnectorConfigura
 
             String propertyValue = defaultValue;
             for (final PropertyGroupConfiguration groupConfig : groupConfigs) {
-                final String value = groupConfig.getPropertyValues().get(propertyName);
+                final String value = groupConfig.propertyValues().get(propertyName);
                 if (value != null) {
                     propertyValue = value;
                     break;
@@ -79,7 +79,7 @@ public class StandardConnectorConfigurationContext implements ConnectorConfigura
                 final List<PropertyGroupConfiguration> createdGroupConfigs = new ArrayList<>();
 
                 for (final PropertyGroupConfiguration groupConfig : entry.getValue()) {
-                    final Map<String, String> mergedProperties = new HashMap<>(groupConfig.getPropertyValues());
+                    final Map<String, String> mergedProperties = new HashMap<>(groupConfig.propertyValues());
 
                     if (Objects.equals(existingStepName, stepName)) {
                         for (final Map.Entry<String, String> overrideEntry : propertyOverrides.entrySet()) {
@@ -94,7 +94,7 @@ public class StandardConnectorConfigurationContext implements ConnectorConfigura
                         }
                     }
 
-                    createdGroupConfigs.add(new PropertyGroupConfiguration(groupConfig.getPropertyGroupName(), mergedProperties));
+                    createdGroupConfigs.add(new PropertyGroupConfiguration(groupConfig.groupName(), mergedProperties));
                 }
 
                 created.setProperties(existingStepName, createdGroupConfigs);
@@ -149,13 +149,13 @@ public class StandardConnectorConfigurationContext implements ConnectorConfigura
 
         final Map<String, PropertyGroupConfiguration> mergedMap = new HashMap<>();
         for (final PropertyGroupConfiguration groupConfig : existingGroupConfigs) {
-            mergedMap.put(groupConfig.getPropertyGroupName(), groupConfig);
+            mergedMap.put(groupConfig.groupName(), groupConfig);
         }
 
         for (final PropertyGroupConfiguration groupConfig : newGroupConfigs) {
-            final PropertyGroupConfiguration existingConfiguration = mergedMap.get(groupConfig.getPropertyGroupName());
+            final PropertyGroupConfiguration existingConfiguration = mergedMap.get(groupConfig.groupName());
             final PropertyGroupConfiguration mergedGroupConfig = merge(existingConfiguration, groupConfig);
-            mergedMap.put(groupConfig.getPropertyGroupName(), mergedGroupConfig);
+            mergedMap.put(groupConfig.groupName(), mergedGroupConfig);
         }
 
         return List.copyOf(mergedMap.values());
@@ -172,8 +172,8 @@ public class StandardConnectorConfigurationContext implements ConnectorConfigura
             return existingConfiguration;
         }
 
-        final Map<String, String> mergedProperties = new HashMap<>(existingConfiguration.getPropertyValues());
-        mergedProperties.putAll(newConfiguration.getPropertyValues());
-        return new PropertyGroupConfiguration(existingConfiguration.getPropertyGroupName(), mergedProperties);
+        final Map<String, String> mergedProperties = new HashMap<>(existingConfiguration.propertyValues());
+        mergedProperties.putAll(newConfiguration.propertyValues());
+        return new PropertyGroupConfiguration(existingConfiguration.groupName(), mergedProperties);
     }
 }

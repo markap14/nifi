@@ -1067,7 +1067,7 @@ public class VersionedFlowSynchronizer implements FlowSynchronizer {
         }
 
         final Map<String, ConfigurationStepConfiguration> existingStepsByName = existingStepConfigurations.stream()
-            .collect(Collectors.toMap(ConfigurationStepConfiguration::getConfigurationStepName, Function.identity()));
+            .collect(Collectors.toMap(ConfigurationStepConfiguration::stepName, Function.identity()));
 
         for (final VersionedConfigurationStep versionedStep : versionedConfigurationSteps) {
             final ConfigurationStepConfiguration existingStep = existingStepsByName.get(versionedStep.getName());
@@ -1084,7 +1084,7 @@ public class VersionedFlowSynchronizer implements FlowSynchronizer {
     }
 
     private boolean isConfigurationStepUpdated(final ConfigurationStepConfiguration existingStep, final VersionedConfigurationStep versionedStep) {
-        final List<PropertyGroupConfiguration> existingPropertyGroups = existingStep.getPropertyGroupConfigurations();
+        final List<PropertyGroupConfiguration> existingPropertyGroups = existingStep.propertyGroupConfigurations();
         final List<VersionedConnectorPropertyGroup> versionedPropertyGroups = versionedStep.getPropertyGroups();
 
         if (versionedPropertyGroups == null || versionedPropertyGroups.isEmpty()) {
@@ -1096,7 +1096,7 @@ public class VersionedFlowSynchronizer implements FlowSynchronizer {
         }
 
         final Map<String, PropertyGroupConfiguration> existingGroupsByName = existingPropertyGroups.stream()
-            .collect(Collectors.toMap(PropertyGroupConfiguration::getPropertyGroupName, Function.identity()));
+            .collect(Collectors.toMap(PropertyGroupConfiguration::groupName, Function.identity()));
 
         for (final VersionedConnectorPropertyGroup versionedGroup : versionedPropertyGroups) {
             final PropertyGroupConfiguration existingGroup = existingGroupsByName.get(versionedGroup.getName());
@@ -1113,7 +1113,7 @@ public class VersionedFlowSynchronizer implements FlowSynchronizer {
     }
 
     private boolean isPropertyGroupUpdated(final PropertyGroupConfiguration existingGroup, final VersionedConnectorPropertyGroup versionedGroup) {
-        final Map<String, String> existingProperties = existingGroup.getPropertyValues();
+        final Map<String, String> existingProperties = existingGroup.propertyValues();
         final Map<String, String> versionedProperties = versionedGroup.getProperties();
 
         if (versionedProperties == null || versionedProperties.isEmpty()) {

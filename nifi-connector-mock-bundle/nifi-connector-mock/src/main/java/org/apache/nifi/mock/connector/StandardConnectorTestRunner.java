@@ -21,6 +21,7 @@ import org.apache.nifi.NiFiServer;
 import org.apache.nifi.bundle.Bundle;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.FlowUpdateException;
+import org.apache.nifi.components.connector.PropertyGroupConfiguration;
 import org.apache.nifi.mock.connector.server.ConnectorMockServer;
 import org.apache.nifi.mock.connector.server.ConnectorTestRunner;
 import org.apache.nifi.nar.ExtensionMapping;
@@ -37,7 +38,6 @@ import java.io.InputStream;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 public class StandardConnectorTestRunner implements ConnectorTestRunner, Closeable {
@@ -114,8 +114,8 @@ public class StandardConnectorTestRunner implements ConnectorTestRunner, Closeab
     }
 
     @Override
-    public void configure(final String stepName, final String propertyGroupName, final Map<String, String> properties) throws FlowUpdateException {
-        mockServer.configure(stepName, propertyGroupName, properties);
+    public void configure(final String stepName, final List<PropertyGroupConfiguration> groupConfigurations) throws FlowUpdateException {
+        mockServer.configure(stepName, groupConfigurations);
     }
 
     @Override
@@ -131,6 +131,11 @@ public class StandardConnectorTestRunner implements ConnectorTestRunner, Closeab
     @Override
     public void waitForDataIngested(final Duration maxWaitTime) {
         mockServer.waitForDataIngested(maxWaitTime);
+    }
+
+    @Override
+    public void waitForIdle(final Duration maxWaitTime) {
+        mockServer.waitForIdle(maxWaitTime);
     }
 
     @Override

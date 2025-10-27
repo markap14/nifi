@@ -20,43 +20,5 @@ package org.apache.nifi.components.connector;
 import java.util.List;
 import java.util.Objects;
 
-public class ConfigurationStepConfiguration {
-    private final String configurationStepName;
-    private final List<PropertyGroupConfiguration> propertyGroupConfigurations;
-
-    public ConfigurationStepConfiguration(final String configurationStepName, final List<PropertyGroupConfiguration> propertyGroupConfigurations) {
-        this.configurationStepName = configurationStepName;
-        this.propertyGroupConfigurations = List.copyOf(propertyGroupConfigurations);
-    }
-
-    public String getConfigurationStepName() {
-        return configurationStepName;
-    }
-
-    public List<PropertyGroupConfiguration> getPropertyGroupConfigurations() {
-        return propertyGroupConfigurations;
-    }
-
-    @Override
-    public boolean equals(final Object other) {
-        if (other == null || getClass() != other.getClass()) {
-            return false;
-        }
-
-        final ConfigurationStepConfiguration that = (ConfigurationStepConfiguration) other;
-        return Objects.equals(configurationStepName, that.configurationStepName) && Objects.equals(propertyGroupConfigurations, that.propertyGroupConfigurations);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(configurationStepName, propertyGroupConfigurations);
-    }
-
-    @Override
-    public String toString() {
-        return "ConfigurationStepConfiguration{" +
-               "configurationStepName='" + configurationStepName + '\'' +
-               ", propertyGroupConfigurations=" + propertyGroupConfigurations +
-               '}';
-    }
+public record ConfigurationStepConfiguration(String stepName, List<PropertyGroupConfiguration> propertyGroupConfigurations) {
 }
