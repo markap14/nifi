@@ -354,7 +354,7 @@
           "Resource Transfer Source": "FLOWFILE_CONTENT",
           "Cache Control": null,
           "s3-object-remove-tags-prefix": "false",
-          "Endpoint Override URL": null,
+          "Endpoint Override URL": "#{S3 Endpoint Override URL}",
           "File Resource Service": null,
           "Multipart Upload Max Age Threshold": "7 days",
           "custom-signer-class-name": null,
@@ -2100,6 +2100,12 @@
         },
         {
           "name": "S3 Prefix",
+          "description": "",
+          "sensitive": false,
+          "provided": false
+        },
+        {
+          "name": "S3 Endpoint Override URL",
           "description": "",
           "sensitive": false,
           "provided": false

@@ -65,7 +65,7 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
         final AuditService auditService = new MockAuditService();
         final PropertyEncryptor propertyEncryptor = new NopPropertyEncryptor();
         final BulletinRepository bulletinRepository = new VolatileBulletinRepository();
-        final StatusHistoryRepository statusHistoryRepository = new VolatileComponentStatusRepository();
+        final StatusHistoryRepository statusHistoryRepository = new VolatileComponentStatusRepository(nifiProperties);
         final RuleViolationsManager ruleViolationManager = new MockRuleViolationsManager();
         final StateManagerProvider stateManagerProvider = new MockStateManagerProvider();
 

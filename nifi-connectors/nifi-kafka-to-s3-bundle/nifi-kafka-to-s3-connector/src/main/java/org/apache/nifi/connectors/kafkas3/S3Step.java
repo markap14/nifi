@@ -46,6 +46,14 @@ public class S3Step {
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
         .build();
 
+    public static final ConnectorPropertyDescriptor S3_ENDPOINT_OVERRIDE_URL = new ConnectorPropertyDescriptor.Builder()
+        .name("S3 Endpoint Override URL")
+        .description("An optional endpoint URL to use instead of the default AWS S3 endpoint. " +
+                     "This can be used to connect to S3-compatible storage systems or for testing with LocalStack.")
+        .required(false)
+        .addValidator(StandardValidators.URL_VALIDATOR)
+        .build();
+
     public static final ConnectorPropertyDescriptor TARGET_OBJECT_SIZE = new ConnectorPropertyDescriptor.Builder()
         .name("Target Object Size")
         .description("The target size for each object written to S3. The connector will attempt to " +
@@ -99,7 +107,8 @@ public class S3Step {
             S3_BUCKET,
             S3_PREFIX,
             S3_REGION,
-            S3_DATA_FORMAT
+            S3_DATA_FORMAT,
+            S3_ENDPOINT_OVERRIDE_URL
         ))
         .build();
 

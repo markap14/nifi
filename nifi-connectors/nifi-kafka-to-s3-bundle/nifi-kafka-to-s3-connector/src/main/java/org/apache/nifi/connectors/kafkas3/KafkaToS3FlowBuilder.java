@@ -148,6 +148,9 @@ public class KafkaToS3FlowBuilder {
         final String prefix = configContext.getProperty(S3Step.S3_STEP, S3Step.S3_PREFIX).getValue();
         VersionedFlowUtils.setParameterValue(externalFlow, "S3 Prefix", prefix);
 
+        final String endpointOverrideUrl = configContext.getProperty(S3Step.S3_STEP, S3Step.S3_ENDPOINT_OVERRIDE_URL).getValue();
+        VersionedFlowUtils.setParameterValue(externalFlow, "S3 Endpoint Override URL", endpointOverrideUrl);
+
         final String authStrategy = configContext.getProperty(S3Step.S3_STEP, S3Step.S3_AUTHENTICATION_STRATEGY).getValue();
         if (authStrategy.equals(S3Step.DEFAULT_CREDENTIALS)) {
             final VersionedControllerService credentialsService = externalFlow.getFlowContents().getControllerServices().stream()
