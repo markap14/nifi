@@ -21,6 +21,7 @@ import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.connector.components.ControllerServiceReferenceHierarchy;
 import org.apache.nifi.components.connector.components.ControllerServiceReferenceScope;
 import org.apache.nifi.components.connector.components.ProcessGroupLifecycle;
+import org.apache.nifi.controller.ComponentNode;
 import org.apache.nifi.controller.ProcessorNode;
 import org.apache.nifi.controller.service.ControllerServiceNode;
 import org.apache.nifi.controller.service.ControllerServiceProvider;

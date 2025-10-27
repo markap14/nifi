@@ -846,7 +846,7 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
         return ResourceFactory.getControllerResource();
     }
 
-    private static FlowFileRepository createFlowFileRepository(final NiFiProperties properties, final ExtensionManager extensionManager, final ResourceClaimManager contentClaimManager) {
+    private static FlowFileRepository createFlowFileRepository(final NiFiProperties properties, final ExtensionManager extensionManager, final ResourceClaimManager resourceClaimManager) {
         final String implementationClassName = properties.getProperty(NiFiProperties.FLOWFILE_REPOSITORY_IMPLEMENTATION, DEFAULT_FLOWFILE_REPO_IMPLEMENTATION);
         if (implementationClassName == null) {
             throw new RuntimeException("Cannot create FlowFile Repository because the NiFi Properties is missing the following property: "
@@ -856,7 +856,7 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
         try {
             final FlowFileRepository created = NarThreadContextClassLoader.createInstance(extensionManager, implementationClassName, FlowFileRepository.class, properties);
             synchronized (created) {
-                created.initialize(contentClaimManager);
+                created.initialize(resourceClaimManager);
             }
 
             return created;

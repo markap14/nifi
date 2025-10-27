@@ -27,6 +27,7 @@ import org.apache.nifi.components.connector.components.ProcessorFacade;
 import org.apache.nifi.components.connector.components.ProcessorLifecycle;
 import org.apache.nifi.components.validation.DisabledServiceValidationResult;
 import org.apache.nifi.components.validation.ValidationState;
+import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.controller.ProcessScheduler;
 import org.apache.nifi.controller.ProcessorNode;
 import org.apache.nifi.flow.VersionedExternalFlow;
@@ -39,6 +40,7 @@ import org.apache.nifi.parameter.ParameterContext;
 import org.apache.nifi.parameter.ParameterLookup;
 import org.apache.nifi.processor.ProcessContext;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -75,6 +77,19 @@ public class StandaloneProcessorFacade implements ProcessorFacade {
     @Override
     public ProcessorLifecycle getLifecycle() {
         return lifecycle;
+    }
+
+    @Override
+    public List<ValidationResult> validate() {
+        final ValidationStatus status = processorNode.performValidation();
+        if (status == ValidationStatus.VALID) {
+            return Collections.emptyList();
+        }
+
+        return processorNode.getValidationErrors().stream()
+            .filter(result -> !result.isValid())
+            .filter(result -> !DisabledServiceValidationResult.isMatch(result))
+            .toList();
     }
 
     @Override

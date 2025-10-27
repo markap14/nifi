@@ -34,7 +34,9 @@ import org.apache.nifi.reporting.BulletinRepository;
 import org.apache.nifi.util.NiFiProperties;
 import org.apache.nifi.validation.RuleViolationsManager;
 
+import java.io.IOException;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -79,6 +81,12 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
             statusHistoryRepository,
             ruleViolationManager,
             stateManagerProvider);
+
+        try {
+            flowController.getRepositoryContextFactory().getFlowFileRepository().loadFlowFiles(Collections::emptyList);
+        } catch (final IOException e) {
+            throw new RuntimeException("Failed to initialize FlowFile Repository", e);
+        }
 
         flowEngine = new FlowEngine(4, "Connector Threads");
     }
@@ -133,7 +141,7 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
         }
         if (bundles.size() > 1) {
             throw new IllegalStateException("Multiple bundles found for connector class: " + connectorClassName + " - unable to determine which bundle to use. Ensure that only a single version of " +
-                                            "the Connector is included in the configured lib directory");
+                                            "the Connector is included in the configured lib directory. Available bundles: " + bundles);
         }
 
         final BundleCoordinate bundleCoordinate = bundles.getFirst().getBundleDetails().getCoordinate();

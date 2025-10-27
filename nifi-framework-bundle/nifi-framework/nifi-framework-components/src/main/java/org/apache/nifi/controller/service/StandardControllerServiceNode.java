@@ -634,7 +634,12 @@ public class StandardControllerServiceNode extends AbstractComponentNode impleme
                     return;
                 }
 
-                final ValidationStatus validationStatus = getValidationStatus();
+                ValidationStatus validationStatus = getValidationStatus();
+                if (validationStatus == ValidationStatus.VALIDATING) {
+                    performValidation();
+                    validationStatus = getValidationStatus();
+                }
+
                 if (validationStatus != ValidationStatus.VALID) {
                     final ValidationState validationState = getValidationState();
                     LOG.debug("Enabling {} failed: Validation Status [{}] Errors {} Attempt [{}] Retrying...",
