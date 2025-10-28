@@ -30,6 +30,7 @@ import java.net.InetAddress;
 import java.util.Collection;
 import java.util.Date;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
@@ -127,7 +128,7 @@ public interface RemoteProcessGroup extends ComponentAuthorizable, Positionable,
      * Immediately terminates communications between this instance and the
      * remote instance.
      */
-    Future<?> stopTransmitting();
+    CompletableFuture<Void> stopTransmitting();
 
     /**
      * Initiates communications between this instance and the remote instance

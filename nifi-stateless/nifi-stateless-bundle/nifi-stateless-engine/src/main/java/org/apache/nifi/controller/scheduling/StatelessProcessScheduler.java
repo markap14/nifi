@@ -196,7 +196,7 @@ public class StatelessProcessScheduler implements ProcessScheduler {
     }
 
     @Override
-    public Future<Void> startStatelessGroup(final StatelessGroupNode groupNode) {
+    public CompletableFuture<Void> startStatelessGroup(final StatelessGroupNode groupNode) {
         throw new UnsupportedOperationException();
     }
 

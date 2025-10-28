@@ -7,7 +7,7 @@ package org.apache.nifi.components.connector.facades.standalone;
 import org.apache.nifi.components.connector.components.StatelessGroupLifecycle;
 import org.apache.nifi.groups.ProcessGroup;
 
-import java.util.concurrent.Future;
+import java.util.concurrent.CompletableFuture;
 
 public class IllegalExecutionEngineStatelessGroupLifecycle implements StatelessGroupLifecycle {
     private final ProcessGroup processGroup;
@@ -17,17 +17,17 @@ public class IllegalExecutionEngineStatelessGroupLifecycle implements StatelessG
     }
 
     @Override
-    public Future<Void> start() {
+    public CompletableFuture<Void> start() {
         throw new IllegalStateException("Cannot start " + processGroup + " as a Stateless Group because the Process Group is not configured to run using the Stateless Execution Engine");
     }
 
     @Override
-    public Future<Void> stop() {
+    public CompletableFuture<Void> stop() {
         throw new IllegalStateException("Cannot stop " + processGroup + " as a Stateless Group because the Process Group is not configured to run using the Stateless Execution Engine");
     }
 
     @Override
-    public Future<Void> terminate() {
+    public CompletableFuture<Void> terminate() {
         throw new IllegalStateException("Cannot terminate " + processGroup + " as a Stateless Group because the Process Group is not configured to run using the Stateless Execution Engine");
     }
 }

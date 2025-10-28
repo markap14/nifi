@@ -9,6 +9,7 @@ import org.apache.nifi.authorization.Authorizer;
 import org.apache.nifi.bundle.Bundle;
 import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.cluster.ClusterDetailsFactory;
+import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.components.connector.FlowUpdateException;
@@ -100,7 +101,7 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
     @Override
     public void stop() {
         if (flowEngine != null) {
-            flowEngine.close();
+            flowEngine.shutdownNow();
         }
         if (flowController != null) {
             flowController.shutdown(true);
@@ -160,6 +161,11 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
     @Override
     public void configure(final String stepName, final List<PropertyGroupConfiguration> groupConfigurations) throws FlowUpdateException {
         connectorNode.setConfiguration(stepName, groupConfigurations);
+    }
+
+    @Override
+    public List<ConfigVerificationResult> verifyConfiguration(final String stepName, final List<PropertyGroupConfiguration> groupConfigurations) {
+        return connectorNode.verifyConfigurationStep(stepName, groupConfigurations);
     }
 
     @Override

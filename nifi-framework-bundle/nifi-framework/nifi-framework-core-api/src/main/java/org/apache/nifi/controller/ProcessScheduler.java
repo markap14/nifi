@@ -118,7 +118,7 @@ public interface ProcessScheduler {
      * @param groupNode the group to start
      * @return a Future that will be completed whenever the group has started
      */
-    Future<Void> startStatelessGroup(StatelessGroupNode groupNode);
+    CompletableFuture<Void> startStatelessGroup(StatelessGroupNode groupNode);
 
     /**
      * Stops scheduling the given Stateless Group to run. Returns a Future that will be completed whenever all components within the group have been stopped

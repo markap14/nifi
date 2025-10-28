@@ -13,14 +13,19 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.config.SaslConfigs;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.clients.CommonClientConfigs;
+import org.apache.nifi.components.ConfigVerificationResult;
+import org.apache.nifi.components.ConfigVerificationResult.Outcome;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.FlowUpdateException;
 import org.apache.nifi.components.connector.PropertyGroupConfiguration;
 import org.apache.nifi.mock.connector.StandardConnectorTestRunner;
 import org.apache.nifi.mock.connector.server.ConnectorTestRunner;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.testcontainers.containers.localstack.LocalStackContainer;
 import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.utility.DockerImageName;
@@ -55,11 +60,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class KafkaToS3IT {
 
     private static ConnectorTestRunner runner;
-
     private static ConfluentKafkaContainer kafkaContainer;
-
     private static LocalStackContainer localStackContainer;
-
     private static S3Client s3Client;
 
     private static final String SCRAM_USERNAME = "testuser";
@@ -85,13 +87,7 @@ public class KafkaToS3IT {
 
 
     @BeforeAll
-    public static void setupTestRunner() {
-        runner = new StandardConnectorTestRunner.Builder()
-            .connectorClassName("org.apache.nifi.connectors.kafkas3.KafkaToS3")
-            .narLibraryDirectory(new File("target/libDir"))
-            .build();
-        assertNotNull(runner);
-
+    public static void setupTestContainers() {
         kafkaContainer = new ConfluentKafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.8.0"));
         kafkaContainer
             .withStartupTimeout(Duration.ofSeconds(10))
@@ -128,12 +124,17 @@ public class KafkaToS3IT {
         s3Client.createBucket(CreateBucketRequest.builder().bucket(S3_BUCKET_NAME).build());
     }
 
-    @AfterAll
-    public static void cleanup() throws IOException {
-        if (runner != null) {
-            runner.close();
-        }
+    @BeforeEach
+    public void setupRunner() {
+        runner = new StandardConnectorTestRunner.Builder()
+            .connectorClassName("org.apache.nifi.connectors.kafkas3.KafkaToS3")
+            .narLibraryDirectory(new File("target/libDir"))
+            .build();
+        assertNotNull(runner);
+    }
 
+    @AfterAll
+    public static void cleanupTestContainers() throws IOException {
         if (s3Client != null) {
             s3Client.close();
         }
@@ -146,6 +147,14 @@ public class KafkaToS3IT {
             kafkaContainer.stop();
         }
     }
+
+    @AfterEach
+    public void cleanupRunner() throws IOException {
+        if (runner != null) {
+            runner.close();
+        }
+    }
+
 
     private void createKafkaTopics(final String... topicNames) throws ExecutionException, InterruptedException {
         final Properties adminProps = new Properties();
@@ -191,7 +200,7 @@ public class KafkaToS3IT {
 
 
     @Test
-    public void testVerification() throws ExecutionException, InterruptedException {
+    public void testVerification() throws ExecutionException, InterruptedException, FlowUpdateException {
         createKafkaTopics("topic-1", "topic-2", "topic-3", "topic-4", "topic-5", "Z-topic", "an-important-topic");
 
         produceRecordsToTopic("topic-1",
@@ -209,7 +218,52 @@ public class KafkaToS3IT {
             "Final plaintext record"
         );
 
-//        runner.verifyConfigurationStep("Kafka Connection", List.of())
+        final PropertyGroupConfiguration kafkaServerConfig = new PropertyGroupConfiguration("Kafka Server Settings", Map.of(
+            "Kafka Brokers", "localhost:9093",
+            "Security Protocol", "SASL_PLAINTEXT",
+            "SASL Mechanism", "PLAIN",
+            "Username", SCRAM_USERNAME,
+            "Password", SCRAM_PASSWORD
+        ));
+
+        // TODO: Add assertions to framework: runner.assertConfigurationValid(...)
+        // TODO: Add ability to fetch allowable values from Connector
+        runner.prepareForUpdate();
+
+        // Perform verification to ensure that valid server configuration passes
+        final List<ConfigVerificationResult> connectionVerificationResults = runner.verifyConfiguration("Kafka Connection", List.of(kafkaServerConfig));
+        assertEquals(List.of(), connectionVerificationResults);
+
+        // Apply the configuration that we've now validated
+        runner.configure("Kafka Connection", List.of(kafkaServerConfig));
+
+        // Perform verification to ensure that valid topic configuration passes
+        final PropertyGroupConfiguration topic1Config = new PropertyGroupConfiguration("Kafka Topics Configuration", Map.of(
+            "Topic Names", "topic-1",
+            "Consumer Group ID", "nifi-kafka-to-s3-testSuccessfulFlow",
+            "Offset Reset", "earliest",
+            "Kafka Data Format", "JSON"
+        ));
+        final List<ConfigVerificationResult> topic1VerificationResults = runner.verifyConfiguration("Kafka Topics", List.of(topic1Config));
+        assertEquals(List.of(), topic1VerificationResults.stream().filter(result -> result.getOutcome() == Outcome.FAILED).toList());
+
+        // Perform verification against a topic with invalid data for the selected data format
+        final PropertyGroupConfiguration importantTopicConfig = new PropertyGroupConfiguration("Kafka Topics Configuration", Map.of(
+            "Topic Names", "an-important-topic",
+            "Consumer Group ID", "nifi-kafka-to-s3-testSuccessfulFlow",
+            "Offset Reset", "earliest",
+            "Kafka Data Format", "JSON"
+        ));
+
+        final List<ConfigVerificationResult> importantTopicVerificationResults = runner.verifyConfiguration("Kafka Topics", List.of(importantTopicConfig));
+        final List<ConfigVerificationResult> invalidImportantTopicResults = importantTopicVerificationResults.stream()
+            .filter(result -> result.getOutcome() == Outcome.FAILED)
+            .toList();
+        assertEquals(1, invalidImportantTopicResults.size());
+        final ConfigVerificationResult invalidResult = invalidImportantTopicResults.getFirst();
+        assertTrue(invalidResult.getExplanation().contains("parse"), "Unexpected validation reason: " + invalidResult.getExplanation());
+
+        runner.finishUpdate();
     }
 
     @Test
@@ -268,9 +322,12 @@ public class KafkaToS3IT {
         assertEquals(Collections.emptyList(), validationResults);
 
         runner.startConnector();
-        runner.waitForDataIngested(Duration.ofSeconds(10));
-        runner.waitForIdle(Duration.ofSeconds(30));
-        runner.stopConnector();
+        try {
+            runner.waitForDataIngested(Duration.ofSeconds(10));
+            runner.waitForIdle(Duration.ofSeconds(30));
+        } finally {
+            runner.stopConnector();
+        }
 
         verifyS3ObjectsCreated();
     }

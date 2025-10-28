@@ -21,11 +21,14 @@ import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.connector.components.ControllerServiceReferenceHierarchy;
 import org.apache.nifi.components.connector.components.ControllerServiceReferenceScope;
 import org.apache.nifi.components.connector.components.ProcessGroupLifecycle;
-import org.apache.nifi.controller.ComponentNode;
+import org.apache.nifi.components.connector.components.StatelessGroupLifecycle;
+import org.apache.nifi.connectable.Port;
 import org.apache.nifi.controller.ProcessorNode;
 import org.apache.nifi.controller.service.ControllerServiceNode;
 import org.apache.nifi.controller.service.ControllerServiceProvider;
+import org.apache.nifi.flow.ExecutionEngine;
 import org.apache.nifi.groups.ProcessGroup;
+import org.apache.nifi.groups.RemoteProcessGroup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,6 +38,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class StandaloneProcessGroupLifecycle implements ProcessGroupLifecycle {
@@ -42,10 +46,16 @@ public class StandaloneProcessGroupLifecycle implements ProcessGroupLifecycle {
 
     private final ProcessGroup processGroup;
     private final ControllerServiceProvider controllerServiceProvider;
+    private final StatelessGroupLifecycle statelessGroupLifecycle;
+    private final Function<String, ProcessGroupLifecycle> childGroupLifecycleFactory;
 
-    public StandaloneProcessGroupLifecycle(final ProcessGroup processGroup, final ControllerServiceProvider controllerServiceProvider) {
+    public StandaloneProcessGroupLifecycle(final ProcessGroup processGroup, final ControllerServiceProvider controllerServiceProvider,
+                final StatelessGroupLifecycle statelessGroupLifecycle, final Function<String, ProcessGroupLifecycle> childGroupLifecycleFactory) {
+
         this.processGroup = processGroup;
         this.controllerServiceProvider = controllerServiceProvider;
+        this.statelessGroupLifecycle = statelessGroupLifecycle;
+        this.childGroupLifecycleFactory = childGroupLifecycleFactory;
     }
 
     @Override
@@ -162,6 +172,7 @@ public class StandaloneProcessGroupLifecycle implements ProcessGroupLifecycle {
         return disableControllerServices(serviceNodes);
     }
 
+    // TODO: Need a `startComponents` and `stopComponents` that includes Processors, Ports, Stateless Groups, etc.
     @Override
     public CompletableFuture<Void> startProcessors() {
         final Collection<ProcessorNode> processors = processGroup.getProcessors();
@@ -171,6 +182,87 @@ public class StandaloneProcessGroupLifecycle implements ProcessGroupLifecycle {
         }
 
         return CompletableFuture.allOf(startFutures.toArray(new CompletableFuture[0]));
+    }
+
+    @Override
+    public CompletableFuture<Void> start(final ControllerServiceReferenceScope serviceReferenceScope) {
+        if (processGroup.resolveExecutionEngine() == ExecutionEngine.STATELESS) {
+            return statelessGroupLifecycle.start();
+        }
+
+        final CompletableFuture<Void> enableServicesFuture = enableControllerServices(serviceReferenceScope, ControllerServiceReferenceHierarchy.DIRECT_SERVICES_ONLY);
+        final CompletableFuture<Void> enableAllComponents = enableServicesFuture.thenRun(this::startPorts)
+                .thenRun(this::startRemoteProcessGroups)
+                .thenCompose(v -> startProcessors());
+
+        final List<CompletableFuture<Void>> childGroupFutures = new ArrayList<>();
+        for (final ProcessGroup childGroup : processGroup.getProcessGroups()) {
+            final ProcessGroupLifecycle childLifecycle = childGroupLifecycleFactory.apply(childGroup.getIdentifier());
+            final CompletableFuture<Void> childFuture = childLifecycle.start(serviceReferenceScope);
+            childGroupFutures.add(childFuture);
+        }
+
+        final CompletableFuture<Void> compositeChildFutures = CompletableFuture.allOf(childGroupFutures.toArray(new CompletableFuture[0]));
+        return CompletableFuture.allOf(enableAllComponents, compositeChildFutures);
+    }
+
+    private void startPorts() {
+        for (final Port inputPort : processGroup.getInputPorts()) {
+            processGroup.startInputPort(inputPort);
+        }
+        for (final Port outputPort : processGroup.getOutputPorts()) {
+            processGroup.startOutputPort(outputPort);
+        }
+    }
+
+    private void stopPorts() {
+        for (final Port inputPort : processGroup.getInputPorts()) {
+            processGroup.stopInputPort(inputPort);
+        }
+        for (final Port outputPort : processGroup.getOutputPorts()) {
+            processGroup.stopOutputPort(outputPort);
+        }
+    }
+
+    private void startRemoteProcessGroups() {
+        for (final RemoteProcessGroup rpg : processGroup.getRemoteProcessGroups()) {
+            rpg.startTransmitting();
+        }
+    }
+
+    private CompletableFuture<Void> stopRemoteProcessGroups() {
+        final List<CompletableFuture<Void>> stopFutures = new ArrayList<>();
+
+        for (final RemoteProcessGroup rpg : processGroup.getRemoteProcessGroups()) {
+            stopFutures.add(rpg.stopTransmitting());
+        }
+
+        return CompletableFuture.allOf(stopFutures.toArray(new CompletableFuture[0]));
+    }
+
+    @Override
+    public CompletableFuture<Void> stop() {
+        if (processGroup.resolveExecutionEngine() == ExecutionEngine.STATELESS) {
+            return statelessGroupLifecycle.stop();
+        }
+
+        final CompletableFuture<Void> stopProcessorsFuture = stopProcessors();
+
+        return stopProcessorsFuture.thenCompose(ignored -> stopChildren())
+            .thenRun(this::stopPorts)
+            .thenCompose(ignored -> stopRemoteProcessGroups())
+            .thenRun(() -> disableControllerServices(ControllerServiceReferenceHierarchy.INCLUDE_CHILD_GROUPS));
+    }
+
+    private CompletableFuture<Void> stopChildren() {
+        final List<CompletableFuture<Void>> childGroupFutures = new ArrayList<>();
+        for (final ProcessGroup childGroup : processGroup.getProcessGroups()) {
+            final ProcessGroupLifecycle childLifecycle = childGroupLifecycleFactory.apply(childGroup.getIdentifier());
+            final CompletableFuture<Void> childFuture = childLifecycle.stop();
+            childGroupFutures.add(childFuture);
+        }
+
+        return CompletableFuture.allOf(childGroupFutures.toArray(new CompletableFuture[0]));
     }
 
     @Override

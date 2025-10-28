@@ -9,6 +9,7 @@ import org.apache.nifi.controller.ProcessScheduler;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.groups.StatelessGroupNode;
 
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
 public class StandaloneStatelessGroupLifecycle implements StatelessGroupLifecycle {
@@ -21,18 +22,18 @@ public class StandaloneStatelessGroupLifecycle implements StatelessGroupLifecycl
     }
 
     @Override
-    public Future<Void> start() {
+    public CompletableFuture<Void> start() {
         return processScheduler.startStatelessGroup(statelessGroupNode);
     }
 
     @Override
-    public Future<Void> stop() {
+    public CompletableFuture<Void> stop() {
         return processScheduler.stopStatelessGroup(statelessGroupNode);
     }
 
     // TODO: Stateless Group does not currently support termination.
     @Override
-    public Future<Void> terminate() {
-        return null;
+    public CompletableFuture<Void> terminate() {
+        return CompletableFuture.completedFuture(null);
     }
 }

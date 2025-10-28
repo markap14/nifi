@@ -19,6 +19,7 @@ package org.apache.nifi.mock.connector;
 
 import org.apache.nifi.NiFiServer;
 import org.apache.nifi.bundle.Bundle;
+import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.FlowUpdateException;
 import org.apache.nifi.components.connector.PropertyGroupConfiguration;
@@ -116,6 +117,11 @@ public class StandardConnectorTestRunner implements ConnectorTestRunner, Closeab
     @Override
     public void configure(final String stepName, final List<PropertyGroupConfiguration> groupConfigurations) throws FlowUpdateException {
         mockServer.configure(stepName, groupConfigurations);
+    }
+
+    @Override
+    public List<ConfigVerificationResult> verifyConfiguration(final String stepName, final List<PropertyGroupConfiguration> groupConfigurations) {
+        return mockServer.verifyConfiguration(stepName, groupConfigurations);
     }
 
     @Override

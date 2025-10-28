@@ -89,7 +89,6 @@ public class StandaloneProcessGroupFacade implements ProcessGroupFacade {
         this.controllerServiceMap = mapControllerServices(flowDefinition);
         this.connectionMap = mapConnections(flowDefinition);
         this.processGroupMap = mapProcessGroups(flowDefinition);
-        this.lifecycle = new StandaloneProcessGroupLifecycle(processGroup, controllerServiceProvider);
 
         final ExecutionEngine executionEngine = processGroup.resolveExecutionEngine();
         if (executionEngine == ExecutionEngine.STATELESS) {
@@ -97,6 +96,9 @@ public class StandaloneProcessGroupFacade implements ProcessGroupFacade {
         } else {
             this.statelessGroupLifecycle = new IllegalExecutionEngineStatelessGroupLifecycle(processGroup);
         }
+
+        this.lifecycle = new StandaloneProcessGroupLifecycle(processGroup, controllerServiceProvider, statelessGroupLifecycle,
+            id -> getProcessGroup(id).getLifecycle());
     }
 
     private Map<String, VersionedProcessor> mapProcessors(final VersionedProcessGroup flowDefinition) {
