@@ -27,6 +27,8 @@ public class ConnectorParameterLookup implements ParameterLookup {
     private final List<ParameterValue> parameterValues;
     private final AssetManager assetManager;
 
+    // TODO: Refactor how parameters work
+    //       It is possible that a VersionedProcessGroup has a child where different parameter contexts are used or are used in a different inheritance order.
     public ConnectorParameterLookup(final Collection<VersionedParameterContext> parameterContexts, final AssetManager assetManager) {
         this.assetManager = assetManager;
 

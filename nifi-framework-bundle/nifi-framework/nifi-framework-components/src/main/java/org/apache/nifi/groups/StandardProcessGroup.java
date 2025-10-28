@@ -198,6 +198,7 @@ public final class StandardProcessGroup implements ProcessGroup {
     private volatile ExecutionEngine executionEngine = ExecutionEngine.INHERITED;
     private volatile int maxConcurrentTasks = 1;
     private volatile String statelessFlowTimeout = "1 min";
+    private volatile Authorizable explicitParentAuthorizable;
     private final FlowFileActivity flowFileActivity = new ProcessGroupFlowFileActivity(this);
 
     private FlowFileConcurrency flowFileConcurrency = FlowFileConcurrency.UNBOUNDED;
@@ -298,7 +299,7 @@ public final class StandardProcessGroup implements ProcessGroup {
 
     @Override
     public Authorizable getParentAuthorizable() {
-        return getParent();
+        return Objects.requireNonNullElse(explicitParentAuthorizable, getParent());
     }
 
     @Override
@@ -4557,6 +4558,11 @@ public final class StandardProcessGroup implements ProcessGroup {
     @Override
     public FlowFileActivity getFlowFileActivity() {
         return flowFileActivity;
+    }
+
+    @Override
+    public void setExplicitParentAuthorizable(final Authorizable parent) {
+        this.explicitParentAuthorizable = parent;
     }
 
     @Override

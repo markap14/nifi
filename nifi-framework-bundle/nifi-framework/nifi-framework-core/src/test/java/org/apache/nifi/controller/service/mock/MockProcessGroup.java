@@ -911,6 +911,10 @@ public class MockProcessGroup implements ProcessGroup {
     }
 
     @Override
+    public void setExplicitParentAuthorizable(final Authorizable parent) {
+    }
+
+    @Override
     public void setLogFileSuffix(String logFileSuffix) {
 
     }

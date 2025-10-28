@@ -16,6 +16,7 @@
  */
 package org.apache.nifi.groups;
 
+import org.apache.nifi.authorization.resource.Authorizable;
 import org.apache.nifi.authorization.resource.ComponentAuthorizable;
 import org.apache.nifi.components.VersionedComponent;
 import org.apache.nifi.connectable.Connectable;
@@ -1275,4 +1276,11 @@ public interface ProcessGroup extends ComponentAuthorizable, Positionable, Versi
      * @return the FlowFileActivity for this Process Group
      */
     FlowFileActivity getFlowFileActivity();
+
+    /**
+     * Sets an explicit Authorizable that is to be used as the Process Group's parent for the purposes of authorization.
+     * If not set, the Process Group's parent group will be used.
+     * @param parent the parent Authorizable to set, or null to clear any explicit parent
+     */
+    void setExplicitParentAuthorizable(Authorizable parent);
 }

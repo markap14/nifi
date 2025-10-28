@@ -795,6 +795,9 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
             .connectorStateTransition(stateTransition)
             .buildConnector();
 
+        // Establish the Connector as the parent authorizable of the managed root group
+        managedRootGroup.setExplicitParentAuthorizable(connectorNode);
+
         // Set up logging for the connector
         final LogRepository logRepository = LogRepositoryFactory.getRepository(id);
         logRepository.setLogger(connectorNode.getComponentLog());
