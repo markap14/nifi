@@ -76,10 +76,13 @@ public class KafkaToS3FlowBuilder {
                 .ifPresent(service -> service.setProperties(properties));
         } else {
             final String username = configContext.getProperty(connectionStep, KafkaConnectionStep.SCHEMA_REGISTRY_USERNAME).getValue();
-            final String password = configContext.getProperty(connectionStep, KafkaConnectionStep.PASSWORD).getValue();
+            final String password = configContext.getProperty(connectionStep, KafkaConnectionStep.SCHEMA_REGISTRY_PASSWORD).getValue();
 
             VersionedFlowUtils.setParameterValue(externalFlow, "Schema Registry Username", username);
             VersionedFlowUtils.setParameterValue(externalFlow, "Schema Registry Password", password);
+
+            final String authenticationType = (username == null || username.isEmpty()) ? "NONE" : "BASIC";
+            VersionedFlowUtils.setParameterValue(externalFlow, "Schema Registry Authentication Type", authenticationType);
         }
     }
 

@@ -4,7 +4,6 @@
 
 package org.apache.nifi.mock.connector.server;
 
-import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.FlowUpdateException;
 import org.apache.nifi.components.connector.PropertyGroupConfiguration;
@@ -25,7 +24,7 @@ public interface ConnectorTestRunner extends Closeable {
 
     void configure(String stepName, List<PropertyGroupConfiguration> groupConfigurations) throws FlowUpdateException;
 
-    List<ConfigVerificationResult> verifyConfiguration(String stepName, List<PropertyGroupConfiguration> groupConfigurations);
+    ConnectorConfigVerificationResult verifyConfiguration(String stepName, List<PropertyGroupConfiguration> groupConfigurations);
 
     void startConnector();
 

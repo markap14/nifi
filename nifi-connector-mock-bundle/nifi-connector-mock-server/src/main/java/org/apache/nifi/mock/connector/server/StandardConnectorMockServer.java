@@ -164,8 +164,9 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
     }
 
     @Override
-    public List<ConfigVerificationResult> verifyConfiguration(final String stepName, final List<PropertyGroupConfiguration> groupConfigurations) {
-        return connectorNode.verifyConfigurationStep(stepName, groupConfigurations);
+    public ConnectorConfigVerificationResult verifyConfiguration(final String stepName, final List<PropertyGroupConfiguration> groupConfigurations) {
+        final List<ConfigVerificationResult> results = connectorNode.verifyConfigurationStep(stepName, groupConfigurations);
+        return new MockServerConfigVerificationResult(results);
     }
 
     @Override

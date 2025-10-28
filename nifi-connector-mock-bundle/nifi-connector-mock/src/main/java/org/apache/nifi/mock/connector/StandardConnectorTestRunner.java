@@ -19,10 +19,10 @@ package org.apache.nifi.mock.connector;
 
 import org.apache.nifi.NiFiServer;
 import org.apache.nifi.bundle.Bundle;
-import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.FlowUpdateException;
 import org.apache.nifi.components.connector.PropertyGroupConfiguration;
+import org.apache.nifi.mock.connector.server.ConnectorConfigVerificationResult;
 import org.apache.nifi.mock.connector.server.ConnectorMockServer;
 import org.apache.nifi.mock.connector.server.ConnectorTestRunner;
 import org.apache.nifi.nar.ExtensionMapping;
@@ -120,7 +120,7 @@ public class StandardConnectorTestRunner implements ConnectorTestRunner, Closeab
     }
 
     @Override
-    public List<ConfigVerificationResult> verifyConfiguration(final String stepName, final List<PropertyGroupConfiguration> groupConfigurations) {
+    public ConnectorConfigVerificationResult verifyConfiguration(final String stepName, final List<PropertyGroupConfiguration> groupConfigurations) {
         return mockServer.verifyConfiguration(stepName, groupConfigurations);
     }
 

@@ -4,6 +4,7 @@
 
 package org.apache.nifi.connectors.kafkas3;
 
+import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.NewTopic;
@@ -12,21 +13,22 @@ import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.config.SaslConfigs;
 import org.apache.kafka.common.serialization.StringSerializer;
-import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.nifi.components.ConfigVerificationResult;
-import org.apache.nifi.components.ConfigVerificationResult.Outcome;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.FlowUpdateException;
 import org.apache.nifi.components.connector.PropertyGroupConfiguration;
 import org.apache.nifi.mock.connector.StandardConnectorTestRunner;
+import org.apache.nifi.mock.connector.server.ConnectorConfigVerificationResult;
 import org.apache.nifi.mock.connector.server.ConnectorTestRunner;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.containers.localstack.LocalStackContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.kafka.ConfluentKafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -41,6 +43,10 @@ import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.S3Object;
+import io.confluent.kafka.serializers.KafkaAvroSerializer;
+import org.apache.avro.Schema;
+import org.apache.avro.generic.GenericData;
+import org.apache.avro.generic.GenericRecord;
 
 import java.io.File;
 import java.io.IOException;
@@ -60,7 +66,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class KafkaToS3IT {
 
     private static ConnectorTestRunner runner;
+    private static Network network;
     private static ConfluentKafkaContainer kafkaContainer;
+    private static GenericContainer<?> schemaRegistryContainer;
     private static LocalStackContainer localStackContainer;
     private static S3Client s3Client;
 
@@ -88,12 +96,15 @@ public class KafkaToS3IT {
 
     @BeforeAll
     public static void setupTestContainers() {
-        kafkaContainer = new ConfluentKafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.8.0"));
-        kafkaContainer
+        network = Network.newNetwork();
+
+        kafkaContainer = new ConfluentKafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.8.0"))
+            .withNetwork(network)
+            .withNetworkAliases("kafka")
             .withStartupTimeout(Duration.ofSeconds(10))
             .withEnv("KAFKA_LISTENER_SECURITY_PROTOCOL_MAP", "CONTROLLER:PLAINTEXT,BROKER:PLAINTEXT,PLAINTEXT:PLAINTEXT,SASL:SASL_PLAINTEXT")
             .withEnv("KAFKA_LISTENERS", "CONTROLLER://0.0.0.0:9094,BROKER://0.0.0.0:9092,PLAINTEXT://0.0.0.0:19092,SASL://0.0.0.0:9093")
-            .withEnv("KAFKA_ADVERTISED_LISTENERS", "BROKER://localhost:9092,PLAINTEXT://localhost:19092,SASL://localhost:9093")
+            .withEnv("KAFKA_ADVERTISED_LISTENERS", "BROKER://kafka:9092,PLAINTEXT://kafka:19092,SASL://localhost:9093")
             .withEnv("KAFKA_CONTROLLER_LISTENER_NAMES", "CONTROLLER")
             .withEnv("KAFKA_INTER_BROKER_LISTENER_NAME", "BROKER")
             .withEnv("KAFKA_SASL_ENABLED_MECHANISMS", "PLAIN")
@@ -102,10 +113,22 @@ public class KafkaToS3IT {
                 "sh", "-c",
                 "echo '" + JAAS_CONFIG_CONTENT + "' > /tmp/kafka_jaas.conf && " +
                 "/etc/confluent/docker/run"
-            )
-            .setPortBindings(List.of("9093:9093"));
+            );
 
+        kafkaContainer.setPortBindings(List.of("9093:9093"));
         kafkaContainer.start();
+
+        schemaRegistryContainer = new GenericContainer<>(DockerImageName.parse("confluentinc/cp-schema-registry:7.8.0"))
+            .withNetwork(network)
+            .withExposedPorts(8081)
+            .withEnv("SCHEMA_REGISTRY_HOST_NAME", "schema-registry")
+            .withEnv("SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS", "PLAINTEXT://kafka:19092")
+            .withEnv("SCHEMA_REGISTRY_LISTENERS", "http://0.0.0.0:8081")
+            .withStartupTimeout(Duration.ofSeconds(60))
+            .waitingFor(Wait.forHttp("/subjects").forStatusCode(200))
+            .dependsOn(kafkaContainer);
+
+        schemaRegistryContainer.start();
 
         localStackContainer = new LocalStackContainer(DockerImageName.parse("localstack/localstack:4.1.0"))
             .withServices(LocalStackContainer.Service.S3)
@@ -134,7 +157,7 @@ public class KafkaToS3IT {
     }
 
     @AfterAll
-    public static void cleanupTestContainers() throws IOException {
+    public static void cleanupTestContainers() {
         if (s3Client != null) {
             s3Client.close();
         }
@@ -143,8 +166,16 @@ public class KafkaToS3IT {
             localStackContainer.stop();
         }
 
+        if (schemaRegistryContainer != null) {
+            schemaRegistryContainer.stop();
+        }
+
         if (kafkaContainer != null) {
             kafkaContainer.stop();
+        }
+
+        if (network != null) {
+            network.close();
         }
     }
 
@@ -198,6 +229,33 @@ public class KafkaToS3IT {
         }
     }
 
+    private String getSchemaRegistryUrl() {
+        return String.format("http://%s:%d", schemaRegistryContainer.getHost(), schemaRegistryContainer.getMappedPort(8081));
+    }
+
+    private void produceAvroRecordsToTopic(final String topicName, final Schema schema, final GenericRecord... records) throws ExecutionException, InterruptedException {
+        final Properties producerProps = new Properties();
+        producerProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9093");
+        producerProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        producerProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, KafkaAvroSerializer.class.getName());
+        producerProps.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, "SASL_PLAINTEXT");
+        producerProps.put(SaslConfigs.SASL_MECHANISM, "PLAIN");
+        producerProps.put(SaslConfigs.SASL_JAAS_CONFIG, String.format(
+            "org.apache.kafka.common.security.plain.PlainLoginModule required username=\"%s\" password=\"%s\";",
+            SCRAM_USERNAME, SCRAM_PASSWORD
+        ));
+        producerProps.put("schema.registry.url", getSchemaRegistryUrl());
+
+        try (final KafkaProducer<String, GenericRecord> producer = new KafkaProducer<>(producerProps)) {
+            for (final GenericRecord record : records) {
+                final ProducerRecord<String, GenericRecord> producerRecord = new ProducerRecord<>(topicName, record);
+                producer.send(producerRecord).get();
+            }
+
+            producer.flush();
+        }
+    }
+
 
     @Test
     public void testVerification() throws ExecutionException, InterruptedException, FlowUpdateException {
@@ -226,13 +284,11 @@ public class KafkaToS3IT {
             "Password", SCRAM_PASSWORD
         ));
 
-        // TODO: Add assertions to framework: runner.assertConfigurationValid(...)
-        // TODO: Add ability to fetch allowable values from Connector
         runner.prepareForUpdate();
 
         // Perform verification to ensure that valid server configuration passes
-        final List<ConfigVerificationResult> connectionVerificationResults = runner.verifyConfiguration("Kafka Connection", List.of(kafkaServerConfig));
-        assertEquals(List.of(), connectionVerificationResults);
+        final ConnectorConfigVerificationResult connectionVerificationResults = runner.verifyConfiguration("Kafka Connection", List.of(kafkaServerConfig));
+        connectionVerificationResults.assertNoFailures();
 
         // Apply the configuration that we've now validated
         runner.configure("Kafka Connection", List.of(kafkaServerConfig));
@@ -244,8 +300,8 @@ public class KafkaToS3IT {
             "Offset Reset", "earliest",
             "Kafka Data Format", "JSON"
         ));
-        final List<ConfigVerificationResult> topic1VerificationResults = runner.verifyConfiguration("Kafka Topics", List.of(topic1Config));
-        assertEquals(List.of(), topic1VerificationResults.stream().filter(result -> result.getOutcome() == Outcome.FAILED).toList());
+        final ConnectorConfigVerificationResult topic1VerificationResults = runner.verifyConfiguration("Kafka Topics", List.of(topic1Config));
+        topic1VerificationResults.assertNoFailures();
 
         // Perform verification against a topic with invalid data for the selected data format
         final PropertyGroupConfiguration importantTopicConfig = new PropertyGroupConfiguration("Kafka Topics Configuration", Map.of(
@@ -255,10 +311,8 @@ public class KafkaToS3IT {
             "Kafka Data Format", "JSON"
         ));
 
-        final List<ConfigVerificationResult> importantTopicVerificationResults = runner.verifyConfiguration("Kafka Topics", List.of(importantTopicConfig));
-        final List<ConfigVerificationResult> invalidImportantTopicResults = importantTopicVerificationResults.stream()
-            .filter(result -> result.getOutcome() == Outcome.FAILED)
-            .toList();
+        final ConnectorConfigVerificationResult importantTopicVerificationResults = runner.verifyConfiguration("Kafka Topics", List.of(importantTopicConfig));
+        final List<ConfigVerificationResult> invalidImportantTopicResults = importantTopicVerificationResults.getFailedResults();
         assertEquals(1, invalidImportantTopicResults.size());
         final ConfigVerificationResult invalidResult = invalidImportantTopicResults.getFirst();
         assertTrue(invalidResult.getExplanation().contains("parse"), "Unexpected validation reason: " + invalidResult.getExplanation());
@@ -345,6 +399,159 @@ public class KafkaToS3IT {
                 assertTrue(objectSize > 0, "Expected S3 object " + s3Object.key() + " to have content");
             }
         }
+    }
+
+    @Test
+    public void testSchemaRegistryVerification() throws ExecutionException, InterruptedException, FlowUpdateException {
+        createKafkaTopics("avro-topic");
+
+        final String schemaString = """
+            {
+              "type": "record",
+              "name": "TestRecord",
+              "namespace": "org.apache.nifi.test",
+              "fields": [
+                {"name": "id", "type": "int"},
+                {"name": "message", "type": "string"}
+              ]
+            }""";
+
+        final Schema schema = new Schema.Parser().parse(schemaString);
+
+        final GenericRecord record1 = new GenericData.Record(schema);
+        record1.put("id", 100);
+        record1.put("message", "Test message 1");
+
+        final GenericRecord record2 = new GenericData.Record(schema);
+        record2.put("id", 200);
+        record2.put("message", "Test message 2");
+
+        produceAvroRecordsToTopic("avro-topic", schema, record1, record2);
+
+        final PropertyGroupConfiguration kafkaServerConfig = new PropertyGroupConfiguration("Kafka Server Settings", Map.of(
+            "Kafka Brokers", "localhost:9093",
+            "Security Protocol", "SASL_PLAINTEXT",
+            "SASL Mechanism", "PLAIN",
+            "Username", SCRAM_USERNAME,
+            "Password", SCRAM_PASSWORD
+        ));
+
+        final PropertyGroupConfiguration schemaRegistryConfig = new PropertyGroupConfiguration("Schema Registry Settings", Map.of(
+            "Schema Registry URL", getSchemaRegistryUrl()
+        ));
+
+        runner.prepareForUpdate();
+
+        final ConnectorConfigVerificationResult connectionVerificationResults = runner.verifyConfiguration("Kafka Connection", List.of(kafkaServerConfig, schemaRegistryConfig));
+        connectionVerificationResults.assertNoFailures();
+
+        runner.configure("Kafka Connection", List.of(kafkaServerConfig, schemaRegistryConfig));
+
+        final PropertyGroupConfiguration avroTopicConfig = new PropertyGroupConfiguration("Kafka Topics Configuration", Map.of(
+            "Topic Names", "avro-topic",
+            "Consumer Group ID", "nifi-kafka-to-s3-testSchemaRegistryVerification",
+            "Offset Reset", "earliest",
+            "Kafka Data Format", "Avro"
+        ));
+
+        final ConnectorConfigVerificationResult avroTopicVerificationResults = runner.verifyConfiguration("Kafka Topics", List.of(avroTopicConfig));
+        avroTopicVerificationResults.assertNoFailures();
+
+        runner.finishUpdate();
+    }
+
+    @Test
+    public void testWithSchemaRegistry() throws IOException, ExecutionException, InterruptedException, FlowUpdateException {
+        createKafkaTopics("user-events");
+
+        final String schemaString = """
+            {
+              "type": "record",
+              "name": "UserEvent",
+              "namespace": "org.apache.nifi.test",
+              "fields": [
+                {"name": "userId", "type": "int"},
+                {"name": "userName", "type": "string"},
+                {"name": "eventType", "type": "string"},
+                {"name": "timestamp", "type": "long"}
+              ]
+            }""";
+
+        final Schema schema = new Schema.Parser().parse(schemaString);
+
+        final GenericRecord record1 = new GenericData.Record(schema);
+        record1.put("userId", 1001);
+        record1.put("userName", "alice");
+        record1.put("eventType", "login");
+        record1.put("timestamp", System.currentTimeMillis());
+
+        final GenericRecord record2 = new GenericData.Record(schema);
+        record2.put("userId", 1002);
+        record2.put("userName", "bob");
+        record2.put("eventType", "purchase");
+        record2.put("timestamp", System.currentTimeMillis());
+
+        final GenericRecord record3 = new GenericData.Record(schema);
+        record3.put("userId", 1003);
+        record3.put("userName", "charlie");
+        record3.put("eventType", "logout");
+        record3.put("timestamp", System.currentTimeMillis());
+
+        produceAvroRecordsToTopic("user-events", schema, record1, record2, record3);
+
+        final PropertyGroupConfiguration kafkaServerConfig = new PropertyGroupConfiguration("Kafka Server Settings", Map.of(
+            "Kafka Brokers", "localhost:9093",
+            "Security Protocol", "SASL_PLAINTEXT",
+            "SASL Mechanism", "PLAIN",
+            "Username", SCRAM_USERNAME,
+            "Password", SCRAM_PASSWORD
+        ));
+
+        final PropertyGroupConfiguration schemaRegistryConfig = new PropertyGroupConfiguration("Schema Registry Settings", Map.of(
+            "Schema Registry URL", getSchemaRegistryUrl()
+        ));
+
+        final PropertyGroupConfiguration kafkaTopicConfig = new PropertyGroupConfiguration("Kafka Topics Configuration", Map.of(
+            "Topic Names", "user-events",
+            "Consumer Group ID", "nifi-kafka-to-s3-testSchemaRegistry",
+            "Offset Reset", "earliest",
+            "Kafka Data Format", "Avro"
+        ));
+
+        final PropertyGroupConfiguration s3DestinationConfig = new PropertyGroupConfiguration("S3 Destination Configuration", Map.of(
+            "S3 Region", S3_REGION,
+            "S3 Data Format", "Avro",
+            "S3 Bucket", S3_BUCKET_NAME,
+            "S3 Endpoint Override URL", localStackContainer.getEndpoint().toString()
+        ));
+        final PropertyGroupConfiguration s3CredentialsConfig = new PropertyGroupConfiguration("S3 Credentials", Map.of(
+            "S3 Authentication Strategy", "Static Credentials",
+            "Access Key ID", localStackContainer.getAccessKey(),
+            "Secret Access Key", localStackContainer.getSecretKey()
+        ));
+        final PropertyGroupConfiguration s3MergeConfig = new PropertyGroupConfiguration("Merge Configuration", Map.of(
+            "Target Object Size", "1 MB",
+            "Merge Latency", "5 sec"
+        ));
+
+        runner.prepareForUpdate();
+        runner.configure("Kafka Connection", List.of(kafkaServerConfig, schemaRegistryConfig));
+        runner.configure("Kafka Topics", List.of(kafkaTopicConfig));
+        runner.configure("S3 Configuration", List.of(s3DestinationConfig, s3MergeConfig, s3CredentialsConfig));
+        runner.finishUpdate();
+
+        final List<ValidationResult> validationResults = runner.validate();
+        assertEquals(Collections.emptyList(), validationResults);
+
+        runner.startConnector();
+        try {
+            runner.waitForDataIngested(Duration.ofSeconds(10));
+            runner.waitForIdle(Duration.ofSeconds(30));
+        } finally {
+            runner.stopConnector();
+        }
+
+        verifyS3ObjectsCreated();
     }
 
 }

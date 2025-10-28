@@ -1518,7 +1518,7 @@
         "properties": {
           "cache-expiration": "1 hour",
           "password": "#{Schema Registry Password}",
-          "authentication-type": "BASIC",
+          "authentication-type": "#{Schema Registry Authentication Type}",
           "cache-size": "1000",
           "ssl-context": null,
           "url": "#{Schema Registry URLs}",
@@ -2005,6 +2005,13 @@
           "description": "",
           "sensitive": false,
           "provided": false
+        },
+        {
+          "name": "Schema Registry Authentication Type",
+          "description": "",
+          "sensitive": false,
+          "provided": false,
+          "value": "BASIC"
         },
         {
           "name": "S3 Data Format",
