@@ -101,10 +101,10 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
     @Override
     public void stop() {
         if (flowEngine != null) {
-            flowEngine.shutdownNow();
+            flowEngine.shutdown();
         }
         if (flowController != null) {
-            flowController.shutdown(true);
+            flowController.shutdown(false);
         }
     }
 

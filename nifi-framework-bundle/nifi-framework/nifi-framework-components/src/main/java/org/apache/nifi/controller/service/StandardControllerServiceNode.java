@@ -635,7 +635,7 @@ public class StandardControllerServiceNode extends AbstractComponentNode impleme
                 }
 
                 ValidationStatus validationStatus = getValidationStatus();
-                if (validationStatus == ValidationStatus.VALIDATING) {
+                if (validationStatus != ValidationStatus.VALID) {
                     performValidation();
                     validationStatus = getValidationStatus();
                 }

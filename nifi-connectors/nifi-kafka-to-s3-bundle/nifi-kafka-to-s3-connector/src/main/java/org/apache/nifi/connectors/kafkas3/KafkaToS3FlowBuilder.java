@@ -52,9 +52,21 @@ public class KafkaToS3FlowBuilder {
                 .filter(service -> service.getType().endsWith("ConfluentSchemaRegistry"))
                 .findFirst()
                 .orElseThrow();
-
-            processGroup.getControllerServices().remove(schemaRegistryService);
             VersionedFlowUtils.removeControllerServiceReferences(processGroup, schemaRegistryService.getIdentifier());
+
+            final VersionedControllerService schemaReferenceReader = processGroup.getControllerServices().stream()
+                .filter(service -> service.getType().endsWith("ConfluentEncodedSchemaReferenceReader"))
+                .findFirst()
+                .orElseThrow();
+            VersionedFlowUtils.removeControllerServiceReferences(processGroup, schemaReferenceReader.getIdentifier());
+
+            processGroup.getControllerServices().stream()
+                .filter(service -> service.getType().endsWith("JsonTreeReader"))
+                .forEach(service -> service.getProperties().put("Schema Access Strategy", "infer-schema"));
+
+            processGroup.getControllerServices().stream()
+                .filter(service -> service.getType().endsWith("JsonRecordSetWriter"))
+                .forEach(service -> service.getProperties().put("Schema Write Strategy", "no-schema"));
         }
     }
 

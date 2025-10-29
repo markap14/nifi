@@ -556,15 +556,16 @@ public class ConsumeKafka extends AbstractProcessor implements VerifiableProcess
 
     private ConfigVerificationResult verifyCanParse(final ProcessContext context, final KafkaConsumerService consumerService, final ComponentLog verificationLogger) {
         final Iterable<ByteRecord> records = consumerService.poll(Duration.ofSeconds(60));
-        final RecordReaderFactory readerFactory = context.getProperty(RECORD_READER).asControllerService(RecordReaderFactory.class);
-        if (readerFactory == null) {
+        final ProcessingStrategy processingStrategy = context.getProperty(PROCESSING_STRATEGY).asAllowableValue(ProcessingStrategy.class);
+        if (processingStrategy != ProcessingStrategy.RECORD) {
             return new ConfigVerificationResult.Builder()
                 .verificationStepName("Parse Records")
                 .outcome(Outcome.SKIPPED)
-                .explanation("No Record Reader is configured so skipping record parsing verification")
+                .explanation("Processing Strategy is set to " + processingStrategy.getValue() + " so skipping record parsing verification")
                 .build();
         }
 
+        final RecordReaderFactory readerFactory = context.getProperty(RECORD_READER).asControllerService(RecordReaderFactory.class);
         int recordIndex = 0;
         for (final ByteRecord byteRecord : records) {
             recordIndex++;
