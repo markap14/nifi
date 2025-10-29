@@ -299,7 +299,7 @@ public final class StandardProcessGroup implements ProcessGroup {
 
     @Override
     public Authorizable getParentAuthorizable() {
-        return Objects.requireNonNullElse(explicitParentAuthorizable, getParent());
+        return explicitParentAuthorizable == null ? getParent() : explicitParentAuthorizable;
     }
 
     @Override
