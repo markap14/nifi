@@ -15,15 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.nifi.components.connector;
+package org.apache.nifi.mock.connector.server;
 
-public enum ConnectorState {
-    STARTING,
-    RUNNING,
-    STOPPING,
-    STOPPED,
-    DISABLED,
-    PREPARING_FOR_UPDATE,
-    UPDATING,
-    UPDATE_FAILED;
+import org.apache.nifi.components.connector.ConnectorInitializationContextBuilder;
+import org.apache.nifi.components.connector.StandardConnectorRepository;
+
+public class MockConnectorRepository extends StandardConnectorRepository {
+
+    private volatile MockExtensionMapper mockExtensionMapper;
+
+    public void setMockExtensionMapper(final MockExtensionMapper mapper) {
+        mockExtensionMapper = mapper;
+    }
+
+    @Override
+    public ConnectorInitializationContextBuilder createInitializationContextBuilder() {
+        return new MockConnectorInitializationContext.Builder(mockExtensionMapper);
+    }
 }

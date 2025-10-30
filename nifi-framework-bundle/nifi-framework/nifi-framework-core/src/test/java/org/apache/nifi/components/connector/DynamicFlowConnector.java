@@ -115,9 +115,8 @@ public class DynamicFlowConnector extends AbstractConnector {
     protected void init() throws FlowUpdateException {
         // Load the base flow without property-based customizations
         final VersionedExternalFlow externalFlow = VersionedFlowUtils.loadFlowFromResource("flows/generate-duplicate-log-flow.json");
-        final VersionedProcessGroup versionedProcessGroup = externalFlow.getFlowContents();
 
-        getInitializationContext().updateFlow(versionedProcessGroup);
+        getInitializationContext().updateFlow(externalFlow);
         initialized = true;
     }
 
@@ -132,8 +131,8 @@ public class DynamicFlowConnector extends AbstractConnector {
     @Override
     public void onStepConfigured(final String stepName) throws FlowUpdateException {
         // Now that configuration is available, update the flow based on configured properties
-        final VersionedProcessGroup versionedProcessGroup = getFlow();
-        getInitializationContext().updateFlow(versionedProcessGroup);
+        final VersionedExternalFlow versionedFlow = getFlow();
+        getInitializationContext().updateFlow(versionedFlow);
     }
 
     @Override
@@ -149,7 +148,7 @@ public class DynamicFlowConnector extends AbstractConnector {
         return List.of();
     }
 
-    private VersionedProcessGroup getFlow() {
+    private VersionedExternalFlow getFlow() {
         final VersionedExternalFlow externalFlow = VersionedFlowUtils.loadFlowFromResource("flows/generate-duplicate-log-flow.json");
         final VersionedProcessGroup versionedProcessGroup = externalFlow.getFlowContents();
 
@@ -158,7 +157,7 @@ public class DynamicFlowConnector extends AbstractConnector {
         updateDuplicationStep(versionedProcessGroup);
         updateDestinationStep(versionedProcessGroup);
 
-        return versionedProcessGroup;
+        return externalFlow;
     }
 
     private void updateSourceStep(final VersionedProcessGroup rootGroup) {

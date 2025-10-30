@@ -771,8 +771,7 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
                 .mapAssetReferences(true)
                 .build();
 
-            final VersionedComponentFlowMapper flowMapper = new VersionedComponentFlowMapper(flowController.getExtensionManager(),
-                flowMappingOptions);
+            final VersionedComponentFlowMapper flowMapper = new VersionedComponentFlowMapper(flowController.getExtensionManager(), flowMappingOptions);
 
             final VersionedProcessGroup versionedManagedGroup = flowMapper.mapProcessGroup(processGroup, flowController.getControllerServiceProvider(), this, true);
             final ComponentContextProvider componentContextProvider = new StandardComponentContextProvider(flowController);
@@ -793,6 +792,7 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
             .processGroupFacadeFactory(processGroupFacadeFactory)
             .flowController(flowController)
             .connectorStateTransition(stateTransition)
+            .connectorInitializationContextBuilder(flowController.getConnectorRepository().createInitializationContextBuilder())
             .buildConnector();
 
         // Establish the Connector as the parent authorizable of the managed root group

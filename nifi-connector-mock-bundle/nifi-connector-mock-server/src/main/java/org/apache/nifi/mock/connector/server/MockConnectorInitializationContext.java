@@ -15,18 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.nifi.components.connector;
+package org.apache.nifi.mock.connector.server;
 
 import org.apache.nifi.asset.AssetManager;
+import org.apache.nifi.components.connector.ConnectorConfigurationContext;
+import org.apache.nifi.components.connector.ConnectorInitializationContext;
+import org.apache.nifi.components.connector.ConnectorInitializationContextBuilder;
+import org.apache.nifi.components.connector.ConnectorParameterLookup;
+import org.apache.nifi.components.connector.FlowUpdateException;
+import org.apache.nifi.components.connector.ProcessGroupFacadeFactory;
+import org.apache.nifi.components.connector.SecretsManager;
 import org.apache.nifi.components.connector.components.ParameterContextFacade;
 import org.apache.nifi.components.connector.components.ProcessGroupFacade;
 import org.apache.nifi.flow.Bundle;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.flow.VersionedProcessGroup;
+import org.apache.nifi.flow.VersionedProcessor;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 
-public class StandardConnectorInitializationContext implements ConnectorInitializationContext {
+public class MockConnectorInitializationContext implements ConnectorInitializationContext {
+
     private final String identifier;
     private final String name;
     private final ComponentLog componentLog;
@@ -38,11 +47,12 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
     private final Bundle configuredBundle;
     private final Bundle activeBundle;
     private final AssetManager assetManager;
+    private final MockExtensionMapper mockExtensionMapper;
 
     private volatile ProcessGroupFacade processGroupFacade;
 
 
-    private StandardConnectorInitializationContext(final Builder builder) {
+    private MockConnectorInitializationContext(final Builder builder) {
         this.identifier = builder.identifier;
         this.name = builder.name;
         this.componentLog = builder.componentLog;
@@ -54,6 +64,7 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
         this.configuredBundle = builder.configuredBundle;
         this.activeBundle = builder.activeBundle;
         this.assetManager = builder.assetManager;
+        this.mockExtensionMapper = builder.mockExtensionMapper;
 
         this.processGroupFacade = processGroupFacadeFactory.create(managedProcessGroup, componentLog);
     }
@@ -99,6 +110,8 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
         final String parameterContextName = managedProcessGroup.getParameterContext().getName();
         updateParameterContext(versionedExternalFlow.getFlowContents(), parameterContextName);
 
+        replaceMocks(versionedExternalFlow.getFlowContents());
+
         try {
             managedProcessGroup.verifyCanUpdate(versionedExternalFlow, true, false);
         } catch (final IllegalStateException e) {
@@ -111,6 +124,20 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
         getParameterContext().updateParameters(parameterLookup.getParameterValues());
 
         processGroupFacade = processGroupFacadeFactory.create(managedProcessGroup, componentLog);
+    }
+
+    private void replaceMocks(final VersionedProcessGroup group) {
+        if (group.getProcessors() != null) {
+            for (final VersionedProcessor processor : group.getProcessors()) {
+                mockExtensionMapper.mapProcessor(processor);
+            }
+        }
+
+        if (group.getProcessGroups() != null) {
+            for (final VersionedProcessGroup childGroup : group.getProcessGroups()) {
+                replaceMocks(childGroup);
+            }
+        }
     }
 
     private void updateParameterContext(final VersionedProcessGroup group, final String parameterContextName) {
@@ -133,7 +160,8 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
     }
 
 
-    protected static class Builder implements ConnectorInitializationContextBuilder {
+    public static class Builder implements ConnectorInitializationContextBuilder {
+        private final MockExtensionMapper mockExtensionMapper;
         private String identifier;
         private String name;
         private ComponentLog componentLog;
@@ -145,6 +173,10 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
         private Bundle configuredBundle;
         private Bundle activeBundle;
         private AssetManager assetManager;
+
+        public Builder(final MockExtensionMapper mockExtensionMapper) {
+            this.mockExtensionMapper = mockExtensionMapper;
+        }
 
         public Builder identifier(final String identifier) {
             this.identifier = identifier;
@@ -201,8 +233,9 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
             return this;
         }
 
-        public StandardConnectorInitializationContext build() {
-            return new StandardConnectorInitializationContext(this);
+        public MockConnectorInitializationContext build() {
+            return new MockConnectorInitializationContext(this);
         }
+
     }
 }

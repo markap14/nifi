@@ -1,5 +1,18 @@
 /*
- *  Copyright (c) 2025 Snowflake Computing Inc. All rights reserved.
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package org.apache.nifi.mock.connector.server;
@@ -8,10 +21,12 @@ import org.apache.nifi.admin.service.AuditService;
 import org.apache.nifi.authorization.Authorizer;
 import org.apache.nifi.bundle.Bundle;
 import org.apache.nifi.bundle.BundleCoordinate;
+import org.apache.nifi.bundle.BundleDetails;
 import org.apache.nifi.cluster.ClusterDetailsFactory;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.ConnectorNode;
+import org.apache.nifi.components.connector.ConnectorRepository;
 import org.apache.nifi.components.connector.FlowUpdateException;
 import org.apache.nifi.components.connector.PropertyGroupConfiguration;
 import org.apache.nifi.components.state.StateManagerProvider;
@@ -28,19 +43,22 @@ import org.apache.nifi.diagnostics.DiagnosticsFactory;
 import org.apache.nifi.encrypt.PropertyEncryptor;
 import org.apache.nifi.engine.FlowEngine;
 import org.apache.nifi.events.VolatileBulletinRepository;
-import org.apache.nifi.nar.ExtensionDiscoveringManager;
 import org.apache.nifi.nar.ExtensionMapping;
-import org.apache.nifi.nar.StandardExtensionDiscoveringManager;
+import org.apache.nifi.processor.Processor;
 import org.apache.nifi.reporting.BulletinRepository;
 import org.apache.nifi.util.NiFiProperties;
 import org.apache.nifi.validation.RuleViolationsManager;
 
+import java.io.File;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class StandardConnectorMockServer implements ConnectorMockServer {
     private static final String CONNECTOR_ID = "test-connector";
@@ -49,14 +67,14 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
     private Set<Bundle> bundles;
     private NiFiProperties nifiProperties;
     private FlowController flowController;
-    private ExtensionDiscoveringManager extensionManager;
+    private MockExtensionDiscoveringManager extensionManager;
     private ConnectorNode connectorNode;
     private FlowEngine flowEngine;
-
+    private MockExtensionMapper mockExtensionMapper;
 
     @Override
     public void start() {
-        extensionManager = new StandardExtensionDiscoveringManager();
+        extensionManager = new MockExtensionDiscoveringManager();
         extensionManager.discoverExtensions(systemBundle, bundles);
         extensionManager.logClassLoaderMapping();
 
@@ -87,6 +105,14 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
         } catch (final IOException e) {
             throw new RuntimeException("Failed to initialize FlowFile Repository", e);
         }
+
+        final ConnectorRepository connectorRepository = flowController.getConnectorRepository();
+        if (!(connectorRepository instanceof MockConnectorRepository)) {
+            throw new IllegalStateException("Connector Repository is not an instance of MockConnectorRepository");
+        }
+
+        mockExtensionMapper = new MockExtensionMapper();
+        ((MockConnectorRepository) connectorRepository).setMockExtensionMapper(mockExtensionMapper);
 
         flowEngine = new FlowEngine(4, "Connector Threads");
     }
@@ -149,6 +175,14 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
     }
 
     @Override
+    public void registerMockBundle(final ClassLoader classLoader, final File workingDirectory) {
+        final BundleDetails mockBundleDetails = new BundleDetails.Builder()
+            .workingDir(workingDirectory)
+            .coordinate(new BundleCoordinate("org.apache.nifi.mock", "nifi-connector-mock-bundle", "1.0.0"))
+            .build();
+    }
+
+    @Override
     public void prepareForUpdate() throws FlowUpdateException {
         connectorNode.prepareForUpdate(flowEngine);
     }
@@ -176,7 +210,14 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
 
     @Override
     public void stopConnector() {
-        connectorNode.stop(flowEngine);
+        try {
+            connectorNode.stop(flowEngine).get(10, TimeUnit.SECONDS);
+        } catch (final InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while waiting for connector to stop", e);
+        } catch (final Exception e) {
+            throw new RuntimeException("Failed to stop Connector", e);
+        }
     }
 
     @Override
@@ -233,6 +274,12 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
             .filter(result -> !result.isValid())
             .filter(result -> !DisabledServiceValidationResult.isMatch(result))
             .toList();
+    }
+
+    @Override
+    public void mockProcessor(final String processorType, final Class<? extends Processor> mockProcessorClass) {
+        mockExtensionMapper.mockProcessor(processorType, mockProcessorClass.getName());
+        extensionManager.addProcessor(mockProcessorClass);
     }
 
     @Override

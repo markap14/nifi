@@ -30,6 +30,7 @@ import org.apache.nifi.nar.NarClassLoaders;
 import org.apache.nifi.nar.NarUnpackMode;
 import org.apache.nifi.nar.NarUnpacker;
 import org.apache.nifi.nar.SystemBundle;
+import org.apache.nifi.processor.Processor;
 import org.apache.nifi.util.NiFiProperties;
 
 import java.io.Closeable;
@@ -38,7 +39,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class StandardConnectorTestRunner implements ConnectorTestRunner, Closeable {
@@ -54,6 +57,14 @@ public class StandardConnectorTestRunner implements ConnectorTestRunner, Closeab
         } catch (final Exception e) {
             throw new RuntimeException("Failed to bootstrap ConnectorTestRunner", e);
         }
+
+        // It is important that we register the processor mocks before instantiating the connector.
+        // Otherwise, the call to instantiateConnector will initialize the Connector, which may update the flow.
+        // If the flow is updated before the processor mocks are registered, the Processors will be created without
+        // using the mocks. Subsequent updates to the flow will not replace the Processors already created because
+        // these are not recognized as updates to the flow, since the framework assumes that the type of a Processor
+        // with a given ID does not change.
+        builder.processorMocks.forEach(mockServer::mockProcessor);
 
         mockServer.instantiateConnector(builder.connectorClassName);
     }
@@ -95,6 +106,7 @@ public class StandardConnectorTestRunner implements ConnectorTestRunner, Closeab
         nifiServer.start();
 
         mockServer = (ConnectorMockServer) nifiServer;
+        mockServer.registerMockBundle(getClass().getClassLoader(), new File(extensionsWorkingDir, "mock-implementations-bundle"));
     }
 
     @Override
@@ -158,6 +170,7 @@ public class StandardConnectorTestRunner implements ConnectorTestRunner, Closeab
     public static class Builder {
         private String connectorClassName;
         private File narLibraryDirectory;
+        private final Map<String, Class<? extends Processor>> processorMocks = new HashMap<>();
 
         public Builder connectorClassName(final String connectorClassName) {
             this.connectorClassName = connectorClassName;
@@ -166,6 +179,11 @@ public class StandardConnectorTestRunner implements ConnectorTestRunner, Closeab
 
         public Builder narLibraryDirectory(final File libDirectory) {
             this.narLibraryDirectory = libDirectory;
+            return this;
+        }
+
+        public Builder mockProcessor(final String processorType, final Class<? extends Processor> mockProcessorClass) {
+            processorMocks.put(processorType, mockProcessorClass);
             return this;
         }
 

@@ -17,13 +17,10 @@
 
 package org.apache.nifi.components.connector;
 
-public enum ConnectorState {
-    STARTING,
-    RUNNING,
-    STOPPING,
-    STOPPED,
-    DISABLED,
-    PREPARING_FOR_UPDATE,
-    UPDATING,
-    UPDATE_FAILED;
+import org.apache.nifi.components.connector.components.ProcessGroupFacade;
+import org.apache.nifi.groups.ProcessGroup;
+import org.apache.nifi.logging.ComponentLog;
+
+public interface ProcessGroupFacadeFactory {
+    ProcessGroupFacade create(ProcessGroup processGroup, ComponentLog connectorLogger);
 }

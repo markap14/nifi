@@ -17,16 +17,28 @@
 
 package org.apache.nifi.mock.connector.server;
 
-import org.apache.nifi.encrypt.PropertyEncryptor;
+import org.apache.nifi.flow.Bundle;
+import org.apache.nifi.flow.VersionedProcessor;
 
-public class NopPropertyEncryptor implements PropertyEncryptor {
-    @Override
-    public String encrypt(final String property) {
-        return property;
+import java.util.HashMap;
+import java.util.Map;
+
+public class MockExtensionMapper {
+
+    private final Map<String, String> processorMocks = new HashMap<>();
+
+    public void mockProcessor(final String processorType, final String mockProcessorClassName) {
+        processorMocks.put(processorType, mockProcessorClassName);
     }
 
-    @Override
-    public String decrypt(final String encryptedProperty) {
-        return encryptedProperty;
+    public void mapProcessor(final VersionedProcessor processor) {
+        final String type = processor.getType();
+        final String implementationClassName = processorMocks.get(type);
+        if (implementationClassName == null) {
+            return;
+        }
+
+        processor.setType(implementationClassName);
+        processor.setBundle(new Bundle("org.apache.nifi.mock", implementationClassName, "1.0.0"));
     }
 }

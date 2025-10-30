@@ -30,6 +30,7 @@ import org.apache.nifi.components.connector.Connector;
 import org.apache.nifi.components.connector.ConnectorConfigurationContext;
 import org.apache.nifi.components.connector.ConnectorDetails;
 import org.apache.nifi.components.connector.ConnectorInitializationContext;
+import org.apache.nifi.components.connector.ConnectorInitializationContextBuilder;
 import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.components.connector.ConnectorPropertyDescriptor;
 import org.apache.nifi.components.connector.ConnectorPropertyGroup;
@@ -142,6 +143,7 @@ public class ExtensionBuilder {
    private ProcessGroup managedProcessGroup;
    private ProcessGroupFacadeFactory processGroupFacadeFactory;
    private ConnectorStateTransition connectorStateTransition;
+   private ConnectorInitializationContextBuilder connectorInitializationContextBuilder;
 
    public ExtensionBuilder type(final String type) {
        this.type = type;
@@ -261,6 +263,11 @@ public class ExtensionBuilder {
        return this;
    }
 
+   public ExtensionBuilder connectorInitializationContextBuilder(final ConnectorInitializationContextBuilder contextBuilder) {
+       this.connectorInitializationContextBuilder = contextBuilder;
+       return this;
+   }
+
    public ProcessorNode buildProcessor() {
        requireNonNull(identifier, "Processor ID");
        requireNonNull(type, "Processor Type");
@@ -276,10 +283,7 @@ public class ExtensionBuilder {
        try {
            loggableComponent = createLoggableProcessor(loggingContext);
        } catch (final ProcessorInstantiationException pie) {
-           logger.error("Could not create Processor of type {} from {} for ID {} due to: {}; creating \"Ghost\" implementation", type, bundleCoordinate, identifier, pie.getMessage());
-           if (logger.isDebugEnabled()) {
-               logger.debug(pie.getMessage(), pie);
-           }
+           logger.error("Could not create Processor of type {} from {} for ID {} due to: {}; creating \"Ghost\" implementation", type, bundleCoordinate, identifier, pie.getMessage(), pie);
            final GhostProcessor ghostProc = new GhostProcessor();
            ghostProc.setIdentifier(identifier);
            ghostProc.setCanonicalClassName(type);
@@ -546,7 +550,7 @@ public class ExtensionBuilder {
        final ParameterContextFacade parameterContextFacade = new StandaloneParameterContextFacade(flowController, managedProcessGroup);
        final SecretsManager secretsManager = null;
 
-       return new StandardConnectorInitializationContext.Builder()
+       return connectorInitializationContextBuilder
            .identifier(identifier)
            .name(name)
            .componentLog(componentLog)

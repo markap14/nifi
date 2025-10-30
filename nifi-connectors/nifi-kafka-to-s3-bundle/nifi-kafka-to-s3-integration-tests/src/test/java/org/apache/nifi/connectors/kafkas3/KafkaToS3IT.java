@@ -1,9 +1,26 @@
 /*
- *  Copyright (c) 2025 Snowflake Computing Inc. All rights reserved.
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package org.apache.nifi.connectors.kafkas3;
 
+import io.confluent.kafka.serializers.KafkaAvroSerializer;
+import org.apache.avro.Schema;
+import org.apache.avro.generic.GenericData;
+import org.apache.avro.generic.GenericRecord;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
@@ -43,10 +60,6 @@ import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.S3Object;
-import io.confluent.kafka.serializers.KafkaAvroSerializer;
-import org.apache.avro.Schema;
-import org.apache.avro.generic.GenericData;
-import org.apache.avro.generic.GenericRecord;
 
 import java.io.File;
 import java.io.IOException;
@@ -108,6 +121,12 @@ public class KafkaToS3IT {
             .withEnv("KAFKA_CONTROLLER_LISTENER_NAMES", "CONTROLLER")
             .withEnv("KAFKA_INTER_BROKER_LISTENER_NAME", "BROKER")
             .withEnv("KAFKA_SASL_ENABLED_MECHANISMS", "PLAIN")
+            .withEnv("KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS", "0")
+            .withEnv("KAFKA_GROUP_MIN_SESSION_TIMEOUT_MS", "1000")
+            .withEnv("KAFKA_GROUP_MAX_SESSION_TIMEOUT_MS", "60000")
+            .withEnv("KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR", "1")
+            .withEnv("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1")
+            .withEnv("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1")
             .withEnv("KAFKA_OPTS", "-Djava.security.auth.login.config=/tmp/kafka_jaas.conf")
             .withCommand(
                 "sh", "-c",
@@ -321,7 +340,7 @@ public class KafkaToS3IT {
     }
 
     @Test
-    public void testSuccessfulFlow() throws IOException, ExecutionException, InterruptedException, FlowUpdateException {
+    public void testJsonFlow() throws IOException, ExecutionException, InterruptedException, FlowUpdateException {
         createKafkaTopics("story");
 
         produceRecordsToTopic("story",
