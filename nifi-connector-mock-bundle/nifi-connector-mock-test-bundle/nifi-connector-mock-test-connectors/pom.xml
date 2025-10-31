@@ -17,18 +17,32 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.apache.nifi</groupId>
-        <artifactId>nifi</artifactId>
+        <artifactId>nifi-connector-mock-test-bundle</artifactId>
         <version>2.7.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>nifi-connector-mock-bundle</artifactId>
-    <packaging>pom</packaging>
+    <artifactId>nifi-connector-mock-test-connectors</artifactId>
+    <packaging>jar</packaging>
 
-    <modules>
-        <module>nifi-connector-mock</module>
-        <module>nifi-connector-mock-api</module>
-        <module>nifi-connector-mock-server</module>
-        <module>nifi-connector-mock-server-nar</module>
-        <module>nifi-connector-mock-test-bundle</module>
-    </modules>
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.nifi</groupId>
+            <artifactId>nifi-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.nifi</groupId>
+            <artifactId>nifi-connector-utils</artifactId>
+            <version>2.7.0-SNAPSHOT</version>
+        </dependency>
+
+
+        <!-- Test Dependencies -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
 </project>
+
