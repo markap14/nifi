@@ -23,6 +23,7 @@ import org.apache.nifi.components.connector.Connector;
 import org.apache.nifi.components.connector.ConnectorInitializationContext;
 import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.components.connector.ConnectorRepository;
+import org.apache.nifi.components.connector.StandardConnectorInitializationContext;
 import org.apache.nifi.controller.FlowController;
 import org.apache.nifi.controller.GarbageCollectionLog;
 import org.apache.nifi.controller.MockStateManagerProvider;
@@ -136,6 +137,8 @@ public class TestStandardFlowManager {
         when(flowController.getFlowFileEventRepository()).thenReturn(mock(FlowFileEventRepository.class));
 
         final ConnectorRepository connectorRepository = mock(ConnectorRepository.class);
+        when(connectorRepository.createInitializationContextBuilder()).thenAnswer(
+            invocation -> new StandardConnectorInitializationContext.Builder());
         when(flowController.getConnectorRepository()).thenReturn(connectorRepository);
 
         // Create the connector

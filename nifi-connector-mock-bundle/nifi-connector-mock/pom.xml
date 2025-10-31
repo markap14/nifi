@@ -136,21 +136,8 @@
                         </goals>
                         <configuration>
                             <outputDirectory>${project.build.directory}/libDir</outputDirectory>
-                            <includeTypes>nar</includeTypes>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>copy-nifi-jars</id>
-                        <phase>generate-resources</phase>
-                        <goals>
-                            <goal>copy-dependencies</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${project.build.directory}/libDir</outputDirectory>
-                            <includeTypes>jar</includeTypes>
-                            <includeGroupIds>org.apache.nifi</includeGroupIds>
-                            <excludeTransitive>true</excludeTransitive>
-                            <excludeScope>test</excludeScope>
+                            <includeTypes>jar,nar</includeTypes>
+                            <includeScope>compile</includeScope>
                         </configuration>
                     </execution>
                 </executions>

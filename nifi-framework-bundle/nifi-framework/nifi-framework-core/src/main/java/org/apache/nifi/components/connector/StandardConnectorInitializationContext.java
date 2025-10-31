@@ -133,7 +133,7 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
     }
 
 
-    protected static class Builder implements ConnectorInitializationContextBuilder {
+    public static class Builder implements ConnectorInitializationContextBuilder {
         private String identifier;
         private String name;
         private ComponentLog componentLog;
