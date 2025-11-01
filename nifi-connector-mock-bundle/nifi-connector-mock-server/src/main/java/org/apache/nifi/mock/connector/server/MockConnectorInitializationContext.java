@@ -18,15 +18,13 @@
 package org.apache.nifi.mock.connector.server;
 
 import org.apache.nifi.asset.AssetManager;
-import org.apache.nifi.components.connector.ConnectorConfigurationContext;
 import org.apache.nifi.components.connector.ConnectorInitializationContext;
 import org.apache.nifi.components.connector.ConnectorInitializationContextBuilder;
 import org.apache.nifi.components.connector.ConnectorParameterLookup;
+import org.apache.nifi.components.connector.FlowContextFactory;
 import org.apache.nifi.components.connector.FlowUpdateException;
-import org.apache.nifi.components.connector.ProcessGroupFacadeFactory;
 import org.apache.nifi.components.connector.SecretsManager;
-import org.apache.nifi.components.connector.components.ParameterContextFacade;
-import org.apache.nifi.components.connector.components.ProcessGroupFacade;
+import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.flow.Bundle;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.flow.VersionedProcessGroup;
@@ -40,33 +38,30 @@ public class MockConnectorInitializationContext implements ConnectorInitializati
     private final String name;
     private final ComponentLog componentLog;
     private final ProcessGroup managedProcessGroup;
-    private final ProcessGroupFacadeFactory processGroupFacadeFactory;
     private final SecretsManager secretsManager;
-    private final ConnectorConfigurationContext connectorConfigurationContext;
-    private final ParameterContextFacade parameterContextFacade;
     private final Bundle configuredBundle;
     private final Bundle activeBundle;
     private final AssetManager assetManager;
+    private final FlowContextFactory flowContextFactory;
+
+    private volatile FlowContext activeFlowContext;
+    private volatile FlowContext workingFlowContext;
     private final MockExtensionMapper mockExtensionMapper;
-
-    private volatile ProcessGroupFacade processGroupFacade;
-
 
     private MockConnectorInitializationContext(final Builder builder) {
         this.identifier = builder.identifier;
         this.name = builder.name;
         this.componentLog = builder.componentLog;
         this.managedProcessGroup = builder.managedProcessGroup;
-        this.processGroupFacadeFactory = builder.processGroupFacadeFactory;
+        this.flowContextFactory = builder.flowContextFactory;
         this.secretsManager = builder.secretsManager;
-        this.connectorConfigurationContext = builder.connectorConfigurationContext;
-        this.parameterContextFacade = builder.parameterContextFacade;
         this.configuredBundle = builder.configuredBundle;
         this.activeBundle = builder.activeBundle;
         this.assetManager = builder.assetManager;
         this.mockExtensionMapper = builder.mockExtensionMapper;
 
-        this.processGroupFacade = processGroupFacadeFactory.create(managedProcessGroup, componentLog);
+        this.activeFlowContext = flowContextFactory.createActiveFlowContext(managedProcessGroup, componentLog);
+        this.workingFlowContext = flowContextFactory.createWorkingFlowContext(componentLog);
     }
 
 
@@ -86,23 +81,18 @@ public class MockConnectorInitializationContext implements ConnectorInitializati
     }
 
     @Override
-    public ProcessGroupFacade getRootGroup() {
-        return processGroupFacade;
-    }
-
-    @Override
     public SecretsManager getSecretsManager() {
         return secretsManager;
     }
 
     @Override
-    public ConnectorConfigurationContext getConfigurationContext() {
-        return connectorConfigurationContext;
+    public FlowContext getActiveFlowContext() {
+        return activeFlowContext;
     }
 
     @Override
-    public ParameterContextFacade getParameterContext() {
-        return parameterContextFacade;
+    public FlowContext getWorkingFlowContext() {
+        return workingFlowContext;
     }
 
     @Override
@@ -121,9 +111,9 @@ public class MockConnectorInitializationContext implements ConnectorInitializati
         managedProcessGroup.updateFlow(versionedExternalFlow, managedProcessGroup.getIdentifier(), false, true, true);
 
         final ConnectorParameterLookup parameterLookup = new ConnectorParameterLookup(versionedExternalFlow.getParameterContexts().values(), assetManager);
-        getParameterContext().updateParameters(parameterLookup.getParameterValues());
+        getActiveFlowContext().getParameterContext().updateParameters(parameterLookup.getParameterValues());
 
-        processGroupFacade = processGroupFacadeFactory.create(managedProcessGroup, componentLog);
+        activeFlowContext = flowContextFactory.createActiveFlowContext(managedProcessGroup, componentLog);
     }
 
     private void replaceMocks(final VersionedProcessGroup group) {
@@ -166,10 +156,8 @@ public class MockConnectorInitializationContext implements ConnectorInitializati
         private String name;
         private ComponentLog componentLog;
         private ProcessGroup managedProcessGroup;
-        private ProcessGroupFacadeFactory processGroupFacadeFactory;
+        private FlowContextFactory flowContextFactory;
         private SecretsManager secretsManager;
-        private ConnectorConfigurationContext connectorConfigurationContext;
-        private ParameterContextFacade parameterContextFacade;
         private Bundle configuredBundle;
         private Bundle activeBundle;
         private AssetManager assetManager;
@@ -198,23 +186,13 @@ public class MockConnectorInitializationContext implements ConnectorInitializati
             return this;
         }
 
-        public Builder processGroupFacadeFactory(final ProcessGroupFacadeFactory processGroupFacadeFactory) {
-            this.processGroupFacadeFactory = processGroupFacadeFactory;
+        public Builder flowContextFactory(final FlowContextFactory flowContextFactory) {
+            this.flowContextFactory = flowContextFactory;
             return this;
         }
 
         public Builder secretsManager(final SecretsManager secretsManager) {
             this.secretsManager = secretsManager;
-            return this;
-        }
-
-        public Builder configurationContext(final ConnectorConfigurationContext connectorConfigurationContext) {
-            this.connectorConfigurationContext = connectorConfigurationContext;
-            return this;
-        }
-
-        public Builder parameterContextFacade(final ParameterContextFacade parameterContextFacade) {
-            this.parameterContextFacade = parameterContextFacade;
             return this;
         }
 

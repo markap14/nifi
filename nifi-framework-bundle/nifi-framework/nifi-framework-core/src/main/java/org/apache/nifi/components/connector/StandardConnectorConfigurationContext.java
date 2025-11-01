@@ -26,7 +26,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class StandardConnectorConfigurationContext implements ConnectorConfigurationContext {
+public class StandardConnectorConfigurationContext implements ConnectorConfigurationContext, Cloneable {
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final Lock readLock = rwLock.readLock();
     private final Lock writeLock = rwLock.writeLock();
@@ -175,5 +175,25 @@ public class StandardConnectorConfigurationContext implements ConnectorConfigura
         final Map<String, String> mergedProperties = new HashMap<>(existingConfiguration.propertyValues());
         mergedProperties.putAll(newConfiguration.propertyValues());
         return new PropertyGroupConfiguration(existingConfiguration.groupName(), mergedProperties);
+    }
+
+    public ConnectorConfigurationContext clone() {
+        readLock.lock();
+        try {
+            final StandardConnectorConfigurationContext cloned = new StandardConnectorConfigurationContext();
+            for (final Map.Entry<String, List<PropertyGroupConfiguration>> entry : this.propertyGroupConfigurations.entrySet()) {
+                final List<PropertyGroupConfiguration> clonedGroupConfigs = new ArrayList<>();
+                for (final PropertyGroupConfiguration groupConfig : entry.getValue()) {
+                    final Map<String, String> clonedProperties = new HashMap<>(groupConfig.propertyValues());
+                    clonedGroupConfigs.add(new PropertyGroupConfiguration(entry.getKey(), clonedProperties));
+                }
+
+                cloned.propertyGroupConfigurations.put(entry.getKey(), clonedGroupConfigs);
+            }
+
+            return cloned;
+        } finally {
+            readLock.unlock();
+        }
     }
 }

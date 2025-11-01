@@ -34,6 +34,7 @@ import org.apache.nifi.components.connector.ConnectorInitializationContextBuilde
 import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.components.connector.ConnectorPropertyDescriptor;
 import org.apache.nifi.components.connector.ConnectorPropertyGroup;
+import org.apache.nifi.components.connector.FlowContextFactory;
 import org.apache.nifi.components.connector.GhostConnector;
 import org.apache.nifi.components.connector.ProcessGroupFacadeFactory;
 import org.apache.nifi.components.connector.PropertyGroupConfiguration;
@@ -42,6 +43,7 @@ import org.apache.nifi.components.connector.StandardConnectorConfigurationContex
 import org.apache.nifi.components.connector.StandardConnectorInitializationContext;
 import org.apache.nifi.components.connector.ConnectorStateTransition;
 import org.apache.nifi.components.connector.StandardConnectorNode;
+import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.components.connector.components.ParameterContextFacade;
 import org.apache.nifi.components.connector.facades.standalone.StandaloneParameterContextFacade;
 import org.apache.nifi.components.state.StateManager;
@@ -141,7 +143,8 @@ public class ExtensionBuilder {
    private SSLContext systemSslContext;
    private PythonBridge pythonBridge;
    private ProcessGroup managedProcessGroup;
-   private ProcessGroupFacadeFactory processGroupFacadeFactory;
+   private FlowContextFactory flowContextFactory;
+   private ConnectorConfigurationContext activeConfigurationContext;
    private ConnectorStateTransition connectorStateTransition;
    private ConnectorInitializationContextBuilder connectorInitializationContextBuilder;
 
@@ -253,8 +256,13 @@ public class ExtensionBuilder {
        return this;
    }
 
-   public ExtensionBuilder processGroupFacadeFactory(final ProcessGroupFacadeFactory processGroupFacadeFactory) {
-       this.processGroupFacadeFactory = processGroupFacadeFactory;
+   public ExtensionBuilder activeConfigurationContext(final ConnectorConfigurationContext configurationContext) {
+       this.activeConfigurationContext = configurationContext;
+       return this;
+   }
+
+   public ExtensionBuilder flowContextFactory(final FlowContextFactory flowContextFactory) {
+       this.flowContextFactory = flowContextFactory;
        return this;
    }
 
@@ -491,16 +499,15 @@ public class ExtensionBuilder {
 
        final ComponentLog logger = new SimpleProcessLogger(identifier, connector, new StandardLoggingContext());
        final ConnectorDetails connectorDetails = new ConnectorDetails(connector, bundleCoordinate, logger);
-       final StandardConnectorConfigurationContext configurationContext = new StandardConnectorConfigurationContext();
 
-       final ConnectorInitializationContext initContext = createConnectorInitializationContext(managedProcessGroup, logger, configurationContext);
+       final ConnectorInitializationContext initContext = createConnectorInitializationContext(managedProcessGroup, logger, activeConfigurationContext);
 
        // TODO: If an Exception is thrown in the call to #initialize, we should create a Ghosted Connector
        try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(connector.getClass().getClassLoader())) {
            connector.initialize(initContext);
        }
 
-       initializeDefaultValues(connector, configurationContext);
+       initializeDefaultValues(connector, activeConfigurationContext);
 
        final ConnectorNode connectorNode = new StandardConnectorNode(
            identifier,
@@ -542,22 +549,18 @@ public class ExtensionBuilder {
        }
    }
 
-   private ConnectorInitializationContext createConnectorInitializationContext(final ProcessGroup managedProcessGroup, final ComponentLog componentLog,
-            final ConnectorConfigurationContext configurationContext) {
+   private ConnectorInitializationContext createConnectorInitializationContext(final ProcessGroup managedProcessGroup, final ComponentLog componentLog) {
 
        final org.apache.nifi.flow.Bundle bundle = new org.apache.nifi.flow.Bundle(bundleCoordinate.getGroup(), bundleCoordinate.getId(), bundleCoordinate.getVersion());
        final String name = type.contains(".") ? StringUtils.substringAfterLast(type, ".") : type;
-       final ParameterContextFacade parameterContextFacade = new StandaloneParameterContextFacade(flowController, managedProcessGroup);
        final SecretsManager secretsManager = null;
 
        return connectorInitializationContextBuilder
            .identifier(identifier)
            .name(name)
            .componentLog(componentLog)
-           .configurationContext(configurationContext)
-           .parameterContextFacade(parameterContextFacade)
+           .flowContextFactory(flowContextFactory)
            .managedProcessGroup(managedProcessGroup)
-           .processGroupFacadeFactory(processGroupFacadeFactory)
            .secretsManager(secretsManager)
            .configuredBundle(bundle)
            .activeBundle(bundle)

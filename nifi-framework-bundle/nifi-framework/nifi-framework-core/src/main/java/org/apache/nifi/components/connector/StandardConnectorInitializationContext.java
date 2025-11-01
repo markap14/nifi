@@ -18,8 +18,7 @@
 package org.apache.nifi.components.connector;
 
 import org.apache.nifi.asset.AssetManager;
-import org.apache.nifi.components.connector.components.ParameterContextFacade;
-import org.apache.nifi.components.connector.components.ProcessGroupFacade;
+import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.flow.Bundle;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.flow.VersionedProcessGroup;
@@ -31,31 +30,28 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
     private final String name;
     private final ComponentLog componentLog;
     private final ProcessGroup managedProcessGroup;
-    private final ProcessGroupFacadeFactory processGroupFacadeFactory;
     private final SecretsManager secretsManager;
-    private final ConnectorConfigurationContext connectorConfigurationContext;
-    private final ParameterContextFacade parameterContextFacade;
     private final Bundle configuredBundle;
     private final Bundle activeBundle;
     private final AssetManager assetManager;
+    private final FlowContextFactory flowContextFactory;
 
-    private volatile ProcessGroupFacade processGroupFacade;
-
+    private volatile FlowContext activeFlowContext;
+    private volatile FlowContext workingFlowContext;
 
     private StandardConnectorInitializationContext(final Builder builder) {
         this.identifier = builder.identifier;
         this.name = builder.name;
         this.componentLog = builder.componentLog;
         this.managedProcessGroup = builder.managedProcessGroup;
-        this.processGroupFacadeFactory = builder.processGroupFacadeFactory;
+        this.flowContextFactory = builder.flowContextFactory;
         this.secretsManager = builder.secretsManager;
-        this.connectorConfigurationContext = builder.connectorConfigurationContext;
-        this.parameterContextFacade = builder.parameterContextFacade;
         this.configuredBundle = builder.configuredBundle;
         this.activeBundle = builder.activeBundle;
         this.assetManager = builder.assetManager;
 
-        this.processGroupFacade = processGroupFacadeFactory.create(managedProcessGroup, componentLog);
+        this.activeFlowContext = flowContextFactory.createActiveFlowContext(managedProcessGroup, componentLog);
+        this.workingFlowContext = flowContextFactory.createWorkingFlowContext(componentLog);
     }
 
 
@@ -75,23 +71,18 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
     }
 
     @Override
-    public ProcessGroupFacade getRootGroup() {
-        return processGroupFacade;
+    public FlowContext getActiveFlowContext() {
+        return activeFlowContext;
+    }
+
+    @Override
+    public FlowContext getWorkingFlowContext() {
+        return workingFlowContext;
     }
 
     @Override
     public SecretsManager getSecretsManager() {
         return secretsManager;
-    }
-
-    @Override
-    public ConnectorConfigurationContext getConfigurationContext() {
-        return connectorConfigurationContext;
-    }
-
-    @Override
-    public ParameterContextFacade getParameterContext() {
-        return parameterContextFacade;
     }
 
     @Override
@@ -108,9 +99,9 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
         managedProcessGroup.updateFlow(versionedExternalFlow, managedProcessGroup.getIdentifier(), false, true, true);
 
         final ConnectorParameterLookup parameterLookup = new ConnectorParameterLookup(versionedExternalFlow.getParameterContexts().values(), assetManager);
-        getParameterContext().updateParameters(parameterLookup.getParameterValues());
+        getActiveFlowContext().getParameterContext().updateParameters(parameterLookup.getParameterValues());
 
-        processGroupFacade = processGroupFacadeFactory.create(managedProcessGroup, componentLog);
+        activeFlowContext = flowContextFactory.createActiveFlowContext(managedProcessGroup, componentLog);
     }
 
     private void updateParameterContext(final VersionedProcessGroup group, final String parameterContextName) {
@@ -138,10 +129,8 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
         private String name;
         private ComponentLog componentLog;
         private ProcessGroup managedProcessGroup;
-        private ProcessGroupFacadeFactory processGroupFacadeFactory;
         private SecretsManager secretsManager;
-        private ConnectorConfigurationContext connectorConfigurationContext;
-        private ParameterContextFacade parameterContextFacade;
+        private FlowContextFactory flowContextFactory;
         private Bundle configuredBundle;
         private Bundle activeBundle;
         private AssetManager assetManager;
@@ -166,23 +155,13 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
             return this;
         }
 
-        public Builder processGroupFacadeFactory(final ProcessGroupFacadeFactory processGroupFacadeFactory) {
-            this.processGroupFacadeFactory = processGroupFacadeFactory;
+        public Builder flowContextFactory(final FlowContextFactory flowContextFactory) {
+            this.flowContextFactory = flowContextFactory;
             return this;
         }
 
         public Builder secretsManager(final SecretsManager secretsManager) {
             this.secretsManager = secretsManager;
-            return this;
-        }
-
-        public Builder configurationContext(final ConnectorConfigurationContext connectorConfigurationContext) {
-            this.connectorConfigurationContext = connectorConfigurationContext;
-            return this;
-        }
-
-        public Builder parameterContextFacade(final ParameterContextFacade parameterContextFacade) {
-            this.parameterContextFacade = parameterContextFacade;
             return this;
         }
 

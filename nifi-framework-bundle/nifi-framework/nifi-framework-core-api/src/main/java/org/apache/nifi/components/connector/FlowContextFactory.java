@@ -17,30 +17,12 @@
 
 package org.apache.nifi.components.connector;
 
-import org.apache.nifi.asset.AssetManager;
-import org.apache.nifi.flow.Bundle;
+import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 
-public interface ConnectorInitializationContextBuilder {
+public interface FlowContextFactory {
+    FlowContext createActiveFlowContext(ProcessGroup processGroup, ComponentLog connectorLogger);
 
-    ConnectorInitializationContextBuilder identifier(String identifier);
-
-    ConnectorInitializationContextBuilder name(String name);
-
-    ConnectorInitializationContextBuilder componentLog(ComponentLog componentLog);
-
-    ConnectorInitializationContextBuilder managedProcessGroup(ProcessGroup managedProcessGroup);
-
-    ConnectorInitializationContextBuilder flowContextFactory(FlowContextFactory flowContextFactory);
-
-    ConnectorInitializationContextBuilder secretsManager(SecretsManager secretsManager);
-
-    ConnectorInitializationContextBuilder configuredBundle(Bundle configuredBundle);
-
-    ConnectorInitializationContextBuilder activeBundle(Bundle activeBundle);
-
-    ConnectorInitializationContextBuilder assetManager(AssetManager assetManager);
-
-    ConnectorInitializationContext build();
+    FlowContext createWorkingFlowContext(ComponentLog connectorLogger, ConnectorConfigurationContext currentConfiguration);
 }

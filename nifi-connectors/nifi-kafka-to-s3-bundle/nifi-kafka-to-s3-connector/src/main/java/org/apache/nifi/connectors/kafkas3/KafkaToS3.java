@@ -28,6 +28,7 @@ import org.apache.nifi.components.connector.ConnectorConfigurationContext;
 import org.apache.nifi.components.connector.FlowUpdateException;
 import org.apache.nifi.components.connector.InvocationFailedException;
 import org.apache.nifi.components.connector.components.ControllerServiceFacade;
+import org.apache.nifi.components.connector.components.ProcessGroupFacade;
 import org.apache.nifi.components.connector.components.ProcessorFacade;
 import org.apache.nifi.components.connector.util.VersionedFlowUtils;
 import org.apache.nifi.flow.VersionedControllerService;
@@ -58,21 +59,25 @@ public class KafkaToS3 extends AbstractConnector {
 
     @Override
     protected void init() throws FlowUpdateException {
-        if (getInitializationContext().getRootGroup().isFlowEmpty()) {
+        if (getInitializationContext().getActiveFlowContext().getRootGroup().isFlowEmpty()) {
             getInitializationContext().updateFlow(KafkaToS3FlowBuilder.loadInitialFlow());
         }
     }
 
     @Override
     public void onStepConfigured(final String stepName) throws FlowUpdateException {
-        final VersionedExternalFlow flow = buildFlow(getInitializationContext().getConfigurationContext());
+        final VersionedExternalFlow flow = buildFlow(getWorkingConfiguration());
         getInitializationContext().updateFlow(flow);
+    }
+
+    private ConnectorConfigurationContext getWorkingConfiguration() {
+        return getInitializationContext().getWorkingFlowContext().getConfigurationContext();
     }
 
     @Override
     public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
         // Get the current ConfigurationContext and then create a new one that contains the provided property values
-        final ConnectorConfigurationContext configurationContext = getInitializationContext().getConfigurationContext().createWithOverrides(stepName, propertyValues);
+        final ConnectorConfigurationContext configurationContext = getWorkingConfiguration().createWithOverrides(stepName, propertyValues);
         final VersionedExternalFlow flow = buildFlow(configurationContext);
 
         // Validate Connectivity
@@ -96,13 +101,14 @@ public class KafkaToS3 extends AbstractConnector {
         // because that would include the Controller Services that are referenced by the currently configured flow, and it's possible that the
         // what is being verified uses a different set of Controller Services (e.g., the verified flow may use a JSON Reader while the current
         // flow uses an Avro Reader).
+        final ProcessGroupFacade rootGroup = getInitializationContext().getWorkingFlowContext().getRootGroup();
         final Set<VersionedControllerService> referencedServices = VersionedFlowUtils.getReferencedControllerServices(flow.getFlowContents());
         final Set<String> serviceIds = referencedServices.stream()
             .map(VersionedControllerService::getIdentifier)
             .collect(Collectors.toSet());
 
         try {
-            getInitializationContext().getRootGroup().getLifecycle().enableControllerServices(serviceIds).get(10, TimeUnit.SECONDS);
+            rootGroup.getLifecycle().enableControllerServices(serviceIds).get(10, TimeUnit.SECONDS);
         } catch (final Exception e) {
             return List.of(new ConfigVerificationResult.Builder()
                 .verificationStepName("Record Parsing")
@@ -112,7 +118,7 @@ public class KafkaToS3 extends AbstractConnector {
         }
 
         try {
-            final ProcessorFacade consumeKafkaFacade = findProcessors(getInitializationContext().getRootGroup(),
+            final ProcessorFacade consumeKafkaFacade = findProcessors(rootGroup,
                 processor -> processor.getDefinition().getType().endsWith("ConsumeKafka")).getFirst();
 
             final List<ConfigVerificationResult> configVerificationResults = consumeKafkaFacade.verify(flow, Map.of());
@@ -124,12 +130,12 @@ public class KafkaToS3 extends AbstractConnector {
 
             return Collections.emptyList();
         } finally {
-            getInitializationContext().getRootGroup().getLifecycle().disableControllerServices(serviceIds);
+            rootGroup.getLifecycle().disableControllerServices(serviceIds);
         }
     }
 
 
-    private List<ConfigVerificationResult> verifyTopicsExists(ConnectorConfigurationContext configurationContext) {
+    private List<ConfigVerificationResult> verifyTopicsExists(final ConnectorConfigurationContext configurationContext) {
         final List<String> topicsAvailable;
         try {
             topicsAvailable = getAvailableTopics();
@@ -207,7 +213,8 @@ public class KafkaToS3 extends AbstractConnector {
     @SuppressWarnings("unchecked")
     private List<String> getAvailableTopics() {
         // If Kafka Brokers not yet set, return empty list
-        if (!getProperty(KafkaConnectionStep.KAFKA_CONNECTION_STEP, KafkaConnectionStep.KAFKA_BROKERS).isSet()) {
+        final ConnectorConfigurationContext config = getInitializationContext().getWorkingFlowContext().getConfigurationContext();
+        if (!config.getProperty(KafkaConnectionStep.KAFKA_CONNECTION_STEP, KafkaConnectionStep.KAFKA_BROKERS).isSet()) {
             return List.of();
         }
 
@@ -222,7 +229,7 @@ public class KafkaToS3 extends AbstractConnector {
     }
 
     private ControllerServiceFacade getKafkaConnectionService() {
-        return getInitializationContext().getRootGroup().getControllerServices().stream()
+        return getInitializationContext().getWorkingFlowContext().getRootGroup().getControllerServices().stream()
             .filter(service -> service.getDefinition().getType().endsWith("Kafka3ConnectionService"))
             .findFirst()
             .orElseThrow();
@@ -230,7 +237,7 @@ public class KafkaToS3 extends AbstractConnector {
 
     @SuppressWarnings("unchecked")
     private List<String> getPossibleS3Regions() {
-        final ProcessorFacade processorFacade = getInitializationContext().getRootGroup().getProcessors().stream()
+        final ProcessorFacade processorFacade = getInitializationContext().getWorkingFlowContext().getRootGroup().getProcessors().stream()
             .filter(proc -> proc.getDefinition().getType().endsWith("PutS3Object"))
             .findFirst()
             .orElseThrow();
