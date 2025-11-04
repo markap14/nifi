@@ -17,12 +17,9 @@
 
 package org.apache.nifi.components.connector;
 
-import org.apache.nifi.components.connector.components.FlowContext;
+import org.apache.nifi.components.connector.components.ParameterContextFacade;
 import org.apache.nifi.groups.ProcessGroup;
-import org.apache.nifi.logging.ComponentLog;
 
-public interface FlowContextFactory {
-    FrameworkFlowContext createActiveFlowContext(ComponentLog connectorLogger);
-
-    FrameworkFlowContext createWorkingFlowContext(ComponentLog connectorLogger, MutableConnectorConfigurationContext currentConfiguration);
+public interface ParameterContextFacadeFactory {
+    ParameterContextFacade create(ProcessGroup processGroup);
 }

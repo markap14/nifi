@@ -17,19 +17,40 @@
 
 package org.apache.nifi.components.connector;
 
-import org.apache.nifi.components.connector.components.FlowContext;
+import org.apache.nifi.asset.AssetManager;
+import org.apache.nifi.components.connector.components.FlowContextType;
 import org.apache.nifi.components.connector.components.ParameterContextFacade;
 import org.apache.nifi.components.connector.components.ProcessGroupFacade;
+import org.apache.nifi.flow.VersionedExternalFlow;
+import org.apache.nifi.flow.VersionedProcessGroup;
+import org.apache.nifi.groups.ProcessGroup;
+import org.apache.nifi.logging.ComponentLog;
 
-public class StandardFlowContext implements FlowContext {
-    private final ProcessGroupFacade rootGroup;
-    private final ParameterContextFacade parameterContext;
-    private final ConnectorConfigurationContext configurationContext;
+public class StandardFlowContext implements FrameworkFlowContext {
+    private final ProcessGroup managedProcessGroup;
+    private final MutableConnectorConfigurationContext configurationContext;
+    private final ProcessGroupFacadeFactory groupFacadeFactory;
+    private final ParameterContextFacadeFactory parameterContextFacadeFactory;
+    private final ComponentLog connectorLog;
+    private final FlowContextType flowContextType;
 
-    public StandardFlowContext(final ProcessGroupFacade rootGroup, final ParameterContextFacade parameterContext, final ConnectorConfigurationContext configurationContext) {
-        this.rootGroup = rootGroup;
-        this.parameterContext = parameterContext;
+    private volatile ProcessGroupFacade rootGroup;
+    private volatile ParameterContextFacade parameterContext;
+
+
+    public StandardFlowContext(final ProcessGroup managedProcessGroup, final MutableConnectorConfigurationContext configurationContext,
+                final ProcessGroupFacadeFactory groupFacadeFactory, final ParameterContextFacadeFactory parameterContextFacadeFactory,
+                final ComponentLog connectorLog, final FlowContextType flowContextType) {
+
+        this.managedProcessGroup = managedProcessGroup;
+        this.groupFacadeFactory = groupFacadeFactory;
+        this.parameterContextFacadeFactory = parameterContextFacadeFactory;
+        this.connectorLog = connectorLog;
         this.configurationContext = configurationContext;
+        this.flowContextType = flowContextType;
+
+        this.rootGroup = groupFacadeFactory.create(managedProcessGroup, connectorLog);
+        this.parameterContext = parameterContextFacadeFactory.create(managedProcessGroup);
     }
 
     @Override
@@ -43,7 +64,48 @@ public class StandardFlowContext implements FlowContext {
     }
 
     @Override
-    public ConnectorConfigurationContext getConfigurationContext() {
+    public MutableConnectorConfigurationContext getConfigurationContext() {
         return configurationContext;
+    }
+
+    @Override
+    public void updateFlow(final VersionedExternalFlow versionedExternalFlow, final AssetManager assetManager) throws FlowUpdateException {
+        final String parameterContextName = managedProcessGroup.getParameterContext().getName();
+        updateParameterContext(versionedExternalFlow.getFlowContents(), parameterContextName);
+
+        try {
+            managedProcessGroup.verifyCanUpdate(versionedExternalFlow, true, false);
+        } catch (final IllegalStateException e) {
+            throw new FlowUpdateException("Flow is not in a state that allows the requested updated", e);
+        }
+
+        managedProcessGroup.updateFlow(versionedExternalFlow, managedProcessGroup.getIdentifier(), false, true, true);
+
+        final ConnectorParameterLookup parameterLookup = new ConnectorParameterLookup(versionedExternalFlow.getParameterContexts().values(), assetManager);
+        getParameterContext().updateParameters(parameterLookup.getParameterValues());
+
+        rootGroup = groupFacadeFactory.create(managedProcessGroup, connectorLog);
+        parameterContext = parameterContextFacadeFactory.create(managedProcessGroup);
+    }
+
+    private void updateParameterContext(final VersionedProcessGroup group, final String parameterContextName) {
+        group.setParameterContextName(parameterContextName);
+        if (group.getProcessGroups() != null) {
+            for (final VersionedProcessGroup childGroup : group.getProcessGroups()) {
+                updateParameterContext(childGroup, parameterContextName);
+            }
+        }
+    }
+
+
+
+    @Override
+    public FlowContextType getType() {
+        return flowContextType;
+    }
+
+    @Override
+    public ProcessGroup getManagedProcessGroup() {
+        return managedProcessGroup;
     }
 }

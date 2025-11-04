@@ -26,7 +26,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class StandardConnectorConfigurationContext implements ConnectorConfigurationContext, Cloneable {
+public class StandardConnectorConfigurationContext implements MutableConnectorConfigurationContext, Cloneable {
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final Lock readLock = rwLock.readLock();
     private final Lock writeLock = rwLock.writeLock();
@@ -106,6 +106,7 @@ public class StandardConnectorConfigurationContext implements ConnectorConfigura
         }
     }
 
+    @Override
     public ConfigurationUpdateResult setProperties(final String stepName, final List<PropertyGroupConfiguration> propertyGroupConfigurations) {
         writeLock.lock();
         try {
@@ -121,6 +122,34 @@ public class StandardConnectorConfigurationContext implements ConnectorConfigura
         }
     }
 
+    @Override
+    public ConfigurationUpdateResult replaceProperties(final String stepName, final List<PropertyGroupConfiguration> propertyGroupConfigurations) {
+        writeLock.lock();
+        try {
+            final List<PropertyGroupConfiguration> existingGroupConfigs = this.propertyGroupConfigurations.get(stepName);
+            if (Objects.equals(existingGroupConfigs, propertyGroupConfigurations)) {
+                return ConfigurationUpdateResult.NO_CHANGES;
+            }
+
+            this.propertyGroupConfigurations.put(stepName, copyPropertyGroupConfigurations(propertyGroupConfigurations));
+            return ConfigurationUpdateResult.CHANGES_MADE;
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    private List<PropertyGroupConfiguration> copyPropertyGroupConfigurations(final List<PropertyGroupConfiguration> groupConfigs) {
+        final List<PropertyGroupConfiguration> copiedConfigs = new ArrayList<>();
+
+        for (final PropertyGroupConfiguration groupConfig : groupConfigs) {
+            final Map<String, String> copiedProperties = new HashMap<>(groupConfig.propertyValues());
+            copiedConfigs.add(new PropertyGroupConfiguration(groupConfig.groupName(), copiedProperties));
+        }
+
+        return copiedConfigs;
+    }
+
+    @Override
     public ConnectorConfiguration toConnectorConfiguration() {
         readLock.lock();
         try {
@@ -177,18 +206,21 @@ public class StandardConnectorConfigurationContext implements ConnectorConfigura
         return new PropertyGroupConfiguration(existingConfiguration.groupName(), mergedProperties);
     }
 
-    public ConnectorConfigurationContext clone() {
+    public MutableConnectorConfigurationContext clone() {
         readLock.lock();
         try {
             final StandardConnectorConfigurationContext cloned = new StandardConnectorConfigurationContext();
             for (final Map.Entry<String, List<PropertyGroupConfiguration>> entry : this.propertyGroupConfigurations.entrySet()) {
+                final String stepName = entry.getKey();
+                final List<PropertyGroupConfiguration> groupConfigurations = entry.getValue();
+
                 final List<PropertyGroupConfiguration> clonedGroupConfigs = new ArrayList<>();
-                for (final PropertyGroupConfiguration groupConfig : entry.getValue()) {
+                for (final PropertyGroupConfiguration groupConfig : groupConfigurations) {
                     final Map<String, String> clonedProperties = new HashMap<>(groupConfig.propertyValues());
-                    clonedGroupConfigs.add(new PropertyGroupConfiguration(entry.getKey(), clonedProperties));
+                    clonedGroupConfigs.add(new PropertyGroupConfiguration(groupConfig.groupName(), clonedProperties));
                 }
 
-                cloned.propertyGroupConfigurations.put(entry.getKey(), clonedGroupConfigs);
+                cloned.propertyGroupConfigurations.put(stepName, clonedGroupConfigs);
             }
 
             return cloned;

@@ -17,6 +17,7 @@
 
 package org.apache.nifi.connectors.kafkas3;
 
+import org.apache.nifi.components.Validator;
 import org.apache.nifi.components.connector.ConfigurationStep;
 import org.apache.nifi.components.connector.ConnectorPropertyDescriptor;
 import org.apache.nifi.components.connector.ConnectorPropertyGroup;
@@ -90,9 +91,11 @@ public class KafkaConnectionStep {
     public static final ConnectorPropertyDescriptor SCHEMA_REGISTRY_URL = new ConnectorPropertyDescriptor.Builder()
         .name("Schema Registry URL")
         .description("The URL of the Schema Registry.")
-        .required(true)
+        .required(false)
         .type(PropertyType.STRING)
-        .validators(StandardValidators.URL_VALIDATOR)
+        // TODO: Fix
+//        .validators(StandardValidators.URL_VALIDATOR)
+        .validators(Validator.VALID)
         .build();
 
     public static final ConnectorPropertyDescriptor SCHEMA_REGISTRY_USERNAME = new ConnectorPropertyDescriptor.Builder()

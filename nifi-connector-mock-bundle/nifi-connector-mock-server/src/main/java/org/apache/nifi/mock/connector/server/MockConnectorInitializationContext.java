@@ -21,8 +21,8 @@ import org.apache.nifi.asset.AssetManager;
 import org.apache.nifi.components.connector.ConnectorInitializationContext;
 import org.apache.nifi.components.connector.ConnectorInitializationContextBuilder;
 import org.apache.nifi.components.connector.ConnectorParameterLookup;
-import org.apache.nifi.components.connector.FlowContextFactory;
 import org.apache.nifi.components.connector.FlowUpdateException;
+import org.apache.nifi.components.connector.FrameworkFlowContext;
 import org.apache.nifi.components.connector.SecretsManager;
 import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.flow.Bundle;
@@ -37,31 +37,22 @@ public class MockConnectorInitializationContext implements ConnectorInitializati
     private final String identifier;
     private final String name;
     private final ComponentLog componentLog;
-    private final ProcessGroup managedProcessGroup;
     private final SecretsManager secretsManager;
     private final Bundle configuredBundle;
     private final Bundle activeBundle;
     private final AssetManager assetManager;
-    private final FlowContextFactory flowContextFactory;
 
-    private volatile FlowContext activeFlowContext;
-    private volatile FlowContext workingFlowContext;
     private final MockExtensionMapper mockExtensionMapper;
 
     private MockConnectorInitializationContext(final Builder builder) {
         this.identifier = builder.identifier;
         this.name = builder.name;
         this.componentLog = builder.componentLog;
-        this.managedProcessGroup = builder.managedProcessGroup;
-        this.flowContextFactory = builder.flowContextFactory;
         this.secretsManager = builder.secretsManager;
         this.configuredBundle = builder.configuredBundle;
         this.activeBundle = builder.activeBundle;
         this.assetManager = builder.assetManager;
         this.mockExtensionMapper = builder.mockExtensionMapper;
-
-        this.activeFlowContext = flowContextFactory.createActiveFlowContext(managedProcessGroup, componentLog);
-        this.workingFlowContext = flowContextFactory.createWorkingFlowContext(componentLog);
     }
 
 
@@ -86,34 +77,16 @@ public class MockConnectorInitializationContext implements ConnectorInitializati
     }
 
     @Override
-    public FlowContext getActiveFlowContext() {
-        return activeFlowContext;
-    }
-
-    @Override
-    public FlowContext getWorkingFlowContext() {
-        return workingFlowContext;
-    }
-
-    @Override
-    public void updateFlow(final VersionedExternalFlow versionedExternalFlow) throws FlowUpdateException {
-        final String parameterContextName = managedProcessGroup.getParameterContext().getName();
-        updateParameterContext(versionedExternalFlow.getFlowContents(), parameterContextName);
+    public void updateFlow(final FlowContext flowContext, final VersionedExternalFlow versionedExternalFlow) throws FlowUpdateException {
+        if (!(flowContext instanceof final FrameworkFlowContext frameworkFlowContext)) {
+            throw new IllegalArgumentException("FlowContext is not an instance provided by the framework");
+        }
 
         replaceMocks(versionedExternalFlow.getFlowContents());
 
-        try {
-            managedProcessGroup.verifyCanUpdate(versionedExternalFlow, true, false);
-        } catch (final IllegalStateException e) {
-            throw new FlowUpdateException("Flow is not in a state that allows the requested updated", e);
-        }
-
-        managedProcessGroup.updateFlow(versionedExternalFlow, managedProcessGroup.getIdentifier(), false, true, true);
-
-        final ConnectorParameterLookup parameterLookup = new ConnectorParameterLookup(versionedExternalFlow.getParameterContexts().values(), assetManager);
-        getActiveFlowContext().getParameterContext().updateParameters(parameterLookup.getParameterValues());
-
-        activeFlowContext = flowContextFactory.createActiveFlowContext(managedProcessGroup, componentLog);
+        // TODO: Probably should eliminate this method and instead move AssetManager to the FlowContext and add a method there
+        //       to update the flow.
+        frameworkFlowContext.updateFlow(versionedExternalFlow, assetManager);
     }
 
     private void replaceMocks(final VersionedProcessGroup group) {
@@ -155,8 +128,6 @@ public class MockConnectorInitializationContext implements ConnectorInitializati
         private String identifier;
         private String name;
         private ComponentLog componentLog;
-        private ProcessGroup managedProcessGroup;
-        private FlowContextFactory flowContextFactory;
         private SecretsManager secretsManager;
         private Bundle configuredBundle;
         private Bundle activeBundle;
@@ -178,16 +149,6 @@ public class MockConnectorInitializationContext implements ConnectorInitializati
 
         public Builder componentLog(final ComponentLog componentLog) {
             this.componentLog = componentLog;
-            return this;
-        }
-
-        public Builder managedProcessGroup(final ProcessGroup managedProcessGroup) {
-            this.managedProcessGroup = managedProcessGroup;
-            return this;
-        }
-
-        public Builder flowContextFactory(final FlowContextFactory flowContextFactory) {
-            this.flowContextFactory = flowContextFactory;
             return this;
         }
 

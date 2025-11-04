@@ -21,6 +21,7 @@ import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.connector.AbstractConnector;
 import org.apache.nifi.components.connector.ConfigurationStep;
 import org.apache.nifi.components.connector.FlowUpdateException;
+import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.components.connector.util.VersionedFlowUtils;
 import org.apache.nifi.flow.VersionedExternalFlow;
 
@@ -30,22 +31,26 @@ import java.util.Map;
 public class GenerateAndLog extends AbstractConnector {
 
     @Override
-    protected void init() throws FlowUpdateException {
+    protected void init(final FlowContext activeContext) throws FlowUpdateException {
         final VersionedExternalFlow versionedExternalFlow = VersionedFlowUtils.loadFlowFromResource("flows/Generate_and_Update.json");
-        getInitializationContext().updateFlow(versionedExternalFlow);
+        getInitializationContext().updateFlow(activeContext, versionedExternalFlow);
     }
 
     @Override
-    protected void onStepConfigured(final String stepName) {
+    protected void onStepConfigured(final String stepName, final FlowContext flowContext) {
     }
 
     @Override
-    public List<ConfigurationStep> getConfigurationSteps() {
+    public List<ConfigurationStep> getConfigurationSteps(final FlowContext flowContext) {
         return List.of();
     }
 
     @Override
-    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> properties) {
+    public void finishUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
+    }
+
+    @Override
+    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> properties, final FlowContext workingContext) {
         return List.of();
     }
 }

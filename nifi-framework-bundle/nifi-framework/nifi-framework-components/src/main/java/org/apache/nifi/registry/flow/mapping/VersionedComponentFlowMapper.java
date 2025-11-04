@@ -1038,7 +1038,7 @@ public class VersionedComponentFlowMapper {
         versionedConnector.setType(connectorNode.getComponentType());
         versionedConnector.setBundle(mapBundle(connectorNode.getBundleCoordinate()));
 
-        final ConnectorConfiguration configuration = connectorNode.getConfiguration();
+        final ConnectorConfiguration configuration = connectorNode.getActiveFlowContext().getConfigurationContext().toConnectorConfiguration();
         final List<VersionedConfigurationStep> configurationSteps = new ArrayList<>();
 
         for (final ConfigurationStepConfiguration stepConfiguration : configuration.getConfigurationStepConfigurations()) {

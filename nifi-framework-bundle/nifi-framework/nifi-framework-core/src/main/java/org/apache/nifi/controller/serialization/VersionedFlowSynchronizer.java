@@ -1054,7 +1054,7 @@ public class VersionedFlowSynchronizer implements FlowSynchronizer {
     }
 
     private boolean isConnectorConfigurationUpdated(final ConnectorNode existingConnector, final VersionedConnector versionedConnector) {
-        final ConnectorConfiguration existingConfiguration = existingConnector.getConfiguration();
+        final ConnectorConfiguration existingConfiguration = existingConnector.getActiveFlowContext().getConfigurationContext().toConnectorConfiguration();
 
         final List<VersionedConfigurationStep> versionedConfigurationSteps = versionedConnector.getConfigurationSteps();
         if (versionedConfigurationSteps == null || versionedConfigurationSteps.isEmpty()) {

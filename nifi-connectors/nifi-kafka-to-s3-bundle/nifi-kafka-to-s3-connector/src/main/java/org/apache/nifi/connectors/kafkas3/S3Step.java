@@ -17,6 +17,7 @@
 
 package org.apache.nifi.connectors.kafkas3;
 
+import org.apache.nifi.components.Validator;
 import org.apache.nifi.components.connector.ConfigurationStep;
 import org.apache.nifi.components.connector.ConnectorPropertyDescriptor;
 import org.apache.nifi.components.connector.ConnectorPropertyGroup;
@@ -62,9 +63,12 @@ public class S3Step {
     public static final ConnectorPropertyDescriptor S3_ENDPOINT_OVERRIDE_URL = new ConnectorPropertyDescriptor.Builder()
         .name("S3 Endpoint Override URL")
         .description("An optional endpoint URL to use instead of the default AWS S3 endpoint. " +
-                     "This can be used to connect to S3-compatible storage systems or for testing with LocalStack.")
+                     "This can be used to connect to S3-compatible storage systems but should be left unset for connecting to S3.")
         .required(false)
-        .addValidator(StandardValidators.URL_VALIDATOR)
+        // TODO: Use URL_VALIDATOR. It is commented out because many of the StandardValidators don't yet work, as the implementation needs to
+        //       move from nifi-api to the framework so that we can have proper ValidationContext available, etc.
+//        .addValidator(StandardValidators.URL_VALIDATOR)
+        .addValidator(Validator.VALID)
         .build();
 
     public static final ConnectorPropertyDescriptor TARGET_OBJECT_SIZE = new ConnectorPropertyDescriptor.Builder()

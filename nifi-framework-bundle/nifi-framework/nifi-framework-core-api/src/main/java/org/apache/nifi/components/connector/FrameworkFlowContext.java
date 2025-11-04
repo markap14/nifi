@@ -17,12 +17,15 @@
 
 package org.apache.nifi.components.connector;
 
+import org.apache.nifi.asset.AssetManager;
 import org.apache.nifi.components.connector.components.FlowContext;
+import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.groups.ProcessGroup;
-import org.apache.nifi.logging.ComponentLog;
 
-public interface FlowContextFactory {
-    FrameworkFlowContext createActiveFlowContext(ComponentLog connectorLogger);
+public interface FrameworkFlowContext extends FlowContext {
+    ProcessGroup getManagedProcessGroup();
 
-    FrameworkFlowContext createWorkingFlowContext(ComponentLog connectorLogger, MutableConnectorConfigurationContext currentConfiguration);
+    MutableConnectorConfigurationContext getConfigurationContext();
+
+    void updateFlow(VersionedExternalFlow versionedExternalFlow, AssetManager assetManager) throws FlowUpdateException;
 }

@@ -20,6 +20,8 @@ package org.apache.nifi.components.connector;
 import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
+import org.apache.nifi.components.connector.components.FlowContext;
+import org.apache.nifi.components.connector.components.FlowContextType;
 import org.apache.nifi.engine.FlowEngine;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
@@ -47,6 +49,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
 
 public class TestStandardConnectorNode {
 
@@ -58,11 +61,30 @@ public class TestStandardConnectorNode {
     @Mock
     private ProcessGroup managedProcessGroup;
 
+    private FlowContextFactory flowContextFactory;
 
     @BeforeEach
     public void setUp() {
         MockitoAnnotations.openMocks(this);
         scheduler = new FlowEngine(1, "flow-engine");
+
+        flowContextFactory = new FlowContextFactory() {
+            @Override
+            public FrameworkFlowContext createActiveFlowContext(final ComponentLog connectorLogger) {
+                final MutableConnectorConfigurationContext activeConfigurationContext = new StandardConnectorConfigurationContext();
+                final ProcessGroupFacadeFactory processGroupFacadeFactory = mock(ProcessGroupFacadeFactory.class);
+                final ParameterContextFacadeFactory parameterContextFacadeFactory = mock(ParameterContextFacadeFactory.class);
+                return new StandardFlowContext(managedProcessGroup, activeConfigurationContext, processGroupFacadeFactory, parameterContextFacadeFactory, connectorLogger, FlowContextType.ACTIVE);
+            }
+
+            @Override
+            public FrameworkFlowContext createWorkingFlowContext(final ComponentLog connectorLogger, final MutableConnectorConfigurationContext currentConfiguration) {
+                final ProcessGroupFacadeFactory processGroupFacadeFactory = mock(ProcessGroupFacadeFactory.class);
+                final ParameterContextFacadeFactory parameterContextFacadeFactory = mock(ParameterContextFacadeFactory.class);
+
+                return new StandardFlowContext(managedProcessGroup, currentConfiguration, processGroupFacadeFactory, parameterContextFacadeFactory, connectorLogger, FlowContextType.WORKING);
+            }
+        };
     }
 
     @AfterEach
@@ -182,7 +204,8 @@ public class TestStandardConnectorNode {
             "BlockingConnector",
             null,
             new StandardConnectorConfigurationContext(),
-            stateTransition
+            stateTransition,
+            flowContextFactory
         );
 
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
@@ -275,7 +298,8 @@ public class TestStandardConnectorNode {
             "BlockingConnector",
             null,
             new StandardConnectorConfigurationContext(),
-            stateTransition
+            stateTransition,
+            flowContextFactory
         );
 
         connectorNode.start(scheduler).get(5, TimeUnit.SECONDS);
@@ -315,7 +339,8 @@ public class TestStandardConnectorNode {
             "SlowStartingConnector",
             null,
             new StandardConnectorConfigurationContext(),
-            stateTransition
+            stateTransition,
+            flowContextFactory
         );
 
         // Start the connector - this will take time
@@ -344,7 +369,7 @@ public class TestStandardConnectorNode {
         connectorNode.setConfiguration("testGroup", createGroupConfig());
         connectorNode.finishUpdate(scheduler);
 
-        assertEquals(newConfiguration, connectorNode.getConfiguration());
+        assertEquals(newConfiguration, connectorNode.getActiveFlowContext().getConfigurationContext().toConnectorConfiguration());
     }
 
     @Test
@@ -360,7 +385,7 @@ public class TestStandardConnectorNode {
         connectorNode.setConfiguration("testGroup", createGroupConfig());
         connectorNode.finishUpdate(scheduler);
 
-        assertEquals(newConfiguration, connectorNode.getConfiguration());
+        assertEquals(newConfiguration, connectorNode.getActiveFlowContext().getConfigurationContext().toConnectorConfiguration());
     }
 
     @Test
@@ -388,7 +413,8 @@ public class TestStandardConnectorNode {
             "SlowStartingConnector",
             null,
             new StandardConnectorConfigurationContext(),
-            stateTransition
+            stateTransition,
+            flowContextFactory
         );
 
         final Future<Void> startFuture = slowNode.start(scheduler);
@@ -416,7 +442,8 @@ public class TestStandardConnectorNode {
             "SlowStoppingConnector",
             null,
             new StandardConnectorConfigurationContext(),
-            stateTransition
+            stateTransition,
+            flowContextFactory
         );
 
         connectorNode.start(scheduler).get(5, TimeUnit.SECONDS);
@@ -446,7 +473,7 @@ public class TestStandardConnectorNode {
         connectorNode.prepareForUpdate(null);
         connectorNode.setConfiguration("step1", createGroupConfig("propertyGroup1", Map.of("prop1", "value2")));
         connectorNode.finishUpdate(scheduler);
-        assertEquals(newConfiguration, connectorNode.getConfiguration());
+        assertEquals(newConfiguration, connectorNode.getActiveFlowContext().getConfigurationContext().toConnectorConfiguration());
     }
 
     @Test
@@ -467,7 +494,7 @@ public class TestStandardConnectorNode {
         connectorNode.setConfiguration("configurationStep2", createGroupConfig("propertyGroup2", Map.of("prop2", "value2")));
         connectorNode.finishUpdate(scheduler);
 
-        assertEquals(newConfiguration, connectorNode.getConfiguration());
+        assertEquals(newConfiguration, connectorNode.getActiveFlowContext().getConfigurationContext().toConnectorConfiguration());
     }
 
     @Test
@@ -490,7 +517,7 @@ public class TestStandardConnectorNode {
             new ConfigurationStepConfiguration("configurationStep2", List.of(new PropertyGroupConfiguration("propertyGroup2", Map.of("prop2", "value2"))))
         );
         final ConnectorConfiguration expectedConfiguration = new ConnectorConfiguration(expectedSteps);
-        assertEquals(expectedConfiguration, connectorNode.getConfiguration());
+        assertEquals(expectedConfiguration, connectorNode.getActiveFlowContext().getConfigurationContext().toConnectorConfiguration());
     }
 
     @Test
@@ -526,14 +553,17 @@ public class TestStandardConnectorNode {
     private StandardConnectorNode createConnectorNode() {
         final SleepingConnector sleepingConnector = new SleepingConnector(Duration.ofMillis(1));
         final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("TestConnectorNode");
+
         return new StandardConnectorNode("test-connector-id", extensionManager, null, managedProcessGroup,
-            createConnectorDetails(sleepingConnector), "TestConnector", null, new StandardConnectorConfigurationContext(), stateTransition);
+            createConnectorDetails(sleepingConnector), "TestConnector", null, new StandardConnectorConfigurationContext(),
+            stateTransition, flowContextFactory);
     }
 
     private StandardConnectorNode createConnectorNode(final Connector connector) {
         final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("TestConnectorNode");
         return new StandardConnectorNode("test-connector-id", extensionManager, null, managedProcessGroup,
-            createConnectorDetails(connector), "TestConnector", null, new StandardConnectorConfigurationContext(), stateTransition);
+            createConnectorDetails(connector), "TestConnector", null, new StandardConnectorConfigurationContext(),
+            stateTransition, flowContextFactory);
     }
 
     private ConnectorDetails createConnectorDetails(final Connector connector) {
@@ -580,62 +610,61 @@ public class TestStandardConnectorNode {
         private final Set<String> onConfigurationStepConfiguredCalls = new HashSet<>();
 
         @Override
-        public void initialize(final ConnectorInitializationContext connectorInitializationContext) {
+        public void initialize(final ConnectorInitializationContext connectorInitializationContext, final FlowContext flowContext) {
         }
 
         @Override
-        public void start() {
+        public void start(final FlowContext flowContext) {
         }
 
         @Override
-        public void stop() {
+        public void stop(final FlowContext flowContext) {
         }
 
         @Override
-        public List<org.apache.nifi.components.ValidationResult> validate() {
+        public List<ValidationResult> validate(final FlowContext flowContext) {
             return List.of();
         }
 
         @Override
-        public List<ConfigurationStep> getConfigurationSteps() {
+        public List<ConfigurationStep> getConfigurationSteps(final FlowContext flowContext) {
             return List.of();
         }
 
         @Override
-        public void onConfigurationStepConfigured(final String stepName) {
+        public void prepareForUpdate(final FlowContext workingContext, final FlowContext activeContext) {
+        }
+
+        @Override
+        public void abortUpdatePreparation(final FlowContext flowContext, final Throwable throwable) {
+        }
+
+        @Override
+        public void finishUpdate(final FlowContext workingContext, final FlowContext activeContext) {
+        }
+
+        @Override
+        public List<ConfigVerificationResult> verifyConfigurationStep(final String s, final Map<String, String> map, final FlowContext flowContext) {
+            return List.of();
+        }
+
+        @Override
+        public List<ValidationResult> validate(final FlowContext flowContext, final ConnectorConfigurationContext connectorConfigurationContext) {
+            return List.of();
+        }
+
+        @Override
+        public void onConfigurationStepConfigured(final String stepName, final FlowContext flowContext) {
             onConfigurationStepConfiguredCalls.add(stepName);
         }
 
         @Override
-        public void prepareForUpdate() {
-        }
-
-        @Override
-        public void abortUpdatePreparation(final Throwable throwable) {
-
-        }
-
-        @Override
-        public void finishUpdate() {
-        }
-
-        @Override
-        public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
+        public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName, final FlowContext workingContext) {
             return List.of();
         }
 
         @Override
-        public List<ValidationResult> validate(final ConnectorConfigurationContext connectorConfigurationContext) {
-            return List.of();
-        }
-
-        @Override
-        public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName) {
-            return List.of();
-        }
-
-        @Override
-        public List<AllowableValue> fetchAllowableValues(final String s, final String s1, final String s2, final String s3) {
+        public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName, final FlowContext workingContext, final String filter) {
             return List.of();
         }
 

@@ -25,6 +25,7 @@ import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
+import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.components.validation.DisabledServiceValidationResult;
 import org.apache.nifi.components.validation.ValidationState;
 import org.apache.nifi.components.validation.ValidationStatus;
@@ -62,10 +63,13 @@ public class StandardConnectorNode implements ConnectorNode {
     private final ConnectorDetails connectorDetails;
     private final String componentType;
     private final BundleCoordinate bundleCoordinate;
-    private final StandardConnectorConfigurationContext configurationContext;
     private final ConnectorStateTransition stateTransition;
     private final AtomicReference<String> versionedComponentId = new AtomicReference<>();
     private final AtomicReference<ConnectorState> updateResumeState = new AtomicReference<>(null);
+    private final FlowContextFactory flowContextFactory;
+    private final FrameworkFlowContext activeFlowContext;
+
+    private volatile FrameworkFlowContext workingFlowContext;
 
     private volatile String name;
     private volatile boolean performValidation = true;
@@ -73,7 +77,8 @@ public class StandardConnectorNode implements ConnectorNode {
 
     public StandardConnectorNode(final String identifier, final ExtensionManager extensionManager, final Authorizable parentAuthorizable, final ProcessGroup managedProcessGroup,
         final ConnectorDetails connectorDetails, final String componentType, final BundleCoordinate bundleCoordinate,
-        final StandardConnectorConfigurationContext configurationContext, final ConnectorStateTransition stateTransition) {
+        final MutableConnectorConfigurationContext configurationContext, final ConnectorStateTransition stateTransition,
+        final FlowContextFactory flowContextFactory) {
 
         this.identifier = identifier;
         this.extensionManager = extensionManager;
@@ -82,9 +87,11 @@ public class StandardConnectorNode implements ConnectorNode {
         this.connectorDetails = connectorDetails;
         this.componentType = componentType;
         this.bundleCoordinate = bundleCoordinate;
-        this.configurationContext = configurationContext;
         this.stateTransition = stateTransition;
+        this.flowContextFactory = flowContextFactory;
+
         this.name = connectorDetails.getConnector().getClass().getSimpleName();
+        this.activeFlowContext = flowContextFactory.createActiveFlowContext(connectorDetails.getComponentLog());
     }
 
     @Override
@@ -98,11 +105,6 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
-    public ConnectorConfiguration getConfiguration() {
-        return configurationContext.toConnectorConfiguration();
-    }
-
-    @Override
     public void prepareForUpdate(final FlowEngine scheduler) throws FlowUpdateException {
         final ConnectorState initialState = getCurrentState();
         if (initialState == ConnectorState.UPDATING || initialState == ConnectorState.PREPARING_FOR_UPDATE) {
@@ -113,15 +115,16 @@ public class StandardConnectorNode implements ConnectorNode {
         stateTransition.setDesiredState(ConnectorState.UPDATING);
         stateTransition.setCurrentState(ConnectorState.PREPARING_FOR_UPDATE);
 
+        workingFlowContext = flowContextFactory.createWorkingFlowContext(connectorDetails.getComponentLog(), activeFlowContext.getConfigurationContext());
+
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
-            getConnector().prepareForUpdate();
+            getConnector().prepareForUpdate(workingFlowContext, activeFlowContext);
             stateTransition.setCurrentState(ConnectorState.UPDATING);
         } catch (final Throwable t) {
             logger.error("Failed to prepare update for {}", this, t);
-            stateTransition.setCurrentState(ConnectorState.UPDATE_FAILED);
 
             try {
-                getConnector().abortUpdatePreparation(t);
+                abortUpdate(t);
             } catch (final Throwable abortFailure) {
                 logger.error("Failed to abort update preparation for {}", this, abortFailure);
             }
@@ -138,14 +141,23 @@ public class StandardConnectorNode implements ConnectorNode {
                                             + "; it must be UPDATING.");
         }
 
+        // TODO: Need to update lifecycle to stop the Connector, etc. before applying the update.
+
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
-            getConnector().finishUpdate();
+            getConnector().finishUpdate(workingFlowContext, activeFlowContext);
         } catch (final Throwable t) {
             logger.error("Failed to finish update for {}", this, t);
             stateTransition.setCurrentState(ConnectorState.UPDATE_FAILED);
             stateTransition.setDesiredState(ConnectorState.UPDATE_FAILED);
 
             throw new FlowUpdateException("Failed to finish update for " + this, t);
+        } finally {
+            final ConnectorConfiguration workingConfig = workingFlowContext.getConfigurationContext().toConnectorConfiguration();
+            for (final ConfigurationStepConfiguration stepConfig : workingConfig.getConfigurationStepConfigurations()) {
+                activeFlowContext.getConfigurationContext().replaceProperties(stepConfig.stepName(), stepConfig.propertyGroupConfigurations());
+            }
+
+            destroyWorkingContext();
         }
 
         final ConnectorState stateToResume = updateResumeState.getAndSet(null);
@@ -158,13 +170,24 @@ public class StandardConnectorNode implements ConnectorNode {
         }
     }
 
+    private void destroyWorkingContext() {
+        // TODO: Add a purge method that will drop all data and remove all components,
+//        final ProcessGroup managedGroup = workingFlowContext.getManagedProcessGroup();
+//        managedGroup.purge();
+
+        this.workingFlowContext = null;
+    }
+
     @Override
     public void abortUpdate(final Throwable cause) {
         stateTransition.setCurrentState(ConnectorState.UPDATE_FAILED);
         stateTransition.setDesiredState(ConnectorState.UPDATE_FAILED);
 
+        final FlowContext updateContext = workingFlowContext;
+        workingFlowContext = null;
+
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
-            getConnector().abortUpdatePreparation(cause);
+            getConnector().abortUpdatePreparation(updateContext, cause);
         }
     }
 
@@ -185,7 +208,7 @@ public class StandardConnectorNode implements ConnectorNode {
         }
 
         // Determine which configuration steps will change as a result of applying this new configuration
-        final ConfigurationUpdateResult updateResult = configurationContext.setProperties(stepName, groupConfigurations);
+        final ConfigurationUpdateResult updateResult = workingFlowContext.getConfigurationContext().setProperties(stepName, groupConfigurations);
 
         if (updateResult == ConfigurationUpdateResult.NO_CHANGES) {
             return;
@@ -194,7 +217,7 @@ public class StandardConnectorNode implements ConnectorNode {
         final Connector connector = connectorDetails.getConnector();
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, connector.getClass(), getIdentifier())) {
             logger.debug("Notifying {} of configuration change for configuration step {}", this, stepName);
-            connector.onConfigurationStepConfigured(stepName);
+            connector.onConfigurationStepConfigured(stepName, workingFlowContext);
         } catch (final FlowUpdateException e) {
             throw e;
         } catch (final Exception e) {
@@ -329,7 +352,7 @@ public class StandardConnectorNode implements ConnectorNode {
 
     private void stopComponent(final FlowEngine scheduler, final CompletableFuture<Void> stopCompleteFuture) {
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, connectorDetails.getConnector().getClass(), getIdentifier())) {
-            connectorDetails.getConnector().stop();
+            connectorDetails.getConnector().stop(activeFlowContext);
         } catch (final Exception e) {
             logger.error("Failed to stop {}. Will try again in 10 seconds", this, e);
             scheduler.schedule(() -> stopComponent(scheduler, stopCompleteFuture), 10, TimeUnit.SECONDS);
@@ -363,7 +386,7 @@ public class StandardConnectorNode implements ConnectorNode {
         }
 
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, connectorDetails.getConnector().getClass(), getIdentifier())) {
-            connectorDetails.getConnector().start();
+            connectorDetails.getConnector().start(activeFlowContext);
         } catch (final Exception e) {
             logger.error("Failed to start {}. Will try again in 10 seconds", this, e);
             scheduler.schedule(() -> startComponent(scheduler, startCompleteFuture), 10, TimeUnit.SECONDS);
@@ -422,15 +445,32 @@ public class StandardConnectorNode implements ConnectorNode {
 
     @Override
     public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName) {
+        if (workingFlowContext == null) {
+            throw new IllegalStateException("Cannot fetch Allowable Values for %s.%s.%s because %s is not being updated.".formatted(
+                stepName, groupName, propertyName, this));
+        }
+
         try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
-            return getConnector().fetchAllowableValues(stepName, groupName, propertyName);
+            return getConnector().fetchAllowableValues(stepName, groupName, propertyName, workingFlowContext);
         }
     }
 
     @Override
     public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName, final String filter) {
+        if (workingFlowContext == null) {
+            throw new IllegalStateException("Cannot fetch Allowable Values for %s.%s.%s because %s is not being updated.".formatted(
+                stepName, groupName, propertyName, this));
+        }
+
         try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
-            return getConnector().fetchAllowableValues(stepName, groupName, propertyName, filter);
+            return getConnector().fetchAllowableValues(stepName, groupName, propertyName, workingFlowContext, filter);
+        }
+    }
+
+    @Override
+    public void initializeConnector(final ConnectorInitializationContext initializationContext) {
+        try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
+            getConnector().initialize(initializationContext, activeFlowContext);
         }
     }
 
@@ -457,7 +497,7 @@ public class StandardConnectorNode implements ConnectorNode {
         }
 
         try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
-            return getConnector().verifyConfigurationStep(stepName, properties);
+            return getConnector().verifyConfigurationStep(stepName, properties, workingFlowContext);
         }
     }
 
@@ -491,15 +531,16 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
-    public ConnectorConfigurationContext getConfigurationContext() {
-        return configurationContext;
+    public List<ConfigurationStep> getConfigurationSteps() {
+        try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
+            // TODO: Will we always have a working flow context when this is called?
+            return getConnector().getConfigurationSteps(workingFlowContext);
+        }
     }
 
     @Override
-    public List<ConfigurationStep> getConfigurationSteps() {
-        try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
-            return getConnector().getConfigurationSteps();
-        }
+    public FrameworkFlowContext getActiveFlowContext() {
+        return activeFlowContext;
     }
 
     @Override
@@ -542,7 +583,7 @@ public class StandardConnectorNode implements ConnectorNode {
     @Override
     public ValidationState performValidation() {
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
-            final List<ValidationResult> allResults = getConnector().validate();
+            final List<ValidationResult> allResults = getConnector().validate(activeFlowContext);
             if (allResults == null) {
                 return new ValidationState(ValidationStatus.VALID, Collections.emptyList());
             }

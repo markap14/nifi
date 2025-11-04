@@ -19,6 +19,7 @@ package org.apache.nifi.components.connector;
 
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.Validator;
+import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.components.connector.processors.CreateDummyFlowFile;
 import org.apache.nifi.components.connector.processors.DuplicateFlowFile;
 import org.apache.nifi.components.connector.processors.LogFlowFileContents;
@@ -107,16 +108,16 @@ public class DynamicFlowConnector extends AbstractConnector {
     );
 
     @Override
-    public List<ConfigurationStep> getConfigurationSteps() {
+    public List<ConfigurationStep> getConfigurationSteps(final FlowContext flowContext) {
         return configurationSteps;
     }
 
     @Override
-    protected void init() throws FlowUpdateException {
+    protected void init(final FlowContext flowContext) throws FlowUpdateException {
         // Load the base flow without property-based customizations
         final VersionedExternalFlow externalFlow = VersionedFlowUtils.loadFlowFromResource("flows/generate-duplicate-log-flow.json");
 
-        getInitializationContext().updateFlow(externalFlow);
+        getInitializationContext().updateFlow(flowContext, externalFlow);
         initialized = true;
     }
 
@@ -125,49 +126,45 @@ public class DynamicFlowConnector extends AbstractConnector {
     }
 
     @Override
-    public void finishUpdate() {
+    public void finishUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
+        // Apply the updates to the active flow that were made to the working flow
+        final VersionedExternalFlow versionedFlow = getFlow(workingContext);
+        getInitializationContext().updateFlow(activeContext, versionedFlow);
     }
 
     @Override
-    public void onStepConfigured(final String stepName) throws FlowUpdateException {
-        // Now that configuration is available, update the flow based on configured properties
-        final VersionedExternalFlow versionedFlow = getFlow();
-        getInitializationContext().updateFlow(versionedFlow);
-    }
-
-    @Override
-    public void prepareForUpdate() {
-    }
-
-    @Override
-    public void abortUpdatePreparation(final Throwable throwable) {
-    }
-
-    @Override
-    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
+    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> properties, final FlowContext flowContext) {
         return List.of();
     }
 
-    private VersionedExternalFlow getFlow() {
+    @Override
+    public void onStepConfigured(final String stepName, final FlowContext workingContext) throws FlowUpdateException {
+        // Now that configuration is available, update the flow based on configured properties
+        final VersionedExternalFlow versionedFlow = getFlow(workingContext);
+        getInitializationContext().updateFlow(workingContext, versionedFlow);
+    }
+
+    private VersionedExternalFlow getFlow(final FlowContext flowContext) {
         final VersionedExternalFlow externalFlow = VersionedFlowUtils.loadFlowFromResource("flows/generate-duplicate-log-flow.json");
         final VersionedProcessGroup versionedProcessGroup = externalFlow.getFlowContents();
 
         // Update the flow based on configured properties
-        updateSourceStep(versionedProcessGroup);
-        updateDuplicationStep(versionedProcessGroup);
-        updateDestinationStep(versionedProcessGroup);
+        updateSourceStep(flowContext, versionedProcessGroup);
+        updateDuplicationStep(flowContext, versionedProcessGroup);
+        updateDestinationStep(flowContext, versionedProcessGroup);
 
         return externalFlow;
     }
 
-    private void updateSourceStep(final VersionedProcessGroup rootGroup) {
-        final String sourceText = getProperty(SOURCE_STEP, SOURCE_TEXT).getValue();
+    private void updateSourceStep(final FlowContext flowContext, final VersionedProcessGroup rootGroup) {
+        final ConnectorConfigurationContext configContext = flowContext.getConfigurationContext();
+        final String sourceText = configContext.getProperty(SOURCE_STEP, SOURCE_TEXT).getValue();
 
         final VersionedProcessor sourceTextProcessor = VersionedFlowUtils.findProcessor(rootGroup,
             p -> p.getType().equals(OverwriteFlowFile.class.getName())).orElseThrow();
         sourceTextProcessor.getProperties().put(OverwriteFlowFile.CONTENT.getName(), sourceText);
 
-        final boolean count = getProperty(SOURCE_STEP, COUNT_FLOWFILES).asBoolean();
+        final boolean count = configContext.getProperty(SOURCE_STEP, COUNT_FLOWFILES).asBoolean();
         if (count) {
             final Bundle systemBundle = new Bundle();
             systemBundle.setArtifact("system");
@@ -183,8 +180,10 @@ public class DynamicFlowConnector extends AbstractConnector {
         }
     }
 
-    private void updateDuplicationStep(final VersionedProcessGroup rootGroup) {
-        final int numCopies = getProperty(DUPLICATION_STEP, NUM_COPIES).asInteger();
+    private void updateDuplicationStep(final FlowContext flowContext, final VersionedProcessGroup rootGroup) {
+        final ConnectorConfigurationContext configContext = flowContext.getConfigurationContext();
+
+        final int numCopies = configContext.getProperty(DUPLICATION_STEP, NUM_COPIES).asInteger();
         final VersionedProcessor duplicateProcessor = VersionedFlowUtils.findProcessor(rootGroup,
             p -> p.getType().equals(DuplicateFlowFile.class.getName())).orElseThrow();
         duplicateProcessor.getProperties().put(DuplicateFlowFile.NUM_DUPLICATES.getName(), String.valueOf(numCopies));
@@ -208,8 +207,10 @@ public class DynamicFlowConnector extends AbstractConnector {
         }
     }
 
-    private void updateDestinationStep(final VersionedProcessGroup rootGroup) {
-        final boolean logContents = getProperty(DESTINATION_STEP, LOG_FLOWFILE_CONTENTS).asBoolean();
+    private void updateDestinationStep(final FlowContext flowContext, final VersionedProcessGroup rootGroup) {
+        final ConnectorConfigurationContext configContext = flowContext.getConfigurationContext();
+
+        final boolean logContents = configContext.getProperty(DESTINATION_STEP, LOG_FLOWFILE_CONTENTS).asBoolean();
         if (!logContents) {
             return;
         }
@@ -241,7 +242,8 @@ public class DynamicFlowConnector extends AbstractConnector {
     }
 
     private void addConnectionsForDuplicates(final VersionedProcessGroup duplicatesGroup, final VersionedProcessor duplicateProcessor,
-        final List<VersionedConnection> existingConnections, final int targetNumCopies) {
+                final List<VersionedConnection> existingConnections, final int targetNumCopies) {
+
         if (existingConnections.isEmpty()) {
             return;
         }
@@ -258,8 +260,7 @@ public class DynamicFlowConnector extends AbstractConnector {
         }
     }
 
-    private void removeExcessConnections(final VersionedProcessGroup duplicatesGroup, final List<VersionedConnection> outboundConnections,
-        final int targetNumCopies) {
+    private void removeExcessConnections(final VersionedProcessGroup duplicatesGroup, final List<VersionedConnection> outboundConnections, final int targetNumCopies) {
         final Set<VersionedConnection> connectionsToRemove = new HashSet<>();
 
         // Sort connections by relationship name (which should be numeric) and remove the highest numbered ones

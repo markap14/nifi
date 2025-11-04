@@ -18,12 +18,17 @@
 package org.apache.nifi.components.connector;
 
 import org.apache.nifi.components.ConfigVerificationResult;
+import org.apache.nifi.components.ValidationContext;
+import org.apache.nifi.components.ValidationResult;
+import org.apache.nifi.components.Validator;
+import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.components.connector.components.ProcessorFacade;
 import org.apache.nifi.components.connector.util.VersionedFlowUtils;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.flow.VersionedProcessGroup;
 import org.apache.nifi.flow.VersionedProcessor;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +38,7 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
     static final ConnectorPropertyDescriptor FILE_PATH = new ConnectorPropertyDescriptor.Builder()
         .name("File Path")
         .description("The path to the file")
+        .addValidator(new SimpleFileExistsValidator())
         .required(true)
         .build();
 
@@ -48,12 +54,14 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
 
 
     @Override
-    public List<ConfigurationStep> getConfigurationSteps() {
+    public List<ConfigurationStep> getConfigurationSteps(final FlowContext flowContext) {
         final List<ConfigurationStep> steps = new ArrayList<>();
         steps.add(FILE_STEP);
 
-        if (getProperty(FILE_STEP, FILE_PATH) != null) {
-            final Set<ProcessorFacade> processorsFacades = getInitializationContext().getRootGroup().getProcessors();
+        final ConnectorConfigurationContext configContext = flowContext.getConfigurationContext();
+
+        if (configContext.getProperty(FILE_STEP, FILE_PATH) != null) {
+            final Set<ProcessorFacade> processorsFacades = flowContext.getRootGroup().getProcessors();
             if (processorsFacades.isEmpty()) {
                 return steps;
             }
@@ -91,30 +99,34 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
     }
 
     @Override
-    public void finishUpdate() throws FlowUpdateException {
+    protected void onStepConfigured(final String stepName, final FlowContext flowContext) {
+    }
+
+    @Override
+    public void finishUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
         final VersionedExternalFlow externalFlow = VersionedFlowUtils.loadFlowFromResource("flows/choose-color.json");
         final VersionedProcessGroup rootGroup = externalFlow.getFlowContents();
         final VersionedProcessor processor = rootGroup.getProcessors().iterator().next();
-        processor.setProperties(Map.of("File", getProperty(FILE_STEP, FILE_PATH).getValue()));
+        processor.setProperties(Map.of("File", workingContext.getConfigurationContext().getProperty(FILE_STEP, FILE_PATH).getValue()));
 
-        getInitializationContext().updateFlow(externalFlow);
+        getInitializationContext().updateFlow(activeContext, externalFlow);
     }
 
     @Override
-    public void onStepConfigured(final String stepName) {
+    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> properties, final FlowContext flowContext) {
+        return List.of();
     }
 
-    @Override
-    public void prepareForUpdate() {
-    }
 
-    @Override
-    public void abortUpdatePreparation(final Throwable throwable) {
-    }
+    public static class SimpleFileExistsValidator implements Validator {
+        @Override
+        public ValidationResult validate(final String subject, final String input, final ValidationContext validationContext) {
+            final File file = new File(input);
+            if (file.exists()) {
+                return new ValidationResult.Builder().subject(subject).input(input).valid(true).build();
+            }
 
-    @Override
-    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
-        return null;
+            return new ValidationResult.Builder().subject(subject).input(input).valid(false).explanation("File does not exist.").build();
+        }
     }
-
 }

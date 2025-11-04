@@ -21,6 +21,7 @@ import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ConfigVerificationResult.Outcome;
 import org.apache.nifi.components.ValidationResult;
+import org.apache.nifi.components.connector.components.FlowContext;
 
 import java.util.List;
 import java.util.Map;
@@ -49,19 +50,20 @@ public class GhostConnector implements Connector {
     }
 
     @Override
-    public void initialize(final ConnectorInitializationContext connectorInitializationContext) {
+    public void initialize(final ConnectorInitializationContext initContext, final FlowContext activeContext) {
     }
 
     @Override
-    public void start() throws FlowUpdateException {
+    public void start(final FlowContext activeContext) throws FlowUpdateException {
+        throw new UnsupportedOperationException("Cannot start a Ghosted Connector");
     }
 
     @Override
-    public void stop() throws FlowUpdateException {
+    public void stop(final FlowContext activeContext) throws FlowUpdateException {
     }
 
     @Override
-    public List<ValidationResult> validate() {
+    public List<ValidationResult> validate(final FlowContext activeContext) {
         return List.of(new ValidationResult.Builder()
             .subject("Missing Connector")
             .input("Any Property")
@@ -71,43 +73,43 @@ public class GhostConnector implements Connector {
     }
 
     @Override
-    public List<ConfigurationStep> getConfigurationSteps() {
+    public List<ConfigurationStep> getConfigurationSteps(final FlowContext workingContext) {
         return List.of();
     }
 
     @Override
-    public void onConfigurationStepConfigured(final String stepName) {
+    public void onConfigurationStepConfigured(final String stepName, final FlowContext workingContext) {
     }
 
     @Override
-    public void prepareForUpdate() {
+    public void prepareForUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
     }
 
     @Override
-    public void abortUpdatePreparation(final Throwable throwable) {
+    public void abortUpdatePreparation(final FlowContext workingContext, final Throwable throwable) {
     }
 
     @Override
-    public void finishUpdate() {
+    public void finishUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
     }
 
     @Override
-    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
+    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues, final FlowContext workingContext) {
         return configVerificationResults;
     }
 
     @Override
-    public List<ValidationResult> validate(final ConnectorConfigurationContext connectorConfigurationContext) {
-        return validationResults;
-    }
-
-    @Override
-    public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName, final String filter) {
+    public List<ValidationResult> validate(final FlowContext flowContext, final ConnectorConfigurationContext configContext) {
         return List.of();
     }
 
     @Override
-    public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName) {
+    public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName, final FlowContext workingContext, final String filter) {
+        return List.of();
+    }
+
+    @Override
+    public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName, final FlowContext workingContext) {
         return List.of();
     }
 

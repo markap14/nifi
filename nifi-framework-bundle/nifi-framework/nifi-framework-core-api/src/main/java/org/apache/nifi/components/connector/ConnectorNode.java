@@ -22,6 +22,7 @@ import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.VersionedComponent;
+import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.components.validation.ValidationState;
 import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.connectable.FlowFileTransferCounts;
@@ -37,8 +38,6 @@ import java.util.concurrent.Future;
 public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent {
 
     String getName();
-
-    ConnectorConfiguration getConfiguration();
 
     ConnectorState getCurrentState();
 
@@ -69,6 +68,7 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
 
     List<AllowableValue> fetchAllowableValues(String stepName, String groupName, String propertyName, String filter);
 
+    void initializeConnector(ConnectorInitializationContext initializationContext);
 
     /**
      * <p>
@@ -107,9 +107,9 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
 
     ComponentLog getComponentLog();
 
-    ConnectorConfigurationContext getConfigurationContext();
-
     List<ConfigurationStep> getConfigurationSteps();
+
+    FrameworkFlowContext getActiveFlowContext();
 
     // -------------------
     // The following methods should always be called via the ConnectorRepository in order to maintain proper

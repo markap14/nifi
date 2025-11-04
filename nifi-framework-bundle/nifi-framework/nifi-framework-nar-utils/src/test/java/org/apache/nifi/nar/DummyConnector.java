@@ -25,6 +25,7 @@ import org.apache.nifi.components.connector.Connector;
 import org.apache.nifi.components.connector.ConnectorConfigurationContext;
 import org.apache.nifi.components.connector.ConnectorInitializationContext;
 import org.apache.nifi.components.connector.FlowUpdateException;
+import org.apache.nifi.components.connector.components.FlowContext;
 
 import java.util.List;
 import java.util.Map;
@@ -33,66 +34,68 @@ import java.util.Map;
 public class DummyConnector implements Connector {
     private ConnectorInitializationContext context;
 
-    @Override
-    public void initialize(final ConnectorInitializationContext context) {
-        this.context = context;
-    }
-
-    @Override
-    public void start() throws FlowUpdateException {
-    }
-
-    @Override
-    public void stop() throws FlowUpdateException {
-    }
-
-    @Override
-    public List<ValidationResult> validate() {
-        return List.of();
-    }
-
-    @Override
-    public List<ConfigurationStep> getConfigurationSteps() {
-        return List.of();
-    }
-
-    @Override
-    public void onConfigurationStepConfigured(final String stepName) {
-    }
-
-    @Override
-    public void prepareForUpdate() {
-    }
-
-    @Override
-    public void abortUpdatePreparation(final Throwable throwable) {
-    }
-
-    @Override
-    public void finishUpdate() {
-    }
-
-    @Override
-    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
-        return List.of();
-    }
-
-    @Override
-    public List<ValidationResult> validate(final ConnectorConfigurationContext connectorConfigurationContext) {
-        return List.of();
-    }
-
     public ConnectorInitializationContext getContext() {
         return context;
     }
 
     @Override
-    public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName, final String filter) {
+    public void initialize(final ConnectorInitializationContext connectorInitializationContext, final FlowContext flowContext) {
+        this.context = connectorInitializationContext;
+    }
+
+    @Override
+    public void start(final FlowContext flowContext) throws FlowUpdateException {
+
+    }
+
+    @Override
+    public void stop(final FlowContext flowContext) throws FlowUpdateException {
+
+    }
+
+    @Override
+    public List<ValidationResult> validate(final FlowContext flowContext) {
         return List.of();
     }
 
     @Override
-    public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName) {
+    public List<ConfigurationStep> getConfigurationSteps(final FlowContext flowContext) {
+        return List.of();
+    }
+
+    @Override
+    public void onConfigurationStepConfigured(final String stepName, final FlowContext flowContext) {
+    }
+
+    @Override
+    public void prepareForUpdate(final FlowContext workingContext, final FlowContext activeContext) {
+    }
+
+    @Override
+    public void abortUpdatePreparation(final FlowContext flowContext, final Throwable cause) {
+    }
+
+    @Override
+    public void finishUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
+    }
+
+    @Override
+    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> properties, final FlowContext flowContext) {
+        return List.of();
+    }
+
+    @Override
+    public List<ValidationResult> validate(final FlowContext flowContext, final ConnectorConfigurationContext connectorConfigurationContext) {
+        return List.of();
+    }
+
+    @Override
+    public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName, final FlowContext flowContext) {
+        return List.of();
+    }
+
+    @Override
+    public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName, final FlowContext flowContext, final String filter) {
         return List.of();
     }
 }

@@ -40,6 +40,7 @@ import org.apache.nifi.controller.NodeTypeProvider;
 import org.apache.nifi.controller.ProcessorNode;
 import org.apache.nifi.controller.ReloadComponent;
 import org.apache.nifi.controller.flow.StandardFlowManager;
+import org.apache.nifi.controller.flowanalysis.FlowAnalyzer;
 import org.apache.nifi.controller.queue.FlowFileQueue;
 import org.apache.nifi.controller.queue.FlowFileQueueFactory;
 import org.apache.nifi.controller.queue.LoadBalanceCompression;
@@ -66,8 +67,10 @@ import org.apache.nifi.parameter.ParameterContext;
 import org.apache.nifi.parameter.ParameterContextManager;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.provenance.ProvenanceRepository;
+import org.apache.nifi.python.PythonBridge;
 import org.apache.nifi.reporting.BulletinRepository;
 import org.apache.nifi.util.NiFiProperties;
+import org.apache.nifi.validation.RuleViolationsManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -163,6 +166,7 @@ public class StandardConnectorNodeIT {
         extensionManager.discoverExtensions(systemBundle, Set.of());
 
         flowManager = new StandardFlowManager(nifiProperties, null, flowController, flowFileEventRepository, parameterContextManager);
+        flowManager.initialize(controllerServiceProvider, mock(PythonBridge.class), mock(FlowAnalyzer.class), mock(RuleViolationsManager.class));
         final ProcessGroup rootGroup = flowManager.createProcessGroup("root");
         rootGroup.setName("Root");
         flowManager.setRootGroup(rootGroup);
@@ -394,29 +398,33 @@ public class StandardConnectorNodeIT {
             SystemBundle.SYSTEM_BUNDLE_COORDINATE, true, true);
         assertNotNull(connectorNode);
 
-        assertEquals(List.of("File"), getConfigurationStepNames(connectorNode));
+        try (final FlowEngine flowEngine = new FlowEngine(1, "flow-engine")) {
+            connectorNode.prepareForUpdate(flowEngine);
+            assertEquals(List.of("File"), getConfigurationStepNames(connectorNode));
 
-        final Path tempFile = Files.createTempFile("StandardConnectorNodeIT", ".txt");
-        Files.writeString(tempFile, String.join("\n", "red", "blue", "yellow"));
+            final Path tempFile = Files.createTempFile("StandardConnectorNodeIT", ".txt");
+            Files.writeString(tempFile, String.join("\n", "red", "blue", "yellow"));
 
-        final ConnectorConfiguration configuration = createFileConfiguration(tempFile.toFile().getAbsolutePath());
-        configure(connectorNode, configuration);
+            final ConnectorConfiguration configuration = createFileConfiguration(tempFile.toFile().getAbsolutePath());
+            configure(connectorNode, configuration);
 
-        assertEquals(List.of("File", "Colors"), getConfigurationStepNames(connectorNode));
+            connectorNode.prepareForUpdate(flowEngine);
+            assertEquals(List.of("File", "Colors"), getConfigurationStepNames(connectorNode));
 
-        final ConfigurationStep colorConfigurationStep = connectorNode.getConnector().getConfigurationSteps().stream()
-            .filter(step -> step.getName().equals("Colors"))
-            .findFirst()
-            .orElseThrow();
+            final ConfigurationStep colorConfigurationStep = connectorNode.getConfigurationSteps().stream()
+                .filter(step -> step.getName().equals("Colors"))
+                .findFirst()
+                .orElseThrow();
 
-        assertNotNull(colorConfigurationStep);
-        assertEquals(1, colorConfigurationStep.getPropertyGroups().size());
-        final ConnectorPropertyGroup primaryColorsPropertyGroup = colorConfigurationStep.getPropertyGroups().getFirst();
+            assertNotNull(colorConfigurationStep);
+            assertEquals(1, colorConfigurationStep.getPropertyGroups().size());
+            final ConnectorPropertyGroup primaryColorsPropertyGroup = colorConfigurationStep.getPropertyGroups().getFirst();
 
-        final List<String> allowableValues = primaryColorsPropertyGroup.getProperties().getFirst().getAllowableValues().stream()
-            .map(DescribedValue::getValue)
-            .toList();
-        assertEquals(List.of("red", "blue", "yellow"), allowableValues);
+            final List<String> allowableValues = primaryColorsPropertyGroup.getProperties().getFirst().getAllowableValues().stream()
+                .map(DescribedValue::getValue)
+                .toList();
+            assertEquals(List.of("red", "blue", "yellow"), allowableValues);
+        }
     }
 
     @Test
@@ -425,25 +433,29 @@ public class StandardConnectorNodeIT {
             SystemBundle.SYSTEM_BUNDLE_COORDINATE, true, true);
         assertNotNull(connectorNode);
 
-        assertEquals(List.of("File"), getConfigurationStepNames(connectorNode));
+        try (final FlowEngine flowEngine = new FlowEngine(1, "testSimpleValidation")) {
+            connectorNode.prepareForUpdate(flowEngine);
+            assertEquals(List.of("File"), getConfigurationStepNames(connectorNode));
 
-        final ConnectorConfiguration configuration = createFileConfiguration("/non/existent/file");
-        configure(connectorNode, configuration);
+            final ConnectorConfiguration configuration = createFileConfiguration("/non/existent/file");
+            configure(connectorNode, configuration);
 
-        final ValidationState validationState = connectorNode.performValidation();
-        assertNotNull(validationState);
-        assertEquals(ValidationStatus.INVALID, validationState.getStatus());
-        assertEquals(1, validationState.getValidationErrors().size());
+            final ValidationState validationState = connectorNode.performValidation();
+            assertNotNull(validationState);
+            assertEquals(ValidationStatus.INVALID, validationState.getStatus());
+            assertEquals(1, validationState.getValidationErrors().size());
 
-        final ValidationResult result = validationState.getValidationErrors().iterator().next();
-        result.getExplanation().contains("/non/existent/file");
+            final ValidationResult result = validationState.getValidationErrors().iterator().next();
+            result.getExplanation().contains("/non/existent/file");
 
-        final ConnectorConfiguration validConfig = createFileConfiguration(".");
-        configure(connectorNode, validConfig);
+            final ConnectorConfiguration validConfig = createFileConfiguration(".");
+            configure(connectorNode, validConfig);
 
-        final ValidationState updatedValidationState = connectorNode.performValidation();
-        assertEquals(ValidationStatus.VALID, updatedValidationState.getStatus());
-        assertEquals(List.of(), updatedValidationState.getValidationErrors());
+            final ValidationState updatedValidationState = connectorNode.performValidation();
+            assertEquals(ValidationStatus.VALID, updatedValidationState.getStatus(),
+                "Expected valid state but invalid due to " + updatedValidationState.getValidationErrors());
+            assertEquals(List.of(), updatedValidationState.getValidationErrors());
+        }
     }
 
     @Test
@@ -468,7 +480,7 @@ public class StandardConnectorNodeIT {
     }
 
     private List<String> getConfigurationStepNames(final ConnectorNode connectorNode) {
-        return connectorNode.getConnector().getConfigurationSteps().stream()
+        return connectorNode.getConfigurationSteps().stream()
             .map(ConfigurationStep::getName)
             .toList();
     }

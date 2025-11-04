@@ -376,9 +376,9 @@ public class KafkaToS3IT {
             "S3 Endpoint Override URL", localStackContainer.getEndpoint().toString()
         ));
         final PropertyGroupConfiguration s3CredentialsConfig = new PropertyGroupConfiguration("S3 Credentials", Map.of(
-            "S3 Authentication Strategy", "Static Credentials",
-            "Access Key ID", localStackContainer.getAccessKey(),
-            "Secret Access Key", localStackContainer.getSecretKey()
+            "S3 Authentication Strategy", "Access Key ID and Secret Key",
+            "S3 Access Key ID", localStackContainer.getAccessKey(),
+            "S3 Secret Access Key", localStackContainer.getSecretKey()
         ));
         final PropertyGroupConfiguration s3MergeConfig = new PropertyGroupConfiguration("Merge Configuration", Map.of(
             "Target Object Size", "1 MB",
@@ -544,9 +544,9 @@ public class KafkaToS3IT {
             "S3 Endpoint Override URL", localStackContainer.getEndpoint().toString()
         ));
         final PropertyGroupConfiguration s3CredentialsConfig = new PropertyGroupConfiguration("S3 Credentials", Map.of(
-            "S3 Authentication Strategy", "Static Credentials",
-            "Access Key ID", localStackContainer.getAccessKey(),
-            "Secret Access Key", localStackContainer.getSecretKey()
+            "S3 Authentication Strategy", "Access Key ID and Secret Key",
+            "S3 Access Key ID", localStackContainer.getAccessKey(),
+            "S3 Secret Access Key", localStackContainer.getSecretKey()
         ));
         final PropertyGroupConfiguration s3MergeConfig = new PropertyGroupConfiguration("Merge Configuration", Map.of(
             "Target Object Size", "1 MB",

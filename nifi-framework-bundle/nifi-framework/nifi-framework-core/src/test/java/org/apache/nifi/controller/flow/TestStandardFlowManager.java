@@ -156,9 +156,7 @@ public class TestStandardFlowManager {
         assertFalse(nopConnector.isConfigured());
 
         final ConnectorInitializationContext initializationContext = nopConnector.getContext();
-        assertNotNull(initializationContext.getRootGroup());
         assertNotNull(initializationContext.getLogger());
-        assertNotNull(initializationContext.getConfigurationContext());
         assertEquals(id, initializationContext.getIdentifier());
         assertEquals(NopConnector.class.getSimpleName(), initializationContext.getName());
     }

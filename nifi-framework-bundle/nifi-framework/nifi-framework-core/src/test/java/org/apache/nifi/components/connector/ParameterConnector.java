@@ -19,6 +19,7 @@ package org.apache.nifi.components.connector;
 
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.Validator;
+import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.components.connector.components.ParameterValue;
 import org.apache.nifi.components.connector.util.VersionedFlowUtils;
 import org.apache.nifi.flow.VersionedExternalFlow;
@@ -58,10 +59,10 @@ public class ParameterConnector extends AbstractConnector {
         .build();
 
     @Override
-    protected void init() throws FlowUpdateException {
+    protected void init(final FlowContext activeFlowContext) throws FlowUpdateException {
         // Load the base flow from the generate-and-log-with-parameter.json flow
         final VersionedExternalFlow externalFlow = VersionedFlowUtils.loadFlowFromResource("flows/generate-and-log-with-parameter.json");
-        getInitializationContext().updateFlow(externalFlow);
+        getInitializationContext().updateFlow(activeFlowContext, externalFlow);
         initialized = true;
     }
 
@@ -70,14 +71,14 @@ public class ParameterConnector extends AbstractConnector {
     }
 
     @Override
-    public List<ConfigurationStep> getConfigurationSteps() {
+    public List<ConfigurationStep> getConfigurationSteps(final FlowContext flowContext) {
         return List.of(TEXT_STEP);
     }
 
     @Override
-    public void finishUpdate() {
+    public void finishUpdate(final FlowContext workingContext, final FlowContext activeContext) {
         try {
-            updateTextParameter();
+            updateTextParameter(workingContext, activeContext);
         } catch (final FlowUpdateException e) {
             getLogger().error("Failed to update parameters", e);
             throw new RuntimeException("Failed to update parameters", e);
@@ -85,24 +86,25 @@ public class ParameterConnector extends AbstractConnector {
     }
 
     @Override
-    public void onStepConfigured(final String stepName) {
+    public void onStepConfigured(final String stepName, final FlowContext workingContext) {
     }
 
     @Override
-    public void prepareForUpdate() {
+    public void prepareForUpdate(final FlowContext workingContext, final FlowContext activeContext) {
     }
 
     @Override
-    public void abortUpdatePreparation(final Throwable throwable) {
+    public void abortUpdatePreparation(final FlowContext workingContext, final Throwable throwable) {
     }
 
     @Override
-    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues) {
+    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues, final FlowContext workingContext) {
         return List.of();
     }
 
-    private void updateTextParameter() throws FlowUpdateException {
-        final String textValue = getProperty(TEXT_STEP, TEXT_PROPERTY).getValue();
+    private void updateTextParameter(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
+        final ConnectorConfigurationContext configContext = workingContext.getConfigurationContext();
+        final String textValue = configContext.getProperty(TEXT_STEP, TEXT_PROPERTY).getValue();
 
         // Update the "Text" parameter with the configured property value
         final ParameterValue textParameter = new ParameterValue.Builder()
@@ -113,11 +115,11 @@ public class ParameterConnector extends AbstractConnector {
 
         final ParameterValue sleepDurationParameter = new ParameterValue.Builder()
             .name("Sleep Duration")
-            .value(getProperty(TEXT_STEP, SLEEP_DURATION).getValue())
+            .value(configContext.getProperty(TEXT_STEP, SLEEP_DURATION).getValue())
             .sensitive(false)
             .build();
 
         final List<ParameterValue> parameterValues = List.of(textParameter, sleepDurationParameter);
-        getInitializationContext().getParameterContext().updateParameters(parameterValues);
+        activeContext.getParameterContext().updateParameters(parameterValues);
     }
 }

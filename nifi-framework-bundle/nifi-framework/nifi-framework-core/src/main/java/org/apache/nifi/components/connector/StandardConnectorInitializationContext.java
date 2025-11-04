@@ -29,29 +29,20 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
     private final String identifier;
     private final String name;
     private final ComponentLog componentLog;
-    private final ProcessGroup managedProcessGroup;
     private final SecretsManager secretsManager;
     private final Bundle configuredBundle;
     private final Bundle activeBundle;
     private final AssetManager assetManager;
-    private final FlowContextFactory flowContextFactory;
 
-    private volatile FlowContext activeFlowContext;
-    private volatile FlowContext workingFlowContext;
 
     private StandardConnectorInitializationContext(final Builder builder) {
         this.identifier = builder.identifier;
         this.name = builder.name;
         this.componentLog = builder.componentLog;
-        this.managedProcessGroup = builder.managedProcessGroup;
-        this.flowContextFactory = builder.flowContextFactory;
         this.secretsManager = builder.secretsManager;
         this.configuredBundle = builder.configuredBundle;
         this.activeBundle = builder.activeBundle;
         this.assetManager = builder.assetManager;
-
-        this.activeFlowContext = flowContextFactory.createActiveFlowContext(managedProcessGroup, componentLog);
-        this.workingFlowContext = flowContextFactory.createWorkingFlowContext(componentLog);
     }
 
 
@@ -71,46 +62,8 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
     }
 
     @Override
-    public FlowContext getActiveFlowContext() {
-        return activeFlowContext;
-    }
-
-    @Override
-    public FlowContext getWorkingFlowContext() {
-        return workingFlowContext;
-    }
-
-    @Override
     public SecretsManager getSecretsManager() {
         return secretsManager;
-    }
-
-    @Override
-    public void updateFlow(final VersionedExternalFlow versionedExternalFlow) throws FlowUpdateException {
-        final String parameterContextName = managedProcessGroup.getParameterContext().getName();
-        updateParameterContext(versionedExternalFlow.getFlowContents(), parameterContextName);
-
-        try {
-            managedProcessGroup.verifyCanUpdate(versionedExternalFlow, true, false);
-        } catch (final IllegalStateException e) {
-            throw new FlowUpdateException("Flow is not in a state that allows the requested updated", e);
-        }
-
-        managedProcessGroup.updateFlow(versionedExternalFlow, managedProcessGroup.getIdentifier(), false, true, true);
-
-        final ConnectorParameterLookup parameterLookup = new ConnectorParameterLookup(versionedExternalFlow.getParameterContexts().values(), assetManager);
-        getActiveFlowContext().getParameterContext().updateParameters(parameterLookup.getParameterValues());
-
-        activeFlowContext = flowContextFactory.createActiveFlowContext(managedProcessGroup, componentLog);
-    }
-
-    private void updateParameterContext(final VersionedProcessGroup group, final String parameterContextName) {
-        group.setParameterContextName(parameterContextName);
-        if (group.getProcessGroups() != null) {
-            for (final VersionedProcessGroup childGroup : group.getProcessGroups()) {
-                updateParameterContext(childGroup, parameterContextName);
-            }
-        }
     }
 
     @Override
@@ -123,14 +76,31 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
         return activeBundle;
     }
 
+    @Override
+    public void updateFlow(final FlowContext flowContext, final VersionedExternalFlow versionedExternalFlow) throws FlowUpdateException {
+        if (!(flowContext instanceof final FrameworkFlowContext frameworkFlowContext)) {
+            throw new IllegalArgumentException("FlowContext is not an instance provided by the framework");
+        }
+
+        // TODO: Probably should eliminate this method and instead move AssetManager to the FlowContext and add a method there
+        //       to update the flow.
+        frameworkFlowContext.updateFlow(versionedExternalFlow, assetManager);
+    }
+
+    private void updateParameterContext(final VersionedProcessGroup group, final String parameterContextName) {
+        group.setParameterContextName(parameterContextName);
+        if (group.getProcessGroups() != null) {
+            for (final VersionedProcessGroup childGroup : group.getProcessGroups()) {
+                updateParameterContext(childGroup, parameterContextName);
+            }
+        }
+    }
 
     public static class Builder implements ConnectorInitializationContextBuilder {
         private String identifier;
         private String name;
         private ComponentLog componentLog;
-        private ProcessGroup managedProcessGroup;
         private SecretsManager secretsManager;
-        private FlowContextFactory flowContextFactory;
         private Bundle configuredBundle;
         private Bundle activeBundle;
         private AssetManager assetManager;
@@ -150,18 +120,13 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
             return this;
         }
 
-        public Builder managedProcessGroup(final ProcessGroup managedProcessGroup) {
-            this.managedProcessGroup = managedProcessGroup;
-            return this;
-        }
-
-        public Builder flowContextFactory(final FlowContextFactory flowContextFactory) {
-            this.flowContextFactory = flowContextFactory;
-            return this;
-        }
-
         public Builder secretsManager(final SecretsManager secretsManager) {
             this.secretsManager = secretsManager;
+            return this;
+        }
+
+        public Builder assetManager(final AssetManager assetManager) {
+            this.assetManager = assetManager;
             return this;
         }
 
@@ -172,11 +137,6 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
 
         public Builder activeBundle(final Bundle activeBundle) {
             this.activeBundle = activeBundle;
-            return this;
-        }
-
-        public Builder assetManager(final AssetManager assetManager) {
-            this.assetManager = assetManager;
             return this;
         }
 

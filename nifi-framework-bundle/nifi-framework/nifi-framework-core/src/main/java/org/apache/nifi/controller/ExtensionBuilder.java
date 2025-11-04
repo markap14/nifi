@@ -27,25 +27,20 @@ import org.apache.nifi.components.ConfigurableComponent;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.connector.ConfigurationStep;
 import org.apache.nifi.components.connector.Connector;
-import org.apache.nifi.components.connector.ConnectorConfigurationContext;
 import org.apache.nifi.components.connector.ConnectorDetails;
 import org.apache.nifi.components.connector.ConnectorInitializationContext;
 import org.apache.nifi.components.connector.ConnectorInitializationContextBuilder;
 import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.components.connector.ConnectorPropertyDescriptor;
 import org.apache.nifi.components.connector.ConnectorPropertyGroup;
+import org.apache.nifi.components.connector.ConnectorStateTransition;
 import org.apache.nifi.components.connector.FlowContextFactory;
+import org.apache.nifi.components.connector.FrameworkFlowContext;
 import org.apache.nifi.components.connector.GhostConnector;
-import org.apache.nifi.components.connector.ProcessGroupFacadeFactory;
+import org.apache.nifi.components.connector.MutableConnectorConfigurationContext;
 import org.apache.nifi.components.connector.PropertyGroupConfiguration;
 import org.apache.nifi.components.connector.SecretsManager;
-import org.apache.nifi.components.connector.StandardConnectorConfigurationContext;
-import org.apache.nifi.components.connector.StandardConnectorInitializationContext;
-import org.apache.nifi.components.connector.ConnectorStateTransition;
 import org.apache.nifi.components.connector.StandardConnectorNode;
-import org.apache.nifi.components.connector.components.FlowContext;
-import org.apache.nifi.components.connector.components.ParameterContextFacade;
-import org.apache.nifi.components.connector.facades.standalone.StandaloneParameterContextFacade;
 import org.apache.nifi.components.state.StateManager;
 import org.apache.nifi.components.state.StateManagerProvider;
 import org.apache.nifi.components.validation.ValidationTrigger;
@@ -144,7 +139,7 @@ public class ExtensionBuilder {
    private PythonBridge pythonBridge;
    private ProcessGroup managedProcessGroup;
    private FlowContextFactory flowContextFactory;
-   private ConnectorConfigurationContext activeConfigurationContext;
+   private MutableConnectorConfigurationContext activeConfigurationContext;
    private ConnectorStateTransition connectorStateTransition;
    private ConnectorInitializationContextBuilder connectorInitializationContextBuilder;
 
@@ -256,7 +251,7 @@ public class ExtensionBuilder {
        return this;
    }
 
-   public ExtensionBuilder activeConfigurationContext(final ConnectorConfigurationContext configurationContext) {
+   public ExtensionBuilder activeConfigurationContext(final MutableConnectorConfigurationContext configurationContext) {
        this.activeConfigurationContext = configurationContext;
        return this;
    }
@@ -500,14 +495,7 @@ public class ExtensionBuilder {
        final ComponentLog logger = new SimpleProcessLogger(identifier, connector, new StandardLoggingContext());
        final ConnectorDetails connectorDetails = new ConnectorDetails(connector, bundleCoordinate, logger);
 
-       final ConnectorInitializationContext initContext = createConnectorInitializationContext(managedProcessGroup, logger, activeConfigurationContext);
-
-       // TODO: If an Exception is thrown in the call to #initialize, we should create a Ghosted Connector
-       try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(connector.getClass().getClassLoader())) {
-           connector.initialize(initContext);
-       }
-
-       initializeDefaultValues(connector, activeConfigurationContext);
+       final ConnectorInitializationContext initContext = createConnectorInitializationContext(managedProcessGroup, logger);
 
        final ConnectorNode connectorNode = new StandardConnectorNode(
            identifier,
@@ -517,16 +505,21 @@ public class ExtensionBuilder {
            connectorDetails,
            componentType,
            bundleCoordinate,
-           configurationContext,
-           connectorStateTransition
+           activeConfigurationContext,
+           connectorStateTransition,
+           flowContextFactory
        );
+
+       initializeDefaultValues(connector, connectorNode.getActiveFlowContext());
+       // TODO: If an Exception is thrown in the call to #initialize, we should create a Ghosted Connector
+       connectorNode.initializeConnector(initContext);
 
        return connectorNode;
    }
 
-   private void initializeDefaultValues(final Connector connector, final StandardConnectorConfigurationContext configurationContext) {
+   private void initializeDefaultValues(final Connector connector, final FrameworkFlowContext flowContext) {
        try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, connector.getClass(), identifier)) {
-           final List<ConfigurationStep> configSteps = connector.getConfigurationSteps();
+           final List<ConfigurationStep> configSteps = connector.getConfigurationSteps(flowContext);
 
            for (final ConfigurationStep step : configSteps) {
                final List<ConnectorPropertyGroup> propertyGroups = step.getPropertyGroups();
@@ -544,7 +537,7 @@ public class ExtensionBuilder {
                    propertyGroupConfigurations.add(new PropertyGroupConfiguration(propertyGroup.getName(), defaultValues));
                }
 
-               configurationContext.setProperties(step.getName(), propertyGroupConfigurations);
+               flowContext.getConfigurationContext().setProperties(step.getName(), propertyGroupConfigurations);
            }
        }
    }
@@ -559,8 +552,6 @@ public class ExtensionBuilder {
            .identifier(identifier)
            .name(name)
            .componentLog(componentLog)
-           .flowContextFactory(flowContextFactory)
-           .managedProcessGroup(managedProcessGroup)
            .secretsManager(secretsManager)
            .configuredBundle(bundle)
            .activeBundle(bundle)
