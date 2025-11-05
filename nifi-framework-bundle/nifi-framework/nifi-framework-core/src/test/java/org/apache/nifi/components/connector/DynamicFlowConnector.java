@@ -113,12 +113,13 @@ public class DynamicFlowConnector extends AbstractConnector {
     }
 
     @Override
-    protected void init(final FlowContext flowContext) throws FlowUpdateException {
-        // Load the base flow without property-based customizations
-        final VersionedExternalFlow externalFlow = VersionedFlowUtils.loadFlowFromResource("flows/generate-duplicate-log-flow.json");
-
-        getInitializationContext().updateFlow(flowContext, externalFlow);
+    protected void init() {
         initialized = true;
+    }
+
+    @Override
+    public VersionedExternalFlow getInitialFlow() {
+        return VersionedFlowUtils.loadFlowFromResource("flows/generate-duplicate-log-flow.json");
     }
 
     public boolean isInitialized() {

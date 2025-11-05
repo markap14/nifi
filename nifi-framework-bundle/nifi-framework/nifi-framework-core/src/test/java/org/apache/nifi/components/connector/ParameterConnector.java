@@ -59,15 +59,17 @@ public class ParameterConnector extends AbstractConnector {
         .build();
 
     @Override
-    protected void init(final FlowContext activeFlowContext) throws FlowUpdateException {
-        // Load the base flow from the generate-and-log-with-parameter.json flow
-        final VersionedExternalFlow externalFlow = VersionedFlowUtils.loadFlowFromResource("flows/generate-and-log-with-parameter.json");
-        getInitializationContext().updateFlow(activeFlowContext, externalFlow);
+    protected void init() {
         initialized = true;
     }
 
     public boolean isInitialized() {
         return initialized;
+    }
+
+    @Override
+    public VersionedExternalFlow getInitialFlow() {
+        return VersionedFlowUtils.loadFlowFromResource("flows/generate-and-log-with-parameter.json");
     }
 
     @Override

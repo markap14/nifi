@@ -21,6 +21,7 @@ import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.components.FlowContext;
+import org.apache.nifi.flow.VersionedExternalFlow;
 
 import java.time.Duration;
 import java.util.List;
@@ -34,7 +35,12 @@ public class SleepingConnector implements Connector {
     }
 
     @Override
-    public void initialize(final ConnectorInitializationContext connectorInitializationContext, final FlowContext activeFlowContext) {
+    public void initialize(final ConnectorInitializationContext connectorInitializationContext) {
+    }
+
+    @Override
+    public VersionedExternalFlow getInitialFlow() {
+        return null;
     }
 
     @Override

@@ -23,6 +23,7 @@ import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.components.connector.components.FlowContextType;
 import org.apache.nifi.engine.FlowEngine;
+import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.nar.ExtensionManager;
@@ -610,7 +611,12 @@ public class TestStandardConnectorNode {
         private final Set<String> onConfigurationStepConfiguredCalls = new HashSet<>();
 
         @Override
-        public void initialize(final ConnectorInitializationContext connectorInitializationContext, final FlowContext flowContext) {
+        public void initialize(final ConnectorInitializationContext connectorInitializationContext) {
+        }
+
+        @Override
+        public VersionedExternalFlow getInitialFlow() {
+            return null;
         }
 
         @Override

@@ -31,9 +31,8 @@ import java.util.Map;
 public class GenerateAndLog extends AbstractConnector {
 
     @Override
-    protected void init(final FlowContext activeContext) throws FlowUpdateException {
-        final VersionedExternalFlow versionedExternalFlow = VersionedFlowUtils.loadFlowFromResource("flows/Generate_and_Update.json");
-        getInitializationContext().updateFlow(activeContext, versionedExternalFlow);
+    public VersionedExternalFlow getInitialFlow() {
+        return VersionedFlowUtils.loadFlowFromResource("flows/Generate_and_Update.json");
     }
 
     @Override

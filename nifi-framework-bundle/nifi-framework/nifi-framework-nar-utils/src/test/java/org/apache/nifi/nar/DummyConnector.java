@@ -26,6 +26,7 @@ import org.apache.nifi.components.connector.ConnectorInitializationContext;
 import org.apache.nifi.components.connector.ConnectorValidationContext;
 import org.apache.nifi.components.connector.FlowUpdateException;
 import org.apache.nifi.components.connector.components.FlowContext;
+import org.apache.nifi.flow.VersionedExternalFlow;
 
 import java.util.List;
 import java.util.Map;
@@ -39,8 +40,13 @@ public class DummyConnector implements Connector {
     }
 
     @Override
-    public void initialize(final ConnectorInitializationContext connectorInitializationContext, final FlowContext flowContext) {
+    public void initialize(final ConnectorInitializationContext connectorInitializationContext) {
         this.context = connectorInitializationContext;
+    }
+
+    @Override
+    public VersionedExternalFlow getInitialFlow() {
+        return null;
     }
 
     @Override

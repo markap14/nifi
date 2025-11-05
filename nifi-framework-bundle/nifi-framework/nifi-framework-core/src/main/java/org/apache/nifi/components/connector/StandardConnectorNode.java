@@ -33,6 +33,7 @@ import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.connectable.FlowFileActivity;
 import org.apache.nifi.connectable.FlowFileTransferCounts;
 import org.apache.nifi.engine.FlowEngine;
+import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.nar.ExtensionManager;
@@ -74,6 +75,7 @@ public class StandardConnectorNode implements ConnectorNode {
 
     private volatile String name;
     private volatile boolean performValidation = true;
+    private volatile ConnectorInitializationContext initializationContext;
 
 
     public StandardConnectorNode(final String identifier, final ExtensionManager extensionManager, final Authorizable parentAuthorizable, final ProcessGroup managedProcessGroup,
@@ -471,8 +473,30 @@ public class StandardConnectorNode implements ConnectorNode {
     @Override
     public void initializeConnector(final ConnectorInitializationContext initializationContext) {
         try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
-            getConnector().initialize(initializationContext, activeFlowContext);
+            getConnector().initialize(initializationContext);
         }
+
+        this.initializationContext = initializationContext;
+    }
+
+    @Override
+    public void loadInitialFlow() throws FlowUpdateException {
+        if (initializationContext == null) {
+            throw new IllegalStateException("Cannot load initial flow because " + this + " has not been initialized yet.");
+        }
+
+        final VersionedExternalFlow initialFlow;
+        try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
+            initialFlow = getConnector().getInitialFlow();
+        }
+
+        if (initialFlow == null) {
+            logger.info("{} has no initial flow to load", this);
+            return;
+        }
+
+        logger.info("Loading initial flow for {}", this);
+        initializationContext.updateFlow(activeFlowContext, initialFlow);
     }
 
     @Override

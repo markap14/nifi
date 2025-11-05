@@ -22,6 +22,7 @@ import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ConfigVerificationResult.Outcome;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.components.FlowContext;
+import org.apache.nifi.flow.VersionedExternalFlow;
 
 import java.util.List;
 import java.util.Map;
@@ -50,7 +51,12 @@ public class GhostConnector implements Connector {
     }
 
     @Override
-    public void initialize(final ConnectorInitializationContext initContext, final FlowContext activeContext) {
+    public void initialize(final ConnectorInitializationContext initContext) {
+    }
+
+    @Override
+    public VersionedExternalFlow getInitialFlow() {
+        return null;
     }
 
     @Override

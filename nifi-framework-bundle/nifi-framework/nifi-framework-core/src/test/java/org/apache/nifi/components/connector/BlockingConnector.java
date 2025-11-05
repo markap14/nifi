@@ -21,6 +21,7 @@ import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.components.FlowContext;
+import org.apache.nifi.flow.VersionedExternalFlow;
 
 import java.util.List;
 import java.util.Map;
@@ -37,8 +38,14 @@ public class BlockingConnector implements Connector {
         this.finishUpdateLatch = finishUpdateLatch;
     }
 
+
     @Override
-    public void initialize(final ConnectorInitializationContext connectorInitializationContext, final FlowContext activeFlowContext) {
+    public void initialize(final ConnectorInitializationContext connectorInitializationContext) {
+    }
+
+    @Override
+    public VersionedExternalFlow getInitialFlow() {
+        return null;
     }
 
     @Override

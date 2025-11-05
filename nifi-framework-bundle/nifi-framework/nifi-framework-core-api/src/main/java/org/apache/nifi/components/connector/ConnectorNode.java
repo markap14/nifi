@@ -70,6 +70,8 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
 
     void initializeConnector(ConnectorInitializationContext initializationContext);
 
+    void loadInitialFlow() throws FlowUpdateException;
+
     /**
      * <p>
      * Pause triggering asynchronous validation to occur when the connector is updated. Often times, it is necessary

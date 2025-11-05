@@ -54,6 +54,11 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
 
 
     @Override
+    public VersionedExternalFlow getInitialFlow() {
+        return null;
+    }
+
+    @Override
     public List<ConfigurationStep> getConfigurationSteps(final FlowContext flowContext) {
         final List<ConfigurationStep> steps = new ArrayList<>();
         steps.add(FILE_STEP);
