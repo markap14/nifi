@@ -501,7 +501,6 @@ public class ExtensionBuilder {
            identifier,
            extensionManager,
            flowController,
-           managedProcessGroup,
            connectorDetails,
            componentType,
            bundleCoordinate,

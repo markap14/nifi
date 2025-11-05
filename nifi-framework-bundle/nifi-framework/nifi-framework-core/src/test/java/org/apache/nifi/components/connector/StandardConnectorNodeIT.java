@@ -188,7 +188,7 @@ public class StandardConnectorNodeIT {
     @Test
     public void testConnectorDynamicallyCreatingFlow() throws FlowUpdateException {
         final ConnectorNode connectorNode = initializeDynamicFlowConnector();
-        final ProcessGroup rootGroup = connectorNode.getManagedProcessGroup();
+        final ProcessGroup rootGroup = connectorNode.getActiveFlowContext().getManagedProcessGroup();
 
         // Configure the connector to log FlowFile contents, make 5 copies, and set text to "Second Iteration."
         final ConnectorConfiguration configuration = createConnectorConfiguration("Second Iteration.", 5, true, false);
@@ -250,7 +250,7 @@ public class StandardConnectorNodeIT {
 
         assertEquals(List.of(connectorNode), connectorRepository.getConnectors());
 
-        final ProcessGroup rootGroup = connectorNode.getManagedProcessGroup();
+        final ProcessGroup rootGroup = connectorNode.getActiveFlowContext().getManagedProcessGroup();
         assertEquals(3, rootGroup.getProcessGroups().size());
 
         final List<ProcessorNode> initialProcessors = rootGroup.findAllProcessors();
@@ -269,7 +269,7 @@ public class StandardConnectorNodeIT {
         assertNotNull(connectorNode);
         assertEquals(List.of(connectorNode), connectorRepository.getConnectors());
 
-        final ProcessGroup rootGroup = connectorNode.getManagedProcessGroup();
+        final ProcessGroup rootGroup = connectorNode.getActiveFlowContext().getManagedProcessGroup();
         assertEquals(3, rootGroup.getProcessors().size());
 
         return connectorNode;
@@ -288,7 +288,7 @@ public class StandardConnectorNodeIT {
         final ParameterConnector flowConnector = (ParameterConnector) connector;
         assertTrue(flowConnector.isInitialized());
 
-        final ProcessGroup rootGroup = connectorNode.getManagedProcessGroup();
+        final ProcessGroup rootGroup = connectorNode.getActiveFlowContext().getManagedProcessGroup();
         final ParameterContext parameterContext = rootGroup.getParameterContext();
         assertNotNull(parameterContext);
         assertEquals(2, parameterContext.getParameters().size());
@@ -315,7 +315,7 @@ public class StandardConnectorNodeIT {
         final ConnectorConfiguration configuration = createConnectorConfiguration("Second Iteration", 5, true, true);
         configure(connectorNode, configuration);
 
-        final ProcessGroup managedGroup = connectorNode.getManagedProcessGroup();
+        final ProcessGroup managedGroup = connectorNode.getActiveFlowContext().getManagedProcessGroup();
         final Set<ControllerServiceNode> serviceNodes = managedGroup.getControllerServices(true);
         assertNotNull(serviceNodes);
         assertEquals(1, serviceNodes.size());
@@ -325,7 +325,7 @@ public class StandardConnectorNodeIT {
     @Test
     public void testUpdateProcessorPropertyDataQueued() throws FlowUpdateException {
         final ConnectorNode connectorNode = initializeDynamicFlowConnector();
-        final ProcessGroup rootGroup = connectorNode.getManagedProcessGroup();
+        final ProcessGroup rootGroup = connectorNode.getActiveFlowContext().getManagedProcessGroup();
         final Connection connection = queueDataBySource(rootGroup, "Create FlowFile");
 
         // Update Connector Property to ensure that the change is allowed with data queued
@@ -338,7 +338,7 @@ public class StandardConnectorNodeIT {
     @Test
     public void testRemoveConnectionDataQueued() throws FlowUpdateException {
         final ConnectorNode connectorNode = initializeDynamicFlowConnector();
-        final ProcessGroup rootGroup = connectorNode.getManagedProcessGroup();
+        final ProcessGroup rootGroup = connectorNode.getActiveFlowContext().getManagedProcessGroup();
 
         // Create a configuration that will result in the LogFlowFileContents processor being removed.
         // Because the component is being removed, it should drain the queues before doing so.

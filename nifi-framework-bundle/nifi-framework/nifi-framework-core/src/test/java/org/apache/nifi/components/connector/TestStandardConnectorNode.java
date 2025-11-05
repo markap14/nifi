@@ -200,7 +200,6 @@ public class TestStandardConnectorNode {
             "blocking-connector-id",
             extensionManager,
             null,
-            managedProcessGroup,
             createConnectorDetails(blockingConnector),
             "BlockingConnector",
             null,
@@ -294,7 +293,6 @@ public class TestStandardConnectorNode {
             "blocking-connector-id",
             extensionManager,
             null,
-            managedProcessGroup,
             createConnectorDetails(blockingConnector),
             "BlockingConnector",
             null,
@@ -335,7 +333,6 @@ public class TestStandardConnectorNode {
             "slow-starting-connector-id",
             extensionManager,
             null,
-            managedProcessGroup,
             createConnectorDetails(blockingConnector),
             "SlowStartingConnector",
             null,
@@ -409,7 +406,6 @@ public class TestStandardConnectorNode {
             "slow-starting-connector-id",
             extensionManager,
             null,
-            managedProcessGroup,
             createConnectorDetails(blockingConnector),
             "SlowStartingConnector",
             null,
@@ -438,7 +434,6 @@ public class TestStandardConnectorNode {
             "slow-stopping-connector-id",
             extensionManager,
             null,
-            managedProcessGroup,
             createConnectorDetails(blockingConnector),
             "SlowStoppingConnector",
             null,
@@ -555,14 +550,14 @@ public class TestStandardConnectorNode {
         final SleepingConnector sleepingConnector = new SleepingConnector(Duration.ofMillis(1));
         final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("TestConnectorNode");
 
-        return new StandardConnectorNode("test-connector-id", extensionManager, null, managedProcessGroup,
+        return new StandardConnectorNode("test-connector-id", extensionManager, null,
             createConnectorDetails(sleepingConnector), "TestConnector", null, new StandardConnectorConfigurationContext(),
             stateTransition, flowContextFactory);
     }
 
     private StandardConnectorNode createConnectorNode(final Connector connector) {
         final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("TestConnectorNode");
-        return new StandardConnectorNode("test-connector-id", extensionManager, null, managedProcessGroup,
+        return new StandardConnectorNode("test-connector-id", extensionManager, null,
             createConnectorDetails(connector), "TestConnector", null, new StandardConnectorConfigurationContext(),
             stateTransition, flowContextFactory);
     }

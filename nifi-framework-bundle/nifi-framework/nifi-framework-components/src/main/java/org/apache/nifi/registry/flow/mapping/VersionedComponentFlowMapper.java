@@ -26,7 +26,9 @@ import org.apache.nifi.components.connector.ConfigurationStepConfiguration;
 import org.apache.nifi.components.connector.ConnectorConfiguration;
 import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.components.connector.ConnectorState;
+import org.apache.nifi.components.connector.FrameworkFlowContext;
 import org.apache.nifi.components.connector.PropertyGroupConfiguration;
+import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.components.resource.ResourceCardinality;
 import org.apache.nifi.components.resource.ResourceDefinition;
 import org.apache.nifi.connectable.Connectable;
@@ -1038,7 +1040,21 @@ public class VersionedComponentFlowMapper {
         versionedConnector.setType(connectorNode.getComponentType());
         versionedConnector.setBundle(mapBundle(connectorNode.getBundleCoordinate()));
 
-        final ConnectorConfiguration configuration = connectorNode.getActiveFlowContext().getConfigurationContext().toConnectorConfiguration();
+        final List<VersionedConfigurationStep> activeFlowConfiguration = createVersionedConfigurationSteps(connectorNode.getActiveFlowContext());
+        versionedConnector.setActiveFlowConfiguration(activeFlowConfiguration);
+
+        final List<VersionedConfigurationStep> workingFlowConfiguration = createVersionedConfigurationSteps(connectorNode.getWorkingFlowContext());
+        versionedConnector.setWorkingFlowConfiguration(workingFlowConfiguration);
+
+        return versionedConnector;
+    }
+
+    private List<VersionedConfigurationStep> createVersionedConfigurationSteps(final FrameworkFlowContext flowContext) {
+        if (flowContext == null) {
+            return Collections.emptyList();
+        }
+
+        final ConnectorConfiguration configuration = flowContext.getConfigurationContext().toConnectorConfiguration();
         final List<VersionedConfigurationStep> configurationSteps = new ArrayList<>();
 
         for (final ConfigurationStepConfiguration stepConfiguration : configuration.getConfigurationStepConfigurations()) {
@@ -1057,9 +1073,7 @@ public class VersionedComponentFlowMapper {
             }
         }
 
-        versionedConnector.setConfigurationSteps(configurationSteps);
-
-        return versionedConnector;
+        return configurationSteps;
     }
 
     private org.apache.nifi.flow.ScheduledState mapConnectorState(final ConnectorState connectorState) {

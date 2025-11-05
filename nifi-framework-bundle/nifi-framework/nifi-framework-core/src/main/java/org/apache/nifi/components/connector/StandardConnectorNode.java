@@ -61,7 +61,6 @@ public class StandardConnectorNode implements ConnectorNode {
     private final String identifier;
     private final ExtensionManager extensionManager;
     private final Authorizable parentAuthorizable;
-    private final ProcessGroup managedProcessGroup;
     private final ConnectorDetails connectorDetails;
     private final String componentType;
     private final BundleCoordinate bundleCoordinate;
@@ -78,7 +77,7 @@ public class StandardConnectorNode implements ConnectorNode {
     private volatile ConnectorInitializationContext initializationContext;
 
 
-    public StandardConnectorNode(final String identifier, final ExtensionManager extensionManager, final Authorizable parentAuthorizable, final ProcessGroup managedProcessGroup,
+    public StandardConnectorNode(final String identifier, final ExtensionManager extensionManager, final Authorizable parentAuthorizable,
         final ConnectorDetails connectorDetails, final String componentType, final BundleCoordinate bundleCoordinate,
         final MutableConnectorConfigurationContext configurationContext, final ConnectorStateTransition stateTransition,
         final FlowContextFactory flowContextFactory) {
@@ -86,7 +85,6 @@ public class StandardConnectorNode implements ConnectorNode {
         this.identifier = identifier;
         this.extensionManager = extensionManager;
         this.parentAuthorizable = parentAuthorizable;
-        this.managedProcessGroup = managedProcessGroup;
         this.connectorDetails = connectorDetails;
         this.componentType = componentType;
         this.bundleCoordinate = bundleCoordinate;
@@ -117,8 +115,6 @@ public class StandardConnectorNode implements ConnectorNode {
         updateResumeState.set(initialState);
         stateTransition.setDesiredState(ConnectorState.UPDATING);
         stateTransition.setCurrentState(ConnectorState.PREPARING_FOR_UPDATE);
-
-        workingFlowContext = flowContextFactory.createWorkingFlowContext(connectorDetails.getComponentLog(), activeFlowContext.getConfigurationContext());
 
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
             getConnector().prepareForUpdate(workingFlowContext, activeFlowContext);
@@ -160,7 +156,7 @@ public class StandardConnectorNode implements ConnectorNode {
                 activeFlowContext.getConfigurationContext().replaceProperties(stepConfig.stepName(), stepConfig.propertyGroupConfigurations());
             }
 
-            destroyWorkingContext();
+            recreateWorkingFlowContext();
         }
 
         final ConnectorState stateToResume = updateResumeState.getAndSet(null);
@@ -174,6 +170,10 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     private void destroyWorkingContext() {
+        if (this.workingFlowContext == null) {
+            return;
+        }
+
         // TODO: Add a purge method that will drop all data and remove all components,
 //        final ProcessGroup managedGroup = workingFlowContext.getManagedProcessGroup();
 //        managedGroup.purge();
@@ -196,27 +196,13 @@ public class StandardConnectorNode implements ConnectorNode {
 
     @Override
     public void setConfiguration(final String stepName, final List<PropertyGroupConfiguration> groupConfigurations) throws FlowUpdateException {
-        // Ensure that the Connector is fully stopped before allowing configuration to be updated
-        final ConnectorState currentState = getCurrentState();
-        if (currentState != ConnectorState.UPDATING) {
-            throw new IllegalStateException("Cannot update the configuration of " + this + " because its state is currently " + currentState
-                                            + "; its state must be UPDATING in order to configure it.");
-        }
-
-        // Desired State must also be UPDATING to ensure that the Connector is not transitioning to a new state during the configuration change
-        final ConnectorState desiredState = getDesiredState();
-        if (desiredState != ConnectorState.UPDATING) {
-            throw new IllegalStateException("Cannot update the configuration of " + this + " because its desired state is currently " + desiredState
-                                            + "; its state must be UPDATING in order to configure it.");
-        }
-
-        // Determine which configuration steps will change as a result of applying this new configuration
+        // Update properties and check if the configuration changed.
         final ConfigurationUpdateResult updateResult = workingFlowContext.getConfigurationContext().setProperties(stepName, groupConfigurations);
-
         if (updateResult == ConfigurationUpdateResult.NO_CHANGES) {
             return;
         }
 
+        // If there were changes, trigger Processor to be notified of the change.
         final Connector connector = connectorDetails.getConnector();
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, connector.getClass(), getIdentifier())) {
             logger.debug("Notifying {} of configuration change for configuration step {}", this, stepName);
@@ -241,6 +227,14 @@ public class StandardConnectorNode implements ConnectorNode {
 
     @Override
     public void enable() {
+        if (getCurrentState() == ConnectorState.STOPPED) {
+            return;
+        }
+        if (getCurrentState() != ConnectorState.DISABLED) {
+            throw new IllegalStateException("Cannot enable " + this + " because its desired state is currently " + getCurrentState()
+                                            + "; it must be DISABLED in order to be enabled.");
+        }
+
         stateTransition.setDesiredState(ConnectorState.STOPPED);
         if (stateTransition.trySetCurrentState(ConnectorState.DISABLED, ConnectorState.STOPPED)) {
             logger.info("Transitioned current state for {} to {}", this, ConnectorState.STOPPED);
@@ -267,13 +261,14 @@ public class StandardConnectorNode implements ConnectorNode {
 
     @Override
     public Optional<Duration> getIdleDuration() {
-        final FlowFileActivity activity = getManagedProcessGroup().getFlowFileActivity();
+        final ProcessGroup processGroup = getActiveFlowContext().getManagedProcessGroup();
+        final FlowFileActivity activity = processGroup.getFlowFileActivity();
         final OptionalLong lastActivityTimestamp = activity.getLatestActivityTime();
         if (lastActivityTimestamp.isEmpty()) {
             return Optional.empty();
         }
 
-        if (getManagedProcessGroup().isDataQueued()) {
+        if (processGroup.isDataQueued()) {
             return Optional.empty();
         }
 
@@ -283,7 +278,7 @@ public class StandardConnectorNode implements ConnectorNode {
 
     @Override
     public FlowFileTransferCounts getFlowFileTransferCounts() {
-        return getManagedProcessGroup().getFlowFileActivity().getTransferCounts();
+        return getActiveFlowContext().getManagedProcessGroup().getFlowFileActivity().getTransferCounts();
     }
 
     @Override
@@ -418,8 +413,6 @@ public class StandardConnectorNode implements ConnectorNode {
             throw new IllegalStateException("Cannot start " + this + " because its state is currently " + currentState + "; it must be fully stopped before it can be started.");
         }
 
-        // TODO: Instead of throwing IllegalStateException here, we should behave more like Controller Services / Processors
-        //       and keep trying to start until it becomes valid or is stopped.
         final ValidationState state = performValidation();
         if (state.getStatus() != ValidationStatus.VALID) {
             throw new IllegalStateException("Cannot start " + this + " because it is not valid: " + state.getValidationErrors());
@@ -434,11 +427,6 @@ public class StandardConnectorNode implements ConnectorNode {
     @Override
     public String getComponentType() {
         return componentType;
-    }
-
-    @Override
-    public ProcessGroup getManagedProcessGroup() {
-        return managedProcessGroup;
     }
 
     @Override
@@ -492,11 +480,17 @@ public class StandardConnectorNode implements ConnectorNode {
 
         if (initialFlow == null) {
             logger.info("{} has no initial flow to load", this);
-            return;
+        } else {
+            logger.info("Loading initial flow for {}", this);
+            initializationContext.updateFlow(activeFlowContext, initialFlow);
         }
 
-        logger.info("Loading initial flow for {}", this);
-        initializationContext.updateFlow(activeFlowContext, initialFlow);
+        recreateWorkingFlowContext();
+    }
+
+    private void recreateWorkingFlowContext() {
+        destroyWorkingContext();
+        workingFlowContext = flowContextFactory.createWorkingFlowContext(connectorDetails.getComponentLog(), activeFlowContext.getConfigurationContext());
     }
 
     @Override
@@ -558,7 +552,6 @@ public class StandardConnectorNode implements ConnectorNode {
     @Override
     public List<ConfigurationStep> getConfigurationSteps() {
         try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
-            // TODO: Will we always have a working flow context when this is called?
             return getConnector().getConfigurationSteps(workingFlowContext);
         }
     }
@@ -566,6 +559,11 @@ public class StandardConnectorNode implements ConnectorNode {
     @Override
     public FrameworkFlowContext getActiveFlowContext() {
         return activeFlowContext;
+    }
+
+    @Override
+    public FrameworkFlowContext getWorkingFlowContext() {
+        return workingFlowContext;
     }
 
     @Override

@@ -1056,7 +1056,7 @@ public class VersionedFlowSynchronizer implements FlowSynchronizer {
     private boolean isConnectorConfigurationUpdated(final ConnectorNode existingConnector, final VersionedConnector versionedConnector) {
         final ConnectorConfiguration existingConfiguration = existingConnector.getActiveFlowContext().getConfigurationContext().toConnectorConfiguration();
 
-        final List<VersionedConfigurationStep> versionedConfigurationSteps = versionedConnector.getConfigurationSteps();
+        final List<VersionedConfigurationStep> versionedConfigurationSteps = versionedConnector.getActiveFlowConfiguration();
         if (versionedConfigurationSteps == null || versionedConfigurationSteps.isEmpty()) {
             return existingConfiguration != null && !existingConfiguration.getConfigurationStepConfigurations().isEmpty();
         }
@@ -1159,7 +1159,7 @@ public class VersionedFlowSynchronizer implements FlowSynchronizer {
             throw new RuntimeException(connectorNode + " failed to prepare itself for update", e);
         }
 
-        final List<VersionedConfigurationStep> configurationSteps = versionedConnector.getConfigurationSteps();
+        final List<VersionedConfigurationStep> configurationSteps = versionedConnector.getActiveFlowConfiguration();
         for (final VersionedConfigurationStep configurationStep : configurationSteps) {
             final List<PropertyGroupConfiguration> stepConfiguration = new ArrayList<>();
 

@@ -60,8 +60,6 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
      */
     String getComponentType();
 
-    ProcessGroup getManagedProcessGroup();
-
     BundleCoordinate getBundleCoordinate();
 
     List<AllowableValue> fetchAllowableValues(String stepName, String groupName, String propertyName);
@@ -112,6 +110,8 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
     List<ConfigurationStep> getConfigurationSteps();
 
     FrameworkFlowContext getActiveFlowContext();
+
+    FrameworkFlowContext getWorkingFlowContext();
 
     // -------------------
     // The following methods should always be called via the ConnectorRepository in order to maintain proper
