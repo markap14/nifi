@@ -18,7 +18,6 @@
 package org.apache.nifi.components.connector;
 
 import java.util.List;
-import java.util.Objects;
 
 public record ConfigurationStepConfiguration(String stepName, List<PropertyGroupConfiguration> propertyGroupConfigurations) {
 }

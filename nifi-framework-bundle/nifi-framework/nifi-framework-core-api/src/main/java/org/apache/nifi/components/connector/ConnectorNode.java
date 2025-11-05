@@ -22,12 +22,10 @@ import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.VersionedComponent;
-import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.components.validation.ValidationState;
 import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.connectable.FlowFileTransferCounts;
 import org.apache.nifi.engine.FlowEngine;
-import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 
 import java.time.Duration;

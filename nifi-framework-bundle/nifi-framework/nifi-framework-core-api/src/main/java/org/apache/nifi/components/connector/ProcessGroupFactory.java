@@ -14,23 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.nifi.controller;
 
-import org.apache.nifi.components.PropertyDescriptor;
-import org.apache.nifi.components.ValidationContext;
-import org.apache.nifi.controller.flowanalysis.FlowAnalyzer;
-import org.apache.nifi.parameter.ParameterLookup;
-import org.apache.nifi.validation.RuleViolationsManager;
+package org.apache.nifi.components.connector;
 
-import java.util.Map;
-import java.util.Optional;
+import org.apache.nifi.groups.ProcessGroup;
 
-public interface ValidationContextFactory {
-
-    ValidationContext newValidationContext(Map<PropertyDescriptor, PropertyConfiguration> properties, String annotationData, String groupId, String componentId, ParameterLookup parameterLookup,
-                                           boolean validateConnections);
-
-    Optional<RuleViolationsManager> getRuleViolationsManager();
-
-    Optional<FlowAnalyzer> getFlowAnalyzer();
+public interface ProcessGroupFactory {
+    ProcessGroup create(String id);
 }

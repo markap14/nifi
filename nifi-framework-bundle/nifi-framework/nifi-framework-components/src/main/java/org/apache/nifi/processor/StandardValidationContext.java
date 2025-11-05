@@ -37,7 +37,6 @@ import org.apache.nifi.controller.service.ControllerServiceState;
 import org.apache.nifi.expression.ExpressionLanguageCompiler;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.parameter.Parameter;
-import org.apache.nifi.parameter.ParameterContext;
 import org.apache.nifi.parameter.ParameterLookup;
 import org.apache.nifi.parameter.ParameterReference;
 

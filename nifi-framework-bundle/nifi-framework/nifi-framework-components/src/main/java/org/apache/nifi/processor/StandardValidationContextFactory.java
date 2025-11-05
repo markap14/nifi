@@ -22,7 +22,6 @@ import org.apache.nifi.controller.PropertyConfiguration;
 import org.apache.nifi.controller.ValidationContextFactory;
 import org.apache.nifi.controller.flowanalysis.FlowAnalyzer;
 import org.apache.nifi.controller.service.ControllerServiceProvider;
-import org.apache.nifi.parameter.ParameterContext;
 import org.apache.nifi.parameter.ParameterLookup;
 import org.apache.nifi.validation.RuleViolationsManager;
 

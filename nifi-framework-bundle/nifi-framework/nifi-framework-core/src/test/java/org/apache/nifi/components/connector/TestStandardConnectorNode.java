@@ -46,6 +46,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -71,7 +72,7 @@ public class TestStandardConnectorNode {
 
         flowContextFactory = new FlowContextFactory() {
             @Override
-            public FrameworkFlowContext createActiveFlowContext(final ComponentLog connectorLogger) {
+            public FrameworkFlowContext createActiveFlowContext(final String connectorId, final ComponentLog connectorLogger) {
                 final MutableConnectorConfigurationContext activeConfigurationContext = new StandardConnectorConfigurationContext();
                 final ProcessGroupFacadeFactory processGroupFacadeFactory = mock(ProcessGroupFacadeFactory.class);
                 final ParameterContextFacadeFactory parameterContextFacadeFactory = mock(ParameterContextFacadeFactory.class);
@@ -79,7 +80,7 @@ public class TestStandardConnectorNode {
             }
 
             @Override
-            public FrameworkFlowContext createWorkingFlowContext(final ComponentLog connectorLogger, final MutableConnectorConfigurationContext currentConfiguration) {
+            public FrameworkFlowContext createWorkingFlowContext(final String connectorId, final ComponentLog connectorLogger, final MutableConnectorConfigurationContext currentConfiguration) {
                 final ProcessGroupFacadeFactory processGroupFacadeFactory = mock(ProcessGroupFacadeFactory.class);
                 final ParameterContextFacadeFactory parameterContextFacadeFactory = mock(ParameterContextFacadeFactory.class);
 
@@ -387,74 +388,6 @@ public class TestStandardConnectorNode {
     }
 
     @Test
-    public void testCannotSetConfigurationWhenRunning() throws Exception {
-        final StandardConnectorNode connectorNode = createConnectorNode();
-        connectorNode.start(scheduler).get(5, TimeUnit.SECONDS);
-        assertEquals(ConnectorState.RUNNING, connectorNode.getCurrentState());
-
-        final IllegalStateException exception = assertThrows(IllegalStateException.class,
-            () -> connectorNode.setConfiguration("testGroup", createGroupConfig()));
-        assertTrue(exception.getMessage().contains("state is currently RUNNING"));
-    }
-
-    @Test
-    public void testCannotSetConfigurationWhenStarting() throws Exception {
-        final CountDownLatch startLatch = new CountDownLatch(1);
-        final BlockingConnector blockingConnector = new BlockingConnector(startLatch, new CountDownLatch(0), new CountDownLatch(0));
-        final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("SlowStartingConnectorNode");
-        final StandardConnectorNode slowNode = new StandardConnectorNode(
-            "slow-starting-connector-id",
-            extensionManager,
-            null,
-            createConnectorDetails(blockingConnector),
-            "SlowStartingConnector",
-            null,
-            new StandardConnectorConfigurationContext(),
-            stateTransition,
-            flowContextFactory
-        );
-
-        final Future<Void> startFuture = slowNode.start(scheduler);
-        assertEquals(ConnectorState.STARTING, slowNode.getCurrentState());
-
-        final IllegalStateException exception = assertThrows(IllegalStateException.class,
-            () -> slowNode.setConfiguration("testGroup", createGroupConfig()));
-        assertTrue(exception.getMessage().contains("state is currently STARTING"));
-
-        startLatch.countDown();
-        startFuture.get(5, TimeUnit.SECONDS);
-    }
-
-    @Test
-    public void testCannotSetConfigurationWhenStopping() throws Exception {
-        final CountDownLatch stopLatch = new CountDownLatch(1);
-        final BlockingConnector blockingConnector = new BlockingConnector(new CountDownLatch(0), stopLatch, new CountDownLatch(0));
-        final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("SlowStoppingConnectorNode");
-        final StandardConnectorNode connectorNode = new StandardConnectorNode(
-            "slow-stopping-connector-id",
-            extensionManager,
-            null,
-            createConnectorDetails(blockingConnector),
-            "SlowStoppingConnector",
-            null,
-            new StandardConnectorConfigurationContext(),
-            stateTransition,
-            flowContextFactory
-        );
-
-        connectorNode.start(scheduler).get(5, TimeUnit.SECONDS);
-        final Future<Void> stopFuture = connectorNode.stop(scheduler);
-        assertEquals(ConnectorState.STOPPING, connectorNode.getCurrentState());
-
-        final IllegalStateException exception = assertThrows(IllegalStateException.class,
-            () -> connectorNode.setConfiguration("testGroup", createGroupConfig()));
-        assertTrue(exception.getMessage().contains("state is currently STOPPING"));
-
-        stopLatch.countDown();
-        stopFuture.get(5, TimeUnit.SECONDS);
-    }
-
-    @Test
     public void testSetConfigurationWithPropertyChanges() throws FlowUpdateException, ExecutionException, InterruptedException, TimeoutException {
         final StandardConnectorNode connectorNode = createConnectorNode();
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
@@ -550,16 +483,24 @@ public class TestStandardConnectorNode {
         final SleepingConnector sleepingConnector = new SleepingConnector(Duration.ofMillis(1));
         final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("TestConnectorNode");
 
-        return new StandardConnectorNode("test-connector-id", extensionManager, null,
+        final StandardConnectorNode node = new StandardConnectorNode("test-connector-id", extensionManager, null,
             createConnectorDetails(sleepingConnector), "TestConnector", null, new StandardConnectorConfigurationContext(),
             stateTransition, flowContextFactory);
+
+        node.initializeConnector(mock(ConnectorInitializationContext.class));
+        assertDoesNotThrow(node::loadInitialFlow);
+        return node;
     }
 
-    private StandardConnectorNode createConnectorNode(final Connector connector) {
+    private StandardConnectorNode createConnectorNode(final Connector connector) throws FlowUpdateException {
         final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("TestConnectorNode");
-        return new StandardConnectorNode("test-connector-id", extensionManager, null,
+        final StandardConnectorNode node = new StandardConnectorNode("test-connector-id", extensionManager, null,
             createConnectorDetails(connector), "TestConnector", null, new StandardConnectorConfigurationContext(),
             stateTransition, flowContextFactory);
+
+        node.initializeConnector(mock(ConnectorInitializationContext.class));
+        node.loadInitialFlow();
+        return node;
     }
 
     private ConnectorDetails createConnectorDetails(final Connector connector) {

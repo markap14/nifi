@@ -19,7 +19,6 @@ package org.apache.nifi.components.connector;
 
 import org.apache.nifi.components.DescribedValue;
 
-import java.io.IOException;
 import java.util.List;
 
 public interface DescribedValueProvider {

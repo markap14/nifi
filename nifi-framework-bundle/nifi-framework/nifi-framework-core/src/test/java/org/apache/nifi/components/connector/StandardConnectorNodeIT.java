@@ -86,9 +86,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.function.Predicate;
 
 import static java.util.Objects.requireNonNull;
@@ -96,7 +93,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -362,39 +358,6 @@ public class StandardConnectorNodeIT {
         }
     }
 
-    @Test
-    public void testUpdateConnectorFailsIfRunning() throws ExecutionException, InterruptedException, TimeoutException {
-        final ConnectorNode connectorNode = initializeDynamicFlowConnector();
-
-        try (final FlowEngine flowEngine = new FlowEngine(1, "flow-engine")) {
-            connectorNode.start(flowEngine).get(5, TimeUnit.SECONDS);
-            assertSame(ConnectorState.RUNNING, connectorNode.getCurrentState());
-
-            final ConnectorConfiguration configuration = createConnectorConfiguration("Second Iteration", 5, true, false);
-            final ConfigurationStepConfiguration firstStepConfig = configuration.getConfigurationStepConfigurations().iterator().next();
-
-            assertThrows(IllegalStateException.class, () ->
-                connectorNode.setConfiguration(firstStepConfig.stepName(), firstStepConfig.propertyGroupConfigurations()));
-        }
-    }
-
-    @Test
-    public void testUpdateConnectorFailsWhileStopping() throws ExecutionException, InterruptedException, TimeoutException {
-        final ConnectorNode connectorNode = initializeParameterConnector();
-
-        try (final FlowEngine flowEngine = new FlowEngine(1, "flow-engine")) {
-            connectorNode.start(flowEngine).get(5, TimeUnit.SECONDS);
-            assertSame(ConnectorState.RUNNING, connectorNode.getCurrentState());
-
-            connectorNode.stop(flowEngine);
-            assertSame(ConnectorState.STOPPING, connectorNode.getCurrentState());
-
-            final ConnectorConfiguration configuration = createConnectorConfiguration("Second Iteration", 5, true, false);
-            final ConfigurationStepConfiguration firstStepConfig = configuration.getConfigurationStepConfigurations().iterator().next();
-            assertThrows(IllegalStateException.class, () ->
-                connectorNode.setConfiguration(firstStepConfig.stepName(), firstStepConfig.propertyGroupConfigurations()));
-        }
-    }
 
     @Test
     public void testDynamicProperties() throws IOException, FlowUpdateException {

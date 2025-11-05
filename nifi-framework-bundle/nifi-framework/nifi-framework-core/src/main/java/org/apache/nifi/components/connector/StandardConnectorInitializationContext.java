@@ -22,7 +22,6 @@ import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.flow.Bundle;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.flow.VersionedProcessGroup;
-import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 
 public class StandardConnectorInitializationContext implements ConnectorInitializationContext {
@@ -82,8 +81,6 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
             throw new IllegalArgumentException("FlowContext is not an instance provided by the framework");
         }
 
-        // TODO: Probably should eliminate this method and instead move AssetManager to the FlowContext and add a method there
-        //       to update the flow.
         frameworkFlowContext.updateFlow(versionedExternalFlow, assetManager);
     }
 

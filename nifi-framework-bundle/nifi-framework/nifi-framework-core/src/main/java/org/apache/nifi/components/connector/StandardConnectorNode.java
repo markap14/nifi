@@ -92,7 +92,7 @@ public class StandardConnectorNode implements ConnectorNode {
         this.flowContextFactory = flowContextFactory;
 
         this.name = connectorDetails.getConnector().getClass().getSimpleName();
-        this.activeFlowContext = flowContextFactory.createActiveFlowContext(connectorDetails.getComponentLog());
+        this.activeFlowContext = flowContextFactory.createActiveFlowContext(identifier, connectorDetails.getComponentLog());
     }
 
     @Override
@@ -187,7 +187,7 @@ public class StandardConnectorNode implements ConnectorNode {
         stateTransition.setDesiredState(ConnectorState.UPDATE_FAILED);
 
         final FlowContext updateContext = workingFlowContext;
-        workingFlowContext = null;
+        recreateWorkingFlowContext();
 
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
             getConnector().abortUpdatePreparation(updateContext, cause);
@@ -465,6 +465,8 @@ public class StandardConnectorNode implements ConnectorNode {
         }
 
         this.initializationContext = initializationContext;
+
+        recreateWorkingFlowContext();
     }
 
     @Override
@@ -490,7 +492,8 @@ public class StandardConnectorNode implements ConnectorNode {
 
     private void recreateWorkingFlowContext() {
         destroyWorkingContext();
-        workingFlowContext = flowContextFactory.createWorkingFlowContext(connectorDetails.getComponentLog(), activeFlowContext.getConfigurationContext());
+        workingFlowContext = flowContextFactory.createWorkingFlowContext(identifier,
+            connectorDetails.getComponentLog(), activeFlowContext.getConfigurationContext());
     }
 
     @Override

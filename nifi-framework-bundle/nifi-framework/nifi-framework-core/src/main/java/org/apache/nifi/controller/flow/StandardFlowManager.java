@@ -29,20 +29,11 @@ import org.apache.nifi.components.ConfigurableComponent;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.connector.Connector;
 import org.apache.nifi.components.connector.ConnectorNode;
+import org.apache.nifi.components.connector.ConnectorRepository;
 import org.apache.nifi.components.connector.ConnectorStateTransition;
 import org.apache.nifi.components.connector.FlowContextFactory;
-import org.apache.nifi.components.connector.FrameworkFlowContext;
-import org.apache.nifi.components.connector.MutableConnectorConfigurationContext;
-import org.apache.nifi.components.connector.ParameterContextFacadeFactory;
-import org.apache.nifi.components.connector.ProcessGroupFacadeFactory;
+import org.apache.nifi.components.connector.ProcessGroupFactory;
 import org.apache.nifi.components.connector.StandardConnectorConfigurationContext;
-import org.apache.nifi.components.connector.StandardFlowContext;
-import org.apache.nifi.components.connector.components.FlowContextType;
-import org.apache.nifi.components.connector.components.ParameterContextFacade;
-import org.apache.nifi.components.connector.components.ProcessGroupFacade;
-import org.apache.nifi.components.connector.facades.standalone.ComponentContextProvider;
-import org.apache.nifi.components.connector.facades.standalone.StandaloneParameterContextFacade;
-import org.apache.nifi.components.connector.facades.standalone.StandaloneProcessGroupFacade;
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.connectable.ConnectableType;
 import org.apache.nifi.connectable.Connection;
@@ -74,14 +65,12 @@ import org.apache.nifi.deprecation.log.DeprecationLogger;
 import org.apache.nifi.deprecation.log.DeprecationLoggerFactory;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.flow.VersionedParameterContext;
-import org.apache.nifi.flow.VersionedProcessGroup;
 import org.apache.nifi.flowanalysis.FlowAnalysisRule;
 import org.apache.nifi.flowfile.FlowFilePrioritizer;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.groups.RemoteProcessGroup;
 import org.apache.nifi.groups.StandardProcessGroup;
 import org.apache.nifi.groups.StatelessGroupNodeFactory;
-import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.logging.ConnectorLogObserver;
 import org.apache.nifi.logging.ControllerServiceLogObserver;
 import org.apache.nifi.logging.FlowAnalysisRuleLogObserver;
@@ -774,57 +763,11 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
             Collections.emptyMap(), Collections.emptyList(), null);
         managedRootGroup.setParameterContext(managedParameterContext);
 
-        final ProcessGroupFacadeFactory processGroupFacadeFactory = (processGroup, connectorLogger) -> {
-            final FlowMappingOptions flowMappingOptions = new FlowMappingOptions.Builder()
-                .mapSensitiveConfiguration(true)
-                .mapPropertyDescriptors(true)
-                .stateLookup(VersionedComponentStateLookup.IDENTITY_LOOKUP)
-                .sensitiveValueEncryptor(value -> value)
-                .componentIdLookup(ComponentIdLookup.VERSIONED_OR_GENERATE)
-                .mapInstanceIdentifiers(true)
-                .mapControllerServiceReferencesToVersionedId(true)
-                .mapFlowRegistryClientId(true)
-                .mapAssetReferences(true)
-                .build();
-
-            final VersionedComponentFlowMapper flowMapper = new VersionedComponentFlowMapper(flowController.getExtensionManager(), flowMappingOptions);
-
-            final VersionedProcessGroup versionedManagedGroup = flowMapper.mapProcessGroup(processGroup, flowController.getControllerServiceProvider(), this, true);
-            final ComponentContextProvider componentContextProvider = new StandardComponentContextProvider(flowController);
-            final ParameterContext parameterContext = processGroup.getParameterContext();
-
-            return new StandaloneProcessGroupFacade(processGroup, versionedManagedGroup,
-                processScheduler, parameterContext, flowController.getControllerServiceProvider(), componentContextProvider,
-                connectorLogger, extensionManager, flowController.getAssetManager());
-        };
-
-        final ConnectorStateTransition stateTransition = flowController.getConnectorRepository().createStateTransition(type, id);
-
+        final ConnectorRepository connectorRepository = flowController.getConnectorRepository();
+        final ConnectorStateTransition stateTransition = connectorRepository.createStateTransition(type, id);
         final StandardConnectorConfigurationContext activeConfigurationContext = new StandardConnectorConfigurationContext();
-
-        final ParameterContextFacadeFactory parameterContextFacadeFactory =
-            processGroup -> new StandaloneParameterContextFacade(flowController, processGroup);
-
-        final FlowContextFactory flowContextFactory = new FlowContextFactory() {
-            @Override
-            public FrameworkFlowContext createActiveFlowContext(final ComponentLog connectorLogger) {
-                return new StandardFlowContext(managedRootGroup, activeConfigurationContext, processGroupFacadeFactory,
-                    parameterContextFacadeFactory, connectorLogger, FlowContextType.ACTIVE);
-            }
-
-            @Override
-            public FrameworkFlowContext createWorkingFlowContext(final ComponentLog connectorLogger, final MutableConnectorConfigurationContext activeConfigurationContext) {
-                final ProcessGroup processGroup = createProcessGroup(workingGroupId, false);
-                copyGroupContents(managedRootGroup, processGroup, id + "-working-context");
-
-                final ProcessGroupFacade processGroupFacade = processGroupFacadeFactory.create(processGroup, connectorLogger);
-                final ParameterContextFacade parameterContextFacade = new StandaloneParameterContextFacade(flowController, processGroup);
-                final MutableConnectorConfigurationContext workingConfigurationContext = activeConfigurationContext.clone();
-
-                return new StandardFlowContext(processGroup, workingConfigurationContext, processGroupFacadeFactory,
-                    parameterContextFacadeFactory, connectorLogger, FlowContextType.WORKING);
-            }
-        };
+        final ProcessGroupFactory processGroupFactory = groupId -> createProcessGroup(groupId, false);
+        final FlowContextFactory flowContextFactory = new FlowControllerFlowContextFactory(flowController, managedRootGroup, activeConfigurationContext, processGroupFactory);
 
         final ConnectorNode connectorNode = new ExtensionBuilder()
             .identifier(id)

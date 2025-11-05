@@ -23,7 +23,6 @@ import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.groups.StatelessGroupNode;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
 
 public class StandaloneStatelessGroupLifecycle implements StatelessGroupLifecycle {
     private final StatelessGroupNode statelessGroupNode;

@@ -17,12 +17,10 @@
 
 package org.apache.nifi.components.connector;
 
-import org.apache.nifi.components.connector.components.FlowContext;
-import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 
 public interface FlowContextFactory {
-    FrameworkFlowContext createActiveFlowContext(ComponentLog connectorLogger);
+    FrameworkFlowContext createActiveFlowContext(String connectorId, ComponentLog connectorLogger);
 
-    FrameworkFlowContext createWorkingFlowContext(ComponentLog connectorLogger, MutableConnectorConfigurationContext currentConfiguration);
+    FrameworkFlowContext createWorkingFlowContext(String connectorId, ComponentLog connectorLogger, MutableConnectorConfigurationContext currentConfiguration);
 }
