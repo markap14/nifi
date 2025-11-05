@@ -63,13 +63,8 @@ public class GhostConnector implements Connector {
     }
 
     @Override
-    public List<ValidationResult> validate(final FlowContext activeContext) {
-        return List.of(new ValidationResult.Builder()
-            .subject("Missing Connector")
-            .input("Any Property")
-            .valid(false)
-            .explanation("Connector is of type " + canonicalClassName + ", but this Connector implementation could not be created")
-            .build());
+    public List<ValidationResult> validate(final FlowContext flowContext, final ConnectorValidationContext connectorValidationContext) {
+        return validationResults;
     }
 
     @Override
@@ -96,11 +91,6 @@ public class GhostConnector implements Connector {
     @Override
     public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues, final FlowContext workingContext) {
         return configVerificationResults;
-    }
-
-    @Override
-    public List<ValidationResult> validate(final FlowContext flowContext, final ConnectorConfigurationContext configContext) {
-        return List.of();
     }
 
     @Override

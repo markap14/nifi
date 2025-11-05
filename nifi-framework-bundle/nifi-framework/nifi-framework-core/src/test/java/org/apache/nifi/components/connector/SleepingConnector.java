@@ -56,9 +56,10 @@ public class SleepingConnector implements Connector {
     }
 
     @Override
-    public List<ValidationResult> validate(final FlowContext activeContext) {
+    public List<ValidationResult> validate(final FlowContext flowContext, final ConnectorValidationContext connectorValidationContext) {
         return List.of();
     }
+
 
     @Override
     public List<ConfigurationStep> getConfigurationSteps(final FlowContext fLowContext) {
@@ -88,11 +89,6 @@ public class SleepingConnector implements Connector {
 
     @Override
     public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues, final FlowContext activeContext) {
-        return List.of();
-    }
-
-    @Override
-    public List<ValidationResult> validate(final FlowContext activeFlowContext, final ConnectorConfigurationContext connectorConfigurationContext) {
         return List.of();
     }
 

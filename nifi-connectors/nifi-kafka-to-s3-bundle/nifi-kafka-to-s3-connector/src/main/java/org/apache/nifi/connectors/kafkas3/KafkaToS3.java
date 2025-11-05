@@ -195,7 +195,7 @@ public class KafkaToS3 extends AbstractConnector {
     }
 
     @Override
-    public List<AllowableValue> fetchAllAllowableValues(final String stepName, final String groupName, final String propertyName, final FlowContext flowContext) {
+    public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName, final FlowContext flowContext) {
         if (stepName.equals(KafkaTopicsStep.STEP_NAME) && propertyName.equals(KafkaTopicsStep.TOPIC_NAMES.getName())) {
             return createAllowableValues(getAvailableTopics(flowContext));
         } else if (stepName.equals(S3Step.S3_STEP_NAME) && propertyName.equals(S3Step.S3_REGION.getName())) {

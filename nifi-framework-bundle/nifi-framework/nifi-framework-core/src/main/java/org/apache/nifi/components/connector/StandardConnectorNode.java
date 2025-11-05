@@ -24,6 +24,7 @@ import org.apache.nifi.authorization.resource.ResourceType;
 import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.ConfigVerificationResult;
+import org.apache.nifi.components.DescribedValue;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.components.validation.DisabledServiceValidationResult;
@@ -583,7 +584,23 @@ public class StandardConnectorNode implements ConnectorNode {
     @Override
     public ValidationState performValidation() {
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
-            final List<ValidationResult> allResults = getConnector().validate(activeFlowContext);
+
+            final DescribedValueProvider allowableValueProvider = (stepName, groupName, propertyName) ->
+                fetchAllowableValues(stepName, groupName, propertyName, activeFlowContext);
+            final ConnectorConfiguration connectorConfiguration = activeFlowContext.getConfigurationContext().toConnectorConfiguration();
+            final ConnectorValidationContext validationContext = new StandardConnectorValidationContext(connectorConfiguration, allowableValueProvider, activeFlowContext.getParameterContext());
+
+            List<ValidationResult> allResults;
+            try {
+                allResults = getConnector().validate(activeFlowContext, validationContext);
+            } catch (final Exception e) {
+                allResults = List.of(new ValidationResult.Builder()
+                        .subject("Validation Failure")
+                        .valid(false)
+                        .explanation("Encountered a failure while attempting to perform validation: " + e.getMessage())
+                        .build());
+            }
+
             if (allResults == null) {
                 return new ValidationState(ValidationStatus.VALID, Collections.emptyList());
             }
@@ -601,6 +618,21 @@ public class StandardConnectorNode implements ConnectorNode {
 
             return new ValidationState(ValidationStatus.INVALID, relevantResults);
         }
+    }
+
+    private List<DescribedValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName, final FlowContext context) {
+        final List<AllowableValue> allowableValues;
+        try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
+            allowableValues = getConnector().fetchAllowableValues(stepName, groupName, propertyName, activeFlowContext);
+        }
+
+        if (allowableValues == null || allowableValues.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return allowableValues.stream()
+            .map(av -> (DescribedValue) av)
+            .toList();
     }
 
     @Override

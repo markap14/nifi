@@ -1095,8 +1095,8 @@ public class VersionedFlowSynchronizer implements FlowSynchronizer {
             return true;
         }
 
-        final Map<String, PropertyGroupConfiguration> existingGroupsByName = existingPropertyGroups.stream()
-            .collect(Collectors.toMap(PropertyGroupConfiguration::groupName, Function.identity()));
+        final Map<String, PropertyGroupConfiguration> existingGroupsByName = new HashMap<>();
+        existingPropertyGroups.forEach(group -> existingGroupsByName.put(group.groupName(), group));
 
         for (final VersionedConnectorPropertyGroup versionedGroup : versionedPropertyGroups) {
             final PropertyGroupConfiguration existingGroup = existingGroupsByName.get(versionedGroup.getName());

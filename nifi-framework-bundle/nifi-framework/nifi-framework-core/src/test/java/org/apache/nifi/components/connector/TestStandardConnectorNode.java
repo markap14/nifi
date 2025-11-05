@@ -622,7 +622,7 @@ public class TestStandardConnectorNode {
         }
 
         @Override
-        public List<ValidationResult> validate(final FlowContext flowContext) {
+        public List<ValidationResult> validate(final FlowContext flowContext, final ConnectorValidationContext connectorValidationContext) {
             return List.of();
         }
 
@@ -645,11 +645,6 @@ public class TestStandardConnectorNode {
 
         @Override
         public List<ConfigVerificationResult> verifyConfigurationStep(final String s, final Map<String, String> map, final FlowContext flowContext) {
-            return List.of();
-        }
-
-        @Override
-        public List<ValidationResult> validate(final FlowContext flowContext, final ConnectorConfigurationContext connectorConfigurationContext) {
             return List.of();
         }
 

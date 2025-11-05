@@ -52,6 +52,7 @@ import org.apache.nifi.controller.repository.FlowFileRecord;
 import org.apache.nifi.controller.repository.FlowFileRepository;
 import org.apache.nifi.controller.scheduling.LifecycleStateManager;
 import org.apache.nifi.controller.scheduling.RepositoryContextFactory;
+import org.apache.nifi.controller.scheduling.SchedulingAgent;
 import org.apache.nifi.controller.scheduling.StandardLifecycleStateManager;
 import org.apache.nifi.controller.scheduling.StandardProcessScheduler;
 import org.apache.nifi.controller.service.ControllerServiceNode;
@@ -69,6 +70,7 @@ import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.provenance.ProvenanceRepository;
 import org.apache.nifi.python.PythonBridge;
 import org.apache.nifi.reporting.BulletinRepository;
+import org.apache.nifi.scheduling.SchedulingStrategy;
 import org.apache.nifi.util.NiFiProperties;
 import org.apache.nifi.validation.RuleViolationsManager;
 import org.junit.jupiter.api.AfterEach;
@@ -161,6 +163,8 @@ public class StandardConnectorNodeIT {
         processScheduler = new StandardProcessScheduler(componentLifecycleThreadPool, extensionManager, nodeTypeProvider, () -> controllerServiceProvider,
             reloadComponent, stateManagerProvider, nifiProperties, lifecycleStateManager);
         when(flowController.getProcessScheduler()).thenReturn(processScheduler);
+        processScheduler.setSchedulingAgent(SchedulingStrategy.TIMER_DRIVEN, mock(SchedulingAgent.class));
+        processScheduler.setSchedulingAgent(SchedulingStrategy.CRON_DRIVEN, mock(SchedulingAgent.class));
 
         final Bundle systemBundle = SystemBundle.create(nifiProperties);
         extensionManager.discoverExtensions(systemBundle, Set.of());

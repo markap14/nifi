@@ -33,8 +33,6 @@ public class KafkaConnectionStep {
         .name("Kafka Brokers")
         .description("A comma-separated list of Kafka brokers to connect to.")
         .required(true)
-        // TODO: If specifying a validator and the type is STRING_LIST, we should split the String, then apply
-        //       the validator to each value instead of the validator applying to the entire comma-separated list.
         .validators(StandardValidators.HOSTNAME_PORT_LIST_VALIDATOR)
         .type(PropertyType.STRING_LIST)
         .build();
@@ -93,8 +91,7 @@ public class KafkaConnectionStep {
         .description("The URL of the Schema Registry.")
         .required(false)
         .type(PropertyType.STRING)
-        // TODO: Fix
-//        .validators(StandardValidators.URL_VALIDATOR)
+        .validators(StandardValidators.URL_VALIDATOR)
         .validators(Validator.VALID)
         .build();
 

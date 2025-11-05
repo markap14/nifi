@@ -70,8 +70,8 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
             try {
                 final List<String> fileValues = (List<String>) processorFacade.invokeConnectorMethod("getFileValues", Map.of());
                 steps.add(createColorConfigurationStep(fileValues));
-            } catch (final InvocationFailedException e) {
-                throw new RuntimeException(e);
+            } catch (final InvocationFailedException ignored) {
+                // If we can't get file values, don't add the step.
             }
         }
 

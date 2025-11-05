@@ -22,8 +22,8 @@ import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.ConfigurationStep;
 import org.apache.nifi.components.connector.Connector;
-import org.apache.nifi.components.connector.ConnectorConfigurationContext;
 import org.apache.nifi.components.connector.ConnectorInitializationContext;
+import org.apache.nifi.components.connector.ConnectorValidationContext;
 import org.apache.nifi.components.connector.FlowUpdateException;
 import org.apache.nifi.components.connector.components.FlowContext;
 
@@ -62,7 +62,7 @@ public class NopConnector implements Connector {
     }
 
     @Override
-    public List<ValidationResult> validate(final FlowContext activeContext) {
+    public List<ValidationResult> validate(final FlowContext activeContext, final ConnectorValidationContext validationContext) {
         if (!initialized) {
             return List.of(new ValidationResult.Builder()
                 .subject("Initialization")
@@ -110,11 +110,6 @@ public class NopConnector implements Connector {
 
     @Override
     public List<ConfigVerificationResult> verifyConfigurationStep(final String s, final Map<String, String> map, final FlowContext flowContext) {
-        return List.of();
-    }
-
-    @Override
-    public List<ValidationResult> validate(final FlowContext flowContext, final ConnectorConfigurationContext connectorConfigurationContext) {
         return List.of();
     }
 

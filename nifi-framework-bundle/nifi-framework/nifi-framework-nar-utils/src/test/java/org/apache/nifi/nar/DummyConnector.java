@@ -22,8 +22,8 @@ import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.ConfigurationStep;
 import org.apache.nifi.components.connector.Connector;
-import org.apache.nifi.components.connector.ConnectorConfigurationContext;
 import org.apache.nifi.components.connector.ConnectorInitializationContext;
+import org.apache.nifi.components.connector.ConnectorValidationContext;
 import org.apache.nifi.components.connector.FlowUpdateException;
 import org.apache.nifi.components.connector.components.FlowContext;
 
@@ -54,11 +54,6 @@ public class DummyConnector implements Connector {
     }
 
     @Override
-    public List<ValidationResult> validate(final FlowContext flowContext) {
-        return List.of();
-    }
-
-    @Override
     public List<ConfigurationStep> getConfigurationSteps(final FlowContext flowContext) {
         return List.of();
     }
@@ -85,7 +80,7 @@ public class DummyConnector implements Connector {
     }
 
     @Override
-    public List<ValidationResult> validate(final FlowContext flowContext, final ConnectorConfigurationContext connectorConfigurationContext) {
+    public List<ValidationResult> validate(final FlowContext flowContext, final ConnectorValidationContext validationContext) {
         return List.of();
     }
 
