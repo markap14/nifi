@@ -19,14 +19,18 @@ package org.apache.nifi.components.connector.facades.standalone;
 
 import org.apache.nifi.components.connector.components.ProcessorLifecycle;
 import org.apache.nifi.components.connector.components.ProcessorState;
+import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.controller.ProcessScheduler;
 import org.apache.nifi.controller.ProcessorNode;
 import org.apache.nifi.controller.ScheduledState;
 import org.apache.nifi.lifecycle.ProcessorStopLifecycleMethods;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.CompletableFuture;
 
 public class StandaloneProcessorLifecycle implements ProcessorLifecycle {
+    private static final Logger logger = LoggerFactory.getLogger(StandaloneProcessorLifecycle.class);
     private final ProcessorNode processorNode;
     private final ProcessScheduler processScheduler;
 
@@ -54,7 +58,11 @@ public class StandaloneProcessorLifecycle implements ProcessorLifecycle {
 
     @Override
     public void terminate() {
-        processScheduler.terminateProcessor(processorNode);
+        try {
+            processScheduler.terminateProcessor(processorNode);
+        } catch (final Exception e) {
+            logger.warn("Failed to terminate processor {}", processorNode, e);
+        }
     }
 
     @Override
@@ -64,6 +72,12 @@ public class StandaloneProcessorLifecycle implements ProcessorLifecycle {
 
     @Override
     public CompletableFuture<Void> start() {
+        // Perform validation if necessary before starting.
+        final ValidationStatus validationStatus = processorNode.getValidationStatus();
+        if (validationStatus != ValidationStatus.VALID) {
+            processorNode.performValidation();
+        }
+
         return processScheduler.startProcessor(processorNode, false);
     }
 

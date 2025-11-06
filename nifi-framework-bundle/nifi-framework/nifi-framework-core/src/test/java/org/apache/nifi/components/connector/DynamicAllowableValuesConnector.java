@@ -108,7 +108,7 @@ public class DynamicAllowableValuesConnector extends AbstractConnector {
     }
 
     @Override
-    public void finishUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
+    public void applyUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
         final VersionedExternalFlow externalFlow = VersionedFlowUtils.loadFlowFromResource("flows/choose-color.json");
         final VersionedProcessGroup rootGroup = externalFlow.getFlowContents();
         final VersionedProcessor processor = rootGroup.getProcessors().iterator().next();

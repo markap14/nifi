@@ -48,7 +48,7 @@ public class StandaloneControllerServiceLifecycle implements ControllerServiceLi
     public CompletableFuture<Void> enable() {
         // If validating, perform validation to ensure it's complete before enabling
         final ValidationStatus currentStatus = controllerServiceNode.getValidationStatus();
-        if (currentStatus == ValidationStatus.VALIDATING) {
+        if (currentStatus != ValidationStatus.VALID) {
             controllerServiceNode.performValidation();
         }
 

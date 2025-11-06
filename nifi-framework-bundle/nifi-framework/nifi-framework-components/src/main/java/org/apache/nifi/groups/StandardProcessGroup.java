@@ -140,6 +140,7 @@ import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -4563,6 +4564,38 @@ public final class StandardProcessGroup implements ProcessGroup {
     @Override
     public void setExplicitParentAuthorizable(final Authorizable parent) {
         this.explicitParentAuthorizable = parent;
+    }
+
+    @Override
+    public CompletableFuture<Void> purge() {
+        final CompletableFuture<Void> purgeFuture = new CompletableFuture<>();
+
+        final Thread purgeThread = Thread.ofVirtual().name("Purge " + this).start(() -> {
+            try {
+                stopProcessing().get();
+                controllerServiceProvider.disableControllerServicesAsync(getControllerServices(true)).get();
+                purgeQueues();
+                removeComponents(this);
+
+                purgeFuture.complete(null);
+            } catch (final Throwable t) {
+                purgeFuture.completeExceptionally(t);
+            }
+        });
+
+        return purgeFuture;
+    }
+
+    private void purgeQueues() throws ExecutionException, InterruptedException {
+        for (final Connection connection : getConnections()) {
+            final FlowFileQueue flowFileQueue = connection.getFlowFileQueue();
+            if (flowFileQueue.isEmpty()) {
+                continue;
+            }
+
+            final DropFlowFileStatus status = connection.getFlowFileQueue().dropFlowFiles("purge-queues-" + getIdentifier(), "Framework");
+            status.getCompletionFuture().get();
+        }
     }
 
     @Override

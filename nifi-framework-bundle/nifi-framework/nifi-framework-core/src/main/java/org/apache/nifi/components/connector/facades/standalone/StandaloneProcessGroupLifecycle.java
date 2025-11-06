@@ -22,6 +22,7 @@ import org.apache.nifi.components.connector.components.ControllerServiceReferenc
 import org.apache.nifi.components.connector.components.ControllerServiceReferenceScope;
 import org.apache.nifi.components.connector.components.ProcessGroupLifecycle;
 import org.apache.nifi.components.connector.components.StatelessGroupLifecycle;
+import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.connectable.Port;
 import org.apache.nifi.controller.ProcessorNode;
 import org.apache.nifi.controller.service.ControllerServiceNode;
@@ -141,6 +142,14 @@ public class StandaloneProcessGroupLifecycle implements ProcessGroupLifecycle {
             return CompletableFuture.completedFuture(null);
         }
 
+        // If any service is not currently valid, perform validation again to ensure that the status is up to date.
+        for (final ControllerServiceNode serviceNode : serviceNodes) {
+            final ValidationStatus validationStatus = serviceNode.getValidationStatus();
+            if (validationStatus != ValidationStatus.VALID) {
+                serviceNode.performValidation();
+            }
+        }
+
         return controllerServiceProvider.enableControllerServicesAsync(serviceNodes);
     }
 
@@ -178,6 +187,12 @@ public class StandaloneProcessGroupLifecycle implements ProcessGroupLifecycle {
         final Collection<ProcessorNode> processors = processGroup.getProcessors();
         final List<CompletableFuture<Void>> startFutures = new ArrayList<>();
         for (final ProcessorNode processor : processors) {
+            // If Processor is not valid, perform validation again to ensure that the status is up to date.
+            final ValidationStatus validationStatus = processor.getValidationStatus();
+            if (validationStatus != ValidationStatus.VALID) {
+                processor.performValidation();
+            }
+
             startFutures.add(processGroup.startProcessor(processor, true));
         }
 

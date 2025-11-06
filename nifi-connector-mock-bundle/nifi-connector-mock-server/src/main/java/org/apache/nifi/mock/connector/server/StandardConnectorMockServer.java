@@ -32,6 +32,7 @@ import org.apache.nifi.components.connector.PropertyGroupConfiguration;
 import org.apache.nifi.components.state.StateManagerProvider;
 import org.apache.nifi.components.validation.DisabledServiceValidationResult;
 import org.apache.nifi.components.validation.ValidationState;
+import org.apache.nifi.connectable.FlowFileTransferCounts;
 import org.apache.nifi.controller.DecommissionTask;
 import org.apache.nifi.controller.FlowController;
 import org.apache.nifi.controller.repository.FlowFileEventRepository;
@@ -56,9 +57,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 public class StandardConnectorMockServer implements ConnectorMockServer {
     private static final String CONNECTOR_ID = "test-connector";
@@ -71,6 +70,7 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
     private ConnectorNode connectorNode;
     private FlowEngine flowEngine;
     private MockExtensionMapper mockExtensionMapper;
+    private FlowFileTransferCounts initialFlowFileTransferCounts = new FlowFileTransferCounts(0L, 0L, 0L, 0L);
 
     @Override
     public void start() {
@@ -189,7 +189,7 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
 
     @Override
     public void finishUpdate() throws FlowUpdateException {
-        connectorNode.finishUpdate(flowEngine);
+        connectorNode.applyUpdate(flowEngine);
     }
 
     @Override
@@ -205,6 +205,8 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
 
     @Override
     public void startConnector() {
+        initialFlowFileTransferCounts = connectorNode.getFlowFileTransferCounts();
+
         connectorNode.start(flowEngine);
     }
 
@@ -225,7 +227,7 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
         final long startTime = System.currentTimeMillis();
         final long expirationTime = startTime + maxWaitTime.toMillis();
 
-        while (connectorNode.getFlowFileTransferCounts().getReceivedCount() == 0L) {
+        while (getTransferCountsSinceStart().getReceivedCount() == 0L) {
             if (System.currentTimeMillis() > expirationTime) {
                 throw new RuntimeException("Timed out waiting for data to be ingested by the Connector");
             }
@@ -237,6 +239,11 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
                 throw new RuntimeException("Interrupted while waiting for data to be ingested by the Connector", e);
             }
         }
+    }
+
+    private FlowFileTransferCounts getTransferCountsSinceStart() {
+        final FlowFileTransferCounts currentCounts = connectorNode.getFlowFileTransferCounts();
+        return currentCounts.minus(initialFlowFileTransferCounts);
     }
 
     @Override
@@ -263,6 +270,7 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
                 Thread.currentThread().interrupt();
                 throw new RuntimeException("Interrupted while waiting for Connector to be idle", e);
             }
+
             idleTime = connectorNode.getIdleDuration();
         }
     }

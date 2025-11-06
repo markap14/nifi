@@ -41,13 +41,19 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 @CapabilityDescription("Provides the ability to ingest data from Apache Kafka topics, merge it together into an object of reasonable " +
                        "size, and write that data to Amazon S3.")
 @Tags({"kafka", "s3"})
 public class KafkaToS3 extends AbstractConnector {
+
+    private volatile CompletableFuture<Void> drainFlowFileFuture = null;
+
 
     @Override
     public List<ConfigurationStep> getConfigurationSteps(final FlowContext flowContext) {
@@ -59,7 +65,41 @@ public class KafkaToS3 extends AbstractConnector {
     }
 
     @Override
-    public void finishUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
+    public void prepareForUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
+        final String activeS3DataFormat = activeContext.getConfigurationContext().getProperty(
+            S3Step.S3_STEP_NAME, S3Step.S3_DATA_FORMAT.getName()).getValue();
+        final String workingS3DataFormat = workingContext.getConfigurationContext().getProperty(
+            S3Step.S3_STEP_NAME, S3Step.S3_DATA_FORMAT.getName()).getValue();
+
+        if (!activeS3DataFormat.equals(workingS3DataFormat)) {
+            getLogger().info("S3 Data Format changed from {} to {}; draining flow before updating it", activeS3DataFormat, workingS3DataFormat);
+
+            drainFlowFileFuture = drainFlowFiles(activeContext);
+            try {
+                drainFlowFileFuture.get(5, TimeUnit.MINUTES);
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new FlowUpdateException("Interrupted while waiting for all FlowFiles to drain from the flow", e);
+            } catch (final TimeoutException e) {
+                throw new FlowUpdateException("Timed out waiting for all FlowFiles to drain from the flow", e);
+            } catch (final ExecutionException e) {
+                throw new FlowUpdateException("Failed to drain FlowFiles from flow", e.getCause());
+            }
+
+            getLogger().info("All FlowFiles drained from the flow; proceeding with flow update");
+        }
+    }
+
+    @Override
+    public void abortUpdate(final FlowContext workingContext, final Throwable throwable) {
+        if (drainFlowFileFuture != null) {
+            drainFlowFileFuture.cancel(true);
+            drainFlowFileFuture = null;
+        }
+    }
+
+    @Override
+    public void applyUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
         final VersionedExternalFlow flow = buildFlow(workingContext.getConfigurationContext());
         getInitializationContext().updateFlow(activeContext, flow);
     }

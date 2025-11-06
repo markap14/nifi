@@ -22,6 +22,7 @@ import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.VersionedComponent;
+import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.components.validation.ValidationState;
 import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.connectable.FlowFileTransferCounts;
@@ -172,7 +173,8 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
     /**
      * Updates the configuration of one of the configuration steps. This method should only be invoked via the ConnectorRepository.
      * @param configurationStepName the name of the configuration step being set
-     *                              (must match one of the names returned by {@link Connector#getConfigurationSteps()})
+     *                              (must match one of the names returned by {@link Connector#getConfigurationSteps(FlowContext)})
+     *                              when providing the working flow context
      * @param propertyGroupConfigurations the list of PropertyGroupConfigurations for the given configuration step
      * @throws FlowUpdateException if unable to apply the configuration changes
      */
@@ -192,6 +194,6 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
      * @throws FlowUpdateException if unable to apply the changes made during the update process
      */
     // TODO: Should this return a Future<Void>?
-    void finishUpdate(FlowEngine scheduler) throws FlowUpdateException;
+    void applyUpdate(FlowEngine scheduler) throws FlowUpdateException;
 
 }

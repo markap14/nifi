@@ -22,6 +22,7 @@ import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.components.connector.components.FlowContextType;
+import org.apache.nifi.controller.flow.FlowManager;
 import org.apache.nifi.engine.FlowEngine;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.groups.ProcessGroup;
@@ -196,18 +197,7 @@ public class TestStandardConnectorNode {
     public void testMultipleStartCallsReturnCompletedFutures() throws Exception {
         final CountDownLatch startLatch = new CountDownLatch(1);
         final BlockingConnector blockingConnector = new BlockingConnector(startLatch, new CountDownLatch(0), new CountDownLatch(0));
-        final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("BlockingConnectorNode");
-        final StandardConnectorNode connectorNode = new StandardConnectorNode(
-            "blocking-connector-id",
-            extensionManager,
-            null,
-            createConnectorDetails(blockingConnector),
-            "BlockingConnector",
-            null,
-            new StandardConnectorConfigurationContext(),
-            stateTransition,
-            flowContextFactory
-        );
+        final StandardConnectorNode connectorNode = createConnectorNode(blockingConnector);
 
         assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
 
@@ -289,18 +279,7 @@ public class TestStandardConnectorNode {
     public void testStartWhileStoppingQueuesStartFuture() throws Exception {
         final CountDownLatch stopLatch = new CountDownLatch(1);
         final BlockingConnector blockingConnector = new BlockingConnector(new CountDownLatch(0), stopLatch, new CountDownLatch(0));
-        final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("BlockingConnectorNode");
-        final StandardConnectorNode connectorNode = new StandardConnectorNode(
-            "blocking-connector-id",
-            extensionManager,
-            null,
-            createConnectorDetails(blockingConnector),
-            "BlockingConnector",
-            null,
-            new StandardConnectorConfigurationContext(),
-            stateTransition,
-            flowContextFactory
-        );
+        final StandardConnectorNode connectorNode = createConnectorNode(blockingConnector);
 
         connectorNode.start(scheduler).get(5, TimeUnit.SECONDS);
         assertEquals(ConnectorState.RUNNING, connectorNode.getCurrentState());
@@ -329,18 +308,7 @@ public class TestStandardConnectorNode {
         // Use a slow-starting connector to test deletion during STARTING state
         final CountDownLatch startLatch = new CountDownLatch(1);
         final BlockingConnector blockingConnector = new BlockingConnector(startLatch, new CountDownLatch(0), new CountDownLatch(0));
-        final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("SlowStartingConnectorNode");
-        final StandardConnectorNode slowNode = new StandardConnectorNode(
-            "slow-starting-connector-id",
-            extensionManager,
-            null,
-            createConnectorDetails(blockingConnector),
-            "SlowStartingConnector",
-            null,
-            new StandardConnectorConfigurationContext(),
-            stateTransition,
-            flowContextFactory
-        );
+        final StandardConnectorNode slowNode = createConnectorNode(blockingConnector);
 
         // Start the connector - this will take time
         final Future<Void> startFuture = slowNode.start(scheduler);
@@ -366,7 +334,7 @@ public class TestStandardConnectorNode {
 
         connectorNode.prepareForUpdate(null);
         connectorNode.setConfiguration("testGroup", createGroupConfig());
-        connectorNode.finishUpdate(scheduler);
+        connectorNode.applyUpdate(scheduler);
 
         assertEquals(newConfiguration, connectorNode.getActiveFlowContext().getConfigurationContext().toConnectorConfiguration());
     }
@@ -382,7 +350,7 @@ public class TestStandardConnectorNode {
 
         connectorNode.prepareForUpdate(null);
         connectorNode.setConfiguration("testGroup", createGroupConfig());
-        connectorNode.finishUpdate(scheduler);
+        connectorNode.applyUpdate(scheduler);
 
         assertEquals(newConfiguration, connectorNode.getActiveFlowContext().getConfigurationContext().toConnectorConfiguration());
     }
@@ -394,14 +362,14 @@ public class TestStandardConnectorNode {
 
         connectorNode.prepareForUpdate(null);
         connectorNode.setConfiguration("step1", createGroupConfig("propertyGroup1", Map.of("prop1", "value1")));
-        connectorNode.finishUpdate(scheduler);
+        connectorNode.applyUpdate(scheduler);
 
         final ConnectorConfiguration newConfiguration = createTestConfiguration("step1", "prop1", "value2");
 
         connectorNode.stop(scheduler).get(5, TimeUnit.SECONDS);
         connectorNode.prepareForUpdate(null);
         connectorNode.setConfiguration("step1", createGroupConfig("propertyGroup1", Map.of("prop1", "value2")));
-        connectorNode.finishUpdate(scheduler);
+        connectorNode.applyUpdate(scheduler);
         assertEquals(newConfiguration, connectorNode.getActiveFlowContext().getConfigurationContext().toConnectorConfiguration());
     }
 
@@ -412,7 +380,7 @@ public class TestStandardConnectorNode {
 
         connectorNode.prepareForUpdate(null);
         connectorNode.setConfiguration("configurationStep1", createGroupConfig("propertyGroup1", Map.of("prop1", "value1")));
-        connectorNode.finishUpdate(scheduler);
+        connectorNode.applyUpdate(scheduler);
 
         final ConnectorConfiguration newConfiguration = createTestConfigurationWithMultipleGroups();
 
@@ -421,7 +389,7 @@ public class TestStandardConnectorNode {
         connectorNode.prepareForUpdate(null);
         connectorNode.setConfiguration("configurationStep1", createGroupConfig("propertyGroup1", Map.of("prop1", "value1")));
         connectorNode.setConfiguration("configurationStep2", createGroupConfig("propertyGroup2", Map.of("prop2", "value2")));
-        connectorNode.finishUpdate(scheduler);
+        connectorNode.applyUpdate(scheduler);
 
         assertEquals(newConfiguration, connectorNode.getActiveFlowContext().getConfigurationContext().toConnectorConfiguration());
     }
@@ -434,12 +402,12 @@ public class TestStandardConnectorNode {
         connectorNode.prepareForUpdate(null);
         connectorNode.setConfiguration("configurationStep1", createGroupConfig("propertyGroup1", Map.of("prop1", "value1")));
         connectorNode.setConfiguration("configurationStep2", createGroupConfig("propertyGroup2", Map.of("prop2", "value2")));
-        connectorNode.finishUpdate(scheduler);
+        connectorNode.applyUpdate(scheduler);
 
         connectorNode.stop(scheduler).get(5, TimeUnit.SECONDS);
         connectorNode.prepareForUpdate(null);
         connectorNode.setConfiguration("configurationStep1", createGroupConfig("propertyGroup1", Map.of("prop1", "value1")));
-        connectorNode.finishUpdate(scheduler);
+        connectorNode.applyUpdate(scheduler);
 
         final List<ConfigurationStepConfiguration> expectedSteps = List.of(
             new ConfigurationStepConfiguration("configurationStep1", List.of(new PropertyGroupConfiguration("propertyGroup1", Map.of("prop1", "value1")))),
@@ -457,7 +425,7 @@ public class TestStandardConnectorNode {
 
         connectorNode.prepareForUpdate(null);
         connectorNode.setConfiguration("testGroup", createGroupConfig());
-        connectorNode.finishUpdate(scheduler);
+        connectorNode.applyUpdate(scheduler);
     }
 
     @Test
@@ -468,38 +436,37 @@ public class TestStandardConnectorNode {
 
         connectorNode.prepareForUpdate(null);
         connectorNode.setConfiguration("configurationStep1", createGroupConfig("configurationStep1", Map.of("prop1", "value1")));
-        connectorNode.finishUpdate(scheduler);
+        connectorNode.applyUpdate(scheduler);
         trackingConnector.reset();
 
         connectorNode.stop(scheduler).get(5, TimeUnit.SECONDS);
         connectorNode.prepareForUpdate(null);
         connectorNode.setConfiguration("configurationStep1", createGroupConfig("configurationStep1", Map.of("prop1", "value2")));
-        connectorNode.finishUpdate(scheduler);
+        connectorNode.applyUpdate(scheduler);
 
         assertTrue(trackingConnector.wasOnPropertyGroupConfiguredCalled("configurationStep1"));
     }
 
     private StandardConnectorNode createConnectorNode() {
         final SleepingConnector sleepingConnector = new SleepingConnector(Duration.ofMillis(1));
-        final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("TestConnectorNode");
+        return createConnectorNode(sleepingConnector);
+    }
 
-        final StandardConnectorNode node = new StandardConnectorNode("test-connector-id", extensionManager, null,
-            createConnectorDetails(sleepingConnector), "TestConnector", null, new StandardConnectorConfigurationContext(),
-            stateTransition, flowContextFactory);
+    private StandardConnectorNode createConnectorNode(final Connector connector) {
+        final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("TestConnectorNode");
+        final StandardConnectorNode node = new StandardConnectorNode(
+            "test-connector-id",
+            mock(FlowManager.class),
+            extensionManager, null,
+            createConnectorDetails(connector),
+            "TestConnector",
+            null,
+            new StandardConnectorConfigurationContext(),
+            stateTransition,
+            flowContextFactory);
 
         node.initializeConnector(mock(ConnectorInitializationContext.class));
         assertDoesNotThrow(node::loadInitialFlow);
-        return node;
-    }
-
-    private StandardConnectorNode createConnectorNode(final Connector connector) throws FlowUpdateException {
-        final ConnectorStateTransition stateTransition = new StandardConnectorStateTransition("TestConnectorNode");
-        final StandardConnectorNode node = new StandardConnectorNode("test-connector-id", extensionManager, null,
-            createConnectorDetails(connector), "TestConnector", null, new StandardConnectorConfigurationContext(),
-            stateTransition, flowContextFactory);
-
-        node.initializeConnector(mock(ConnectorInitializationContext.class));
-        node.loadInitialFlow();
         return node;
     }
 
@@ -578,11 +545,11 @@ public class TestStandardConnectorNode {
         }
 
         @Override
-        public void abortUpdatePreparation(final FlowContext flowContext, final Throwable throwable) {
+        public void abortUpdate(final FlowContext flowContext, final Throwable throwable) {
         }
 
         @Override
-        public void finishUpdate(final FlowContext workingContext, final FlowContext activeContext) {
+        public void applyUpdate(final FlowContext workingContext, final FlowContext activeContext) {
         }
 
         @Override

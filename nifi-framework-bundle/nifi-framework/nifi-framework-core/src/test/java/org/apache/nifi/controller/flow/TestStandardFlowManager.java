@@ -27,6 +27,7 @@ import org.apache.nifi.components.connector.StandardConnectorInitializationConte
 import org.apache.nifi.controller.FlowController;
 import org.apache.nifi.controller.GarbageCollectionLog;
 import org.apache.nifi.controller.MockStateManagerProvider;
+import org.apache.nifi.controller.ReloadComponent;
 import org.apache.nifi.controller.repository.FlowFileEventRepository;
 import org.apache.nifi.controller.repository.FlowFileRepository;
 import org.apache.nifi.controller.scheduling.LifecycleStateManager;
@@ -135,6 +136,7 @@ public class TestStandardFlowManager {
         when(flowController.getBulletinRepository()).thenReturn(mock(BulletinRepository.class));
         when(flowController.getLifecycleStateManager()).thenReturn(mock(LifecycleStateManager.class));
         when(flowController.getFlowFileEventRepository()).thenReturn(mock(FlowFileEventRepository.class));
+        when(flowController.getReloadComponent()).thenReturn(mock(ReloadComponent.class));
 
         final ConnectorRepository connectorRepository = mock(ConnectorRepository.class);
         when(connectorRepository.createInitializationContextBuilder()).thenAnswer(

@@ -1283,4 +1283,14 @@ public interface ProcessGroup extends ComponentAuthorizable, Positionable, Versi
      * @param parent the parent Authorizable to set, or null to clear any explicit parent
      */
     void setExplicitParentAuthorizable(Authorizable parent);
+
+    /**
+     * Deletes any data in any FlowFile Queues in this Process Group and any child Process Groups
+     * and removes any components (Controller Services, Processors, Connections, etc.) from this Process Group
+     * and any child Process Groups. Because the emptying of FlowFile Queues may be a long-running operation,
+     * this method returns a CompletableFuture that will be completed once the purge operation has finished.
+     *
+     * @return a CompletableFuture that will be completed once the purge operation has finished
+     */
+    CompletableFuture<Void> purge();
 }

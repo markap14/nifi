@@ -85,12 +85,12 @@ public class BlockingConnector implements Connector {
     }
 
     @Override
-    public void abortUpdatePreparation(final FlowContext workingContext, final Throwable throwable) {
+    public void abortUpdate(final FlowContext workingContext, final Throwable throwable) {
 
     }
 
     @Override
-    public void finishUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
+    public void applyUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
         try {
             finishUpdateLatch.await();
         } catch (final InterruptedException e) {

@@ -229,7 +229,7 @@ public class StandardConnectorNodeIT {
             for (final ConfigurationStepConfiguration stepConfig : configuration.getConfigurationStepConfigurations()) {
                 connectorNode.setConfiguration(stepConfig.stepName(), stepConfig.propertyGroupConfigurations());
             }
-            connectorNode.finishUpdate(flowEngine);
+            connectorNode.applyUpdate(flowEngine);
         }
     }
 

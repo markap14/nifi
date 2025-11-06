@@ -923,4 +923,12 @@ public class MockProcessGroup implements ProcessGroup {
     public void terminateProcessor(ProcessorNode processor) {
     }
 
+    @Override
+    public CompletableFuture<Void> purge() {
+        processorMap.clear();
+        serviceMap.clear();
+        inputPortMap.clear();
+        outputPortMap.clear();
+        return CompletableFuture.completedFuture(null);
+    }
 }

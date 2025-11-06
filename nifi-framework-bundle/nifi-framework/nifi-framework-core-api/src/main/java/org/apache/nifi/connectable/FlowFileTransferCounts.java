@@ -58,4 +58,31 @@ public class FlowFileTransferCounts {
             this.sentBytes + additionalSentBytes
         );
     }
+
+    public FlowFileTransferCounts plus(final FlowFileTransferCounts other) {
+        return new FlowFileTransferCounts(
+            this.receivedCount + other.getReceivedCount(),
+            this.receivedBytes + other.getReceivedBytes(),
+            this.sentCount + other.getSentCount(),
+            this.sentBytes + other.getSentBytes()
+        );
+    }
+
+    public FlowFileTransferCounts minus(final FlowFileTransferCounts other) {
+        return new FlowFileTransferCounts(
+            this.receivedCount - other.getReceivedCount(),
+            this.receivedBytes - other.getReceivedBytes(),
+            this.sentCount - other.getSentCount(),
+            this.sentBytes - other.getSentBytes()
+        );
+    }
+
+    public FlowFileTransferCounts minus(final long additionalReceivedCount, final long additionalReceivedBytes, final long additionalSentCount, final long additionalSentBytes) {
+        return new FlowFileTransferCounts(
+            this.receivedCount - additionalReceivedCount,
+            this.receivedBytes - additionalReceivedBytes,
+            this.sentCount - additionalSentCount,
+            this.sentBytes - additionalSentBytes
+        );
+    }
 }

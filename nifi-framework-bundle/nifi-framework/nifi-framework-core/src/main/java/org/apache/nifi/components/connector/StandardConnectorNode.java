@@ -32,6 +32,7 @@ import org.apache.nifi.components.validation.ValidationState;
 import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.connectable.FlowFileActivity;
 import org.apache.nifi.connectable.FlowFileTransferCounts;
+import org.apache.nifi.controller.flow.FlowManager;
 import org.apache.nifi.engine.FlowEngine;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.groups.ProcessGroup;
@@ -59,6 +60,7 @@ public class StandardConnectorNode implements ConnectorNode {
     private static final Logger logger = LoggerFactory.getLogger(StandardConnectorNode.class);
 
     private final String identifier;
+    private final FlowManager flowManager;
     private final ExtensionManager extensionManager;
     private final Authorizable parentAuthorizable;
     private final ConnectorDetails connectorDetails;
@@ -77,12 +79,13 @@ public class StandardConnectorNode implements ConnectorNode {
     private volatile ConnectorInitializationContext initializationContext;
 
 
-    public StandardConnectorNode(final String identifier, final ExtensionManager extensionManager, final Authorizable parentAuthorizable,
-        final ConnectorDetails connectorDetails, final String componentType, final BundleCoordinate bundleCoordinate,
-        final MutableConnectorConfigurationContext configurationContext, final ConnectorStateTransition stateTransition,
-        final FlowContextFactory flowContextFactory) {
+    public StandardConnectorNode(final String identifier, final FlowManager flowManager, final ExtensionManager extensionManager,
+        final Authorizable parentAuthorizable, final ConnectorDetails connectorDetails, final String componentType,
+        final BundleCoordinate bundleCoordinate, final MutableConnectorConfigurationContext configurationContext,
+        final ConnectorStateTransition stateTransition, final FlowContextFactory flowContextFactory) {
 
         this.identifier = identifier;
+        this.flowManager = flowManager;
         this.extensionManager = extensionManager;
         this.parentAuthorizable = parentAuthorizable;
         this.connectorDetails = connectorDetails;
@@ -133,17 +136,15 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
-    public void finishUpdate(final FlowEngine scheduler) throws FlowUpdateException {
+    public void applyUpdate(final FlowEngine scheduler) throws FlowUpdateException {
         final ConnectorState currentState = getCurrentState();
         if (currentState != ConnectorState.UPDATING) {
             throw new IllegalStateException("Cannot finish update for " + this + " because its state is currently " + currentState
                                             + "; it must be UPDATING.");
         }
 
-        // TODO: Need to update lifecycle to stop the Connector, etc. before applying the update.
-
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
-            getConnector().finishUpdate(workingFlowContext, activeFlowContext);
+            getConnector().applyUpdate(workingFlowContext, activeFlowContext);
         } catch (final Throwable t) {
             logger.error("Failed to finish update for {}", this, t);
             stateTransition.setCurrentState(ConnectorState.UPDATE_FAILED);
@@ -159,14 +160,17 @@ public class StandardConnectorNode implements ConnectorNode {
             recreateWorkingFlowContext();
         }
 
-        final ConnectorState stateToResume = updateResumeState.getAndSet(null);
-        if (stateToResume == ConnectorState.DISABLED) {
-            disable();
-        } else if (stateToResume == ConnectorState.STOPPED) {
-            stop(scheduler);
-        } else if (stateToResume == ConnectorState.RUNNING) {
-            start(scheduler);
-        }
+        stateTransition.setCurrentState(ConnectorState.STOPPED);
+        stateTransition.setDesiredState(ConnectorState.STOPPED);
+
+//        final ConnectorState stateToResume = updateResumeState.getAndSet(null);
+//        if (stateToResume == ConnectorState.DISABLED) {
+//            disable();
+//        } else if (stateToResume == ConnectorState.STOPPED) {
+//            scheduler.submit(() -> stopComponent(scheduler, new CompletableFuture<>()));
+//        } else if (stateToResume == ConnectorState.RUNNING) {
+//            start(scheduler);
+//        }
     }
 
     private void destroyWorkingContext() {
@@ -174,9 +178,13 @@ public class StandardConnectorNode implements ConnectorNode {
             return;
         }
 
-        // TODO: Add a purge method that will drop all data and remove all components,
-//        final ProcessGroup managedGroup = workingFlowContext.getManagedProcessGroup();
-//        managedGroup.purge();
+        try {
+            workingFlowContext.getManagedProcessGroup().purge().get(1, TimeUnit.MINUTES);
+        } catch (final Exception e) {
+            logger.warn("Failed to purge working flow context for {}", this, e);
+        }
+
+        flowManager.onProcessGroupRemoved(workingFlowContext.getManagedProcessGroup());
 
         this.workingFlowContext = null;
     }
@@ -190,7 +198,7 @@ public class StandardConnectorNode implements ConnectorNode {
         recreateWorkingFlowContext();
 
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
-            getConnector().abortUpdatePreparation(updateContext, cause);
+            getConnector().abortUpdate(updateContext, cause);
         }
     }
 

@@ -45,7 +45,7 @@ public class GenerateAndLog extends AbstractConnector {
     }
 
     @Override
-    public void finishUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
+    public void applyUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
     }
 
     @Override

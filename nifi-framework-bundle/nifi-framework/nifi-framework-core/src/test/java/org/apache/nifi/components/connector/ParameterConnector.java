@@ -78,7 +78,7 @@ public class ParameterConnector extends AbstractConnector {
     }
 
     @Override
-    public void finishUpdate(final FlowContext workingContext, final FlowContext activeContext) {
+    public void applyUpdate(final FlowContext workingContext, final FlowContext activeContext) {
         try {
             updateTextParameter(workingContext, activeContext);
         } catch (final FlowUpdateException e) {
@@ -96,7 +96,7 @@ public class ParameterConnector extends AbstractConnector {
     }
 
     @Override
-    public void abortUpdatePreparation(final FlowContext workingContext, final Throwable throwable) {
+    public void abortUpdate(final FlowContext workingContext, final Throwable throwable) {
     }
 
     @Override

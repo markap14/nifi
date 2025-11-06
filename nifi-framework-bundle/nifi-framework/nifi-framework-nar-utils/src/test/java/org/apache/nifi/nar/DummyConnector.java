@@ -73,11 +73,11 @@ public class DummyConnector implements Connector {
     }
 
     @Override
-    public void abortUpdatePreparation(final FlowContext flowContext, final Throwable cause) {
+    public void abortUpdate(final FlowContext flowContext, final Throwable cause) {
     }
 
     @Override
-    public void finishUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
+    public void applyUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
     }
 
     @Override

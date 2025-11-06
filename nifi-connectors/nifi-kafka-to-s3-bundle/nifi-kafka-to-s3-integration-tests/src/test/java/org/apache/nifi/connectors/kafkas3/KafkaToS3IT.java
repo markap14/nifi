@@ -88,7 +88,6 @@ public class KafkaToS3IT {
     private static final String SCRAM_USERNAME = "testuser";
     private static final String SCRAM_PASSWORD = "testpassword";
 
-    private static final String S3_BUCKET_NAME = "test-bucket";
     private static final String S3_REGION = "us-west-2";
 
     // JAAS configuration for Kafka broker SASL/PLAIN authentication.
@@ -162,8 +161,6 @@ public class KafkaToS3IT {
             .httpClient(UrlConnectionHttpClient.builder().build())
             .forcePathStyle(true)
             .build();
-
-        s3Client.createBucket(CreateBucketRequest.builder().bucket(S3_BUCKET_NAME).build());
     }
 
     @BeforeEach
@@ -205,6 +202,10 @@ public class KafkaToS3IT {
         }
     }
 
+
+    private void createS3Bucket(final String bucketName) {
+        s3Client.createBucket(CreateBucketRequest.builder().bucket(bucketName).build());
+    }
 
     private void createKafkaTopics(final String... topicNames) throws ExecutionException, InterruptedException {
         final Properties adminProps = new Properties();
@@ -341,6 +342,8 @@ public class KafkaToS3IT {
 
     @Test
     public void testJsonFlow() throws IOException, ExecutionException, InterruptedException, FlowUpdateException {
+        final String bucketName = "test-json-flow";
+        createS3Bucket(bucketName);
         createKafkaTopics("story");
 
         produceRecordsToTopic("story",
@@ -372,7 +375,7 @@ public class KafkaToS3IT {
         final PropertyGroupConfiguration s3DestinationConfig = new PropertyGroupConfiguration("S3 Destination Configuration", Map.of(
             "S3 Region", S3_REGION,
             "S3 Data Format", "Avro",
-            "S3 Bucket", S3_BUCKET_NAME,
+            "S3 Bucket", bucketName,
             "S3 Endpoint Override URL", localStackContainer.getEndpoint().toString()
         ));
         final PropertyGroupConfiguration s3CredentialsConfig = new PropertyGroupConfiguration("S3 Credentials", Map.of(
@@ -382,7 +385,7 @@ public class KafkaToS3IT {
         ));
         final PropertyGroupConfiguration s3MergeConfig = new PropertyGroupConfiguration("Merge Configuration", Map.of(
             "Target Object Size", "1 MB",
-            "Merge Latency", "5 sec"
+            "Merge Latency", "1 sec"
         ));
 
         runner.prepareForUpdate();
@@ -402,17 +405,17 @@ public class KafkaToS3IT {
             runner.stopConnector();
         }
 
-        verifyS3ObjectsCreated();
+        verifyS3ObjectsCreated(bucketName);
     }
 
-    private void verifyS3ObjectsCreated() throws IOException {
-        final ListObjectsV2Response listResponse = s3Client.listObjectsV2(ListObjectsV2Request.builder().bucket(S3_BUCKET_NAME).build());
+    private void verifyS3ObjectsCreated(final String bucketName) throws IOException {
+        final ListObjectsV2Response listResponse = s3Client.listObjectsV2(ListObjectsV2Request.builder().bucket(bucketName).build());
         final List<S3Object> objects = listResponse.contents();
 
         assertFalse(objects.isEmpty(), "Expected at least one object in S3 bucket");
 
         for (final S3Object s3Object : objects) {
-            final GetObjectRequest getObjectRequest = GetObjectRequest.builder().bucket(S3_BUCKET_NAME).key(s3Object.key()).build();
+            final GetObjectRequest getObjectRequest = GetObjectRequest.builder().bucket(bucketName).key(s3Object.key()).build();
             try (final ResponseInputStream<GetObjectResponse> objectContent = s3Client.getObject(getObjectRequest)) {
                 final long objectSize = objectContent.response().contentLength();
                 assertTrue(objectSize > 0, "Expected S3 object " + s3Object.key() + " to have content");
@@ -481,6 +484,8 @@ public class KafkaToS3IT {
 
     @Test
     public void testWithSchemaRegistry() throws IOException, ExecutionException, InterruptedException, FlowUpdateException {
+        final String bucketName = "test-schema-registry";
+        createS3Bucket(bucketName);
         createKafkaTopics("user-events");
 
         final String schemaString = """
@@ -540,7 +545,7 @@ public class KafkaToS3IT {
         final PropertyGroupConfiguration s3DestinationConfig = new PropertyGroupConfiguration("S3 Destination Configuration", Map.of(
             "S3 Region", S3_REGION,
             "S3 Data Format", "Avro",
-            "S3 Bucket", S3_BUCKET_NAME,
+            "S3 Bucket", bucketName,
             "S3 Endpoint Override URL", localStackContainer.getEndpoint().toString()
         ));
         final PropertyGroupConfiguration s3CredentialsConfig = new PropertyGroupConfiguration("S3 Credentials", Map.of(
@@ -550,7 +555,7 @@ public class KafkaToS3IT {
         ));
         final PropertyGroupConfiguration s3MergeConfig = new PropertyGroupConfiguration("Merge Configuration", Map.of(
             "Target Object Size", "1 MB",
-            "Merge Latency", "5 sec"
+            "Merge Latency", "1 sec"
         ));
 
         runner.prepareForUpdate();
@@ -570,7 +575,178 @@ public class KafkaToS3IT {
             runner.stopConnector();
         }
 
-        verifyS3ObjectsCreated();
+        verifyS3ObjectsCreated(bucketName);
+    }
+
+    @Test
+    public void testSwitchFromJsonToAvroS3Format() throws IOException, ExecutionException, InterruptedException, FlowUpdateException {
+        final String bucketName = "test-switch-formats";
+        createS3Bucket(bucketName);
+
+        // Add data to json and avro topics
+        createKafkaTopics("json", "avro");
+
+        produceRecordsToTopic("json",
+            """
+            {"id": 1, "type": "json", "data": "First JSON record"}""",
+            """
+            {"id": 2, "type": "json", "data": "Second JSON record"}""",
+            """
+            {"id": 3, "type": "json", "data": "Third JSON record"}"""
+        );
+
+        final String schemaString = """
+            {
+              "type": "record",
+              "name": "AvroRecord",
+              "namespace": "org.apache.nifi.test",
+              "fields": [
+                {"name": "id", "type": "int"},
+                {"name": "type", "type": "string"},
+                {"name": "data", "type": "string"}
+              ]
+            }""";
+
+        final Schema schema = new Schema.Parser().parse(schemaString);
+
+        final GenericRecord avroRecord1 = new GenericData.Record(schema);
+        avroRecord1.put("id", 10);
+        avroRecord1.put("type", "avro");
+        avroRecord1.put("data", "First Avro record");
+
+        final GenericRecord avroRecord2 = new GenericData.Record(schema);
+        avroRecord2.put("id", 20);
+        avroRecord2.put("type", "avro");
+        avroRecord2.put("data", "Second Avro record");
+
+        final GenericRecord avroRecord3 = new GenericData.Record(schema);
+        avroRecord3.put("id", 30);
+        avroRecord3.put("type", "avro");
+        avroRecord3.put("data", "Third Avro record");
+
+        produceAvroRecordsToTopic("avro", schema, avroRecord1, avroRecord2, avroRecord3);
+
+        // Configure Connector to consume from JSON Kafka topic and write to S3 in JSON format, but with an invalid S3 endpoint.
+        // This will cause the data to remain queued, since PutS3Object will fail to write the data.
+        final PropertyGroupConfiguration kafkaServerConfig = new PropertyGroupConfiguration("Kafka Server Settings", Map.of(
+            "Kafka Brokers", "localhost:9093",
+            "Security Protocol", "SASL_PLAINTEXT",
+            "SASL Mechanism", "PLAIN",
+            "Username", SCRAM_USERNAME,
+            "Password", SCRAM_PASSWORD
+        ));
+
+        final PropertyGroupConfiguration schemaRegistryConfig = new PropertyGroupConfiguration("Schema Registry Settings", Map.of(
+            "Schema Registry URL", getSchemaRegistryUrl()
+        ));
+
+        final PropertyGroupConfiguration jsonTopicConfig = new PropertyGroupConfiguration("Kafka Topics Configuration", Map.of(
+            "Topic Names", "json",
+            "Consumer Group ID", "nifi-kafka-to-s3-testReconfiguration",
+            "Offset Reset", "earliest",
+            "Kafka Data Format", "JSON"
+        ));
+
+        final PropertyGroupConfiguration s3InvalidDestinationConfig = new PropertyGroupConfiguration("S3 Destination Configuration", Map.of(
+            "S3 Region", S3_REGION,
+            "S3 Data Format", "JSON",
+            "S3 Bucket", bucketName,
+            "S3 Endpoint Override URL", "http://invalid-s3-endpoint:9999"
+        ));
+        final PropertyGroupConfiguration s3CredentialsConfig = new PropertyGroupConfiguration("S3 Credentials", Map.of(
+            "S3 Authentication Strategy", "Access Key ID and Secret Key",
+            "S3 Access Key ID", localStackContainer.getAccessKey(),
+            "S3 Secret Access Key", localStackContainer.getSecretKey()
+        ));
+        final PropertyGroupConfiguration s3MergeConfig = new PropertyGroupConfiguration("Merge Configuration", Map.of(
+            "Target Object Size", "1 MB",
+            "Merge Latency", "1 sec"
+        ));
+
+        runner.prepareForUpdate();
+        runner.configure("Kafka Connection", List.of(kafkaServerConfig));
+        runner.configure("Kafka Topics", List.of(jsonTopicConfig));
+        runner.configure("S3 Configuration", List.of(s3InvalidDestinationConfig, s3MergeConfig, s3CredentialsConfig));
+        runner.finishUpdate();
+
+        // Run the Connector with the invalid S3 endpoint to queue the JSON data. Wait for data to be queued up.
+        runner.startConnector();
+        try {
+            runner.waitForDataIngested(Duration.ofSeconds(30));
+        } finally {
+            runner.stopConnector();
+        }
+
+        // Apply configuration to specify the correct S3 endpoint. Keep S3 Data Format as JSON for now.
+        // This will allow the Connector to write data to S3 and properly drain the data when we switch the S3 format from JSON to Avro.
+        final PropertyGroupConfiguration s3ValidDestinationJsonConfig = new PropertyGroupConfiguration("S3 Destination Configuration", Map.of(
+            "S3 Region", S3_REGION,
+            "S3 Data Format", "JSON",
+            "S3 Bucket", bucketName,
+            "S3 Endpoint Override URL", localStackContainer.getEndpoint().toString()
+        ));
+
+        runner.prepareForUpdate();
+        runner.configure("S3 Configuration", List.of(s3ValidDestinationJsonConfig, s3MergeConfig, s3CredentialsConfig));
+        runner.finishUpdate();
+
+        // Make sure there is no data in S3 yet.
+        final ListObjectsV2Response initialListingResponse = s3Client.listObjectsV2(ListObjectsV2Request.builder().bucket(bucketName).build());
+        final List<S3Object> initialS3Objects = initialListingResponse.contents();
+        assertEquals(List.of(), initialS3Objects);
+
+        // Now change the S3 Data Format from JSON to Avro. This should trigger draining of the queued JSON data.
+        final PropertyGroupConfiguration s3ValidDestinationAvroConfig = new PropertyGroupConfiguration("S3 Destination Configuration", Map.of(
+            "S3 Region", S3_REGION,
+            "S3 Data Format", "Avro",
+            "S3 Bucket", bucketName,
+            "S3 Endpoint Override URL", localStackContainer.getEndpoint().toString()
+        ));
+
+        // Configure to consume from the Avro topic and change S3 format to Avro
+        final PropertyGroupConfiguration avroTopicConfig = new PropertyGroupConfiguration("Kafka Topics Configuration", Map.of(
+            "Topic Names", "avro",
+            "Consumer Group ID", "nifi-kafka-to-s3-testReconfiguration",
+            "Offset Reset", "earliest",
+            "Kafka Data Format", "Avro"
+        ));
+
+        runner.configure("Kafka Connection", List.of(kafkaServerConfig, schemaRegistryConfig));
+        runner.configure("Kafka Topics", List.of(avroTopicConfig));
+        runner.configure("S3 Configuration", List.of(s3ValidDestinationAvroConfig, s3MergeConfig, s3CredentialsConfig));
+
+        // Prepare to update. This should drain any existing files.
+        runner.prepareForUpdate();
+
+        // After draining, there should be one JSON file in S3.
+        final ListObjectsV2Response jsonOnlyListing = s3Client.listObjectsV2(ListObjectsV2Request.builder().bucket(bucketName).build());
+        final List<S3Object> jsonObjects = jsonOnlyListing.contents();
+        assertEquals(1, jsonObjects.size());
+
+        runner.finishUpdate();
+
+        // Start connector, wait for more data to be ingested, and then wait for the Connector to be idle.
+        runner.startConnector();
+        try {
+            runner.waitForDataIngested(Duration.ofSeconds(30));
+            runner.waitForIdle(Duration.ofSeconds(30));
+        } finally {
+            runner.stopConnector();
+        }
+
+        // Verify that there are two objects in S3: one in JSON format and one in Avro format.
+        final ListObjectsV2Response listResponse = s3Client.listObjectsV2(ListObjectsV2Request.builder().bucket(bucketName).build());
+        final List<S3Object> objects = listResponse.contents();
+
+        assertEquals(2, objects.size(), "Expected exactly 2 objects in S3 bucket: one for JSON data and one for Avro data");
+
+        for (final S3Object s3Object : objects) {
+            final GetObjectRequest getObjectRequest = GetObjectRequest.builder().bucket(bucketName).key(s3Object.key()).build();
+            try (final ResponseInputStream<GetObjectResponse> objectContent = s3Client.getObject(getObjectRequest)) {
+                final long objectSize = objectContent.response().contentLength();
+                assertTrue(objectSize > 0, "Expected S3 object " + s3Object.key() + " to have content");
+            }
+        }
     }
 
 }

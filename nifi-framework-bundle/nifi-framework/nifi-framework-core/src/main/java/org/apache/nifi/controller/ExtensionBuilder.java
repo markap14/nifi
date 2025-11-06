@@ -499,6 +499,7 @@ public class ExtensionBuilder {
 
        final ConnectorNode connectorNode = new StandardConnectorNode(
            identifier,
+           flowController.getFlowManager(),
            extensionManager,
            flowController,
            connectorDetails,

@@ -101,7 +101,7 @@ public class StandardConnectorRepository implements ConnectorRepository {
 
     @Override
     public void finishUpdate(final ConnectorNode connector) throws FlowUpdateException {
-        connector.finishUpdate(lifecycleExecutor);
+        connector.applyUpdate(lifecycleExecutor);
     }
 
     @Override

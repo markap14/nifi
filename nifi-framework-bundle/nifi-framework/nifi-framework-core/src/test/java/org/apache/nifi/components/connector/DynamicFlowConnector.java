@@ -127,7 +127,7 @@ public class DynamicFlowConnector extends AbstractConnector {
     }
 
     @Override
-    public void finishUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
+    public void applyUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
         // Apply the updates to the active flow that were made to the working flow
         final VersionedExternalFlow versionedFlow = getFlow(workingContext);
         getInitializationContext().updateFlow(activeContext, versionedFlow);

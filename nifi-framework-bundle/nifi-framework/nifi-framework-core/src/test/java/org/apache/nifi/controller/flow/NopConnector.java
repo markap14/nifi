@@ -102,12 +102,12 @@ public class NopConnector implements Connector {
     }
 
     @Override
-    public void abortUpdatePreparation(final FlowContext flowContext, final Throwable throwable) {
+    public void abortUpdate(final FlowContext flowContext, final Throwable throwable) {
 
     }
 
     @Override
-    public void finishUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
+    public void applyUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
         if (!initialized) {
             throw new FlowUpdateException("Connector must be initialized before configuration");
         }
