@@ -578,6 +578,11 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
+    public void discardWorkingConfiguration() {
+        recreateWorkingFlowContext();
+    }
+
+    @Override
     public Authorizable getParentAuthorizable() {
         return parentAuthorizable;
     }

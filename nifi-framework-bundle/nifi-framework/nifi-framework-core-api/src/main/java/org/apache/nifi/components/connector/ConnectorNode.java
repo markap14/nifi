@@ -112,6 +112,8 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
 
     FrameworkFlowContext getWorkingFlowContext();
 
+    void discardWorkingConfiguration();
+
     // -------------------
     // The following methods should always be called via the ConnectorRepository in order to maintain proper
     // lifecycle management of the Connector.
