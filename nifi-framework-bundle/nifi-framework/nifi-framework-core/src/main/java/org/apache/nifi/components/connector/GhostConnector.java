@@ -74,6 +74,11 @@ public class GhostConnector implements Connector {
     }
 
     @Override
+    public List<ValidationResult> validateConfigurationStep(final ConfigurationStep configurationStep, final ConnectorConfigurationContext connectorConfigurationContext, final ConnectorValidationContext connectorValidationContext) {
+        return validationResults;
+    }
+
+    @Override
     public List<ConfigurationStep> getConfigurationSteps(final FlowContext workingContext) {
         return List.of();
     }
@@ -98,6 +103,11 @@ public class GhostConnector implements Connector {
 
     @Override
     public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues, final FlowContext workingContext) {
+        return configVerificationResults;
+    }
+
+    @Override
+    public List<ConfigVerificationResult> verify(final FlowContext flowContext) {
         return configVerificationResults;
     }
 

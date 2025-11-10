@@ -24,6 +24,7 @@ import org.apache.nifi.authorization.resource.ResourceType;
 import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.ConfigVerificationResult;
+import org.apache.nifi.components.ConfigVerificationResult.Outcome;
 import org.apache.nifi.components.DescribedValue;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.components.FlowContext;
@@ -43,6 +44,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -519,31 +521,93 @@ public class StandardConnectorNode implements ConnectorNode {
 
     @Override
     public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final List<PropertyGroupConfiguration> groupConfigurations) {
-        verifyCanValidate();
-
         final Map<String, String> properties = new HashMap<>();
         for (final PropertyGroupConfiguration groupConfiguration : groupConfigurations) {
             properties.putAll(groupConfiguration.propertyValues());
         }
 
+        final List<ConfigVerificationResult> results = new ArrayList<>();
         try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
-            return getConnector().verifyConfigurationStep(stepName, properties, workingFlowContext);
+            final DescribedValueProvider allowableValueProvider = (step, groupName, propertyName) ->
+                fetchAllowableValues(step, groupName, propertyName, workingFlowContext);
+            final MutableConnectorConfigurationContext configContext = workingFlowContext.getConfigurationContext()
+                .createWithOverrides(stepName, properties);
+            final ConnectorValidationContext validationContext = new StandardConnectorValidationContext(
+                configContext.toConnectorConfiguration(), allowableValueProvider, workingFlowContext.getParameterContext());
+
+            final Optional<ConfigurationStep> optionalStep = getConfigurationStep(stepName);
+            if (optionalStep.isEmpty()) {
+                results.add(new ConfigVerificationResult.Builder()
+                    .verificationStepName("Property Validation")
+                    .outcome(Outcome.FAILED)
+                    .explanation("Configuration step with name '" + stepName + "' does not exist.")
+                    .build());
+                return results;
+            }
+
+            final ConfigurationStep configurationStep = optionalStep.get();
+            final List<ValidationResult> validationResults = getConnector().validateConfigurationStep(configurationStep, configContext, validationContext);
+
+            final List<String> validationFailureExplanations = validationResults.stream()
+                .filter(result -> !result.isValid())
+                .map(ValidationResult::getExplanation)
+                .toList();
+
+            if (validationFailureExplanations.isEmpty()) {
+                results.add(new ConfigVerificationResult.Builder()
+                    .verificationStepName("Property Validation")
+                    .outcome(Outcome.SUCCESSFUL)
+                    .build());
+            } else {
+                results.add(new ConfigVerificationResult.Builder()
+                    .verificationStepName("Property Validation")
+                    .outcome(Outcome.FAILED)
+                    .explanation("There are " + validationFailureExplanations.size() + " property validation failures: " + validationFailureExplanations)
+                    .build());
+            }
+
+            results.addAll(getConnector().verifyConfigurationStep(stepName, properties, workingFlowContext));
+            return results;
         }
     }
 
-    private void verifyCanValidate() {
-        final ConnectorState currentState = getCurrentState();
-        if (currentState != ConnectorState.UPDATING) {
-            throw new IllegalStateException("Cannot validate the configuration step of " + this + " because its state is currently " + currentState
-                                            + "; its state must be UPDATING in order to validate a configuration step.");
+    private Optional<ConfigurationStep> getConfigurationStep(final String stepName) {
+        for (final ConfigurationStep step : getConfigurationSteps()) {
+            if (Objects.equals(step.getName(), stepName)) {
+                return Optional.of(step);
+            }
         }
 
-        final ConnectorState desiredState = getDesiredState();
-        if (desiredState != ConnectorState.UPDATING) {
-            throw new IllegalStateException("Cannot validate the configuration step of " + this + " because its desired state is currently " + desiredState
-                                            + "; its state must be UPDATING in order to validate a configuration step.");
-        }
+        return Optional.empty();
     }
+
+    @Override
+    public List<ConfigVerificationResult> verify() {
+        final List<ConfigVerificationResult> results = new ArrayList<>();
+
+        final ValidationState state = performValidation();
+        if (state.getStatus() == ValidationStatus.INVALID) {
+            final List<String> validationFailureExplanations = state.getValidationErrors().stream()
+                .filter(result -> !result.isValid())
+                .map(ValidationResult::getExplanation)
+                .toList();
+
+            results.add(new ConfigVerificationResult.Builder()
+                .verificationStepName("Property Validation")
+                .outcome(Outcome.FAILED)
+                .explanation("There are " + validationFailureExplanations.size() + " validation failures: " + validationFailureExplanations)
+                .build());
+
+            return results;
+        }
+
+        try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
+            results.addAll(getConnector().verify(workingFlowContext));
+        }
+
+        return results;
+    }
+
 
     @Override
     public String getIdentifier() {
@@ -623,10 +687,7 @@ public class StandardConnectorNode implements ConnectorNode {
     public ValidationState performValidation() {
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
 
-            final DescribedValueProvider allowableValueProvider = (stepName, groupName, propertyName) ->
-                fetchAllowableValues(stepName, groupName, propertyName, activeFlowContext);
-            final ConnectorConfiguration connectorConfiguration = activeFlowContext.getConfigurationContext().toConnectorConfiguration();
-            final ConnectorValidationContext validationContext = new StandardConnectorValidationContext(connectorConfiguration, allowableValueProvider, activeFlowContext.getParameterContext());
+            final ConnectorValidationContext validationContext = createValidationContext(activeFlowContext);
 
             List<ValidationResult> allResults;
             try {
@@ -656,6 +717,13 @@ public class StandardConnectorNode implements ConnectorNode {
 
             return new ValidationState(ValidationStatus.INVALID, relevantResults);
         }
+    }
+
+    private ConnectorValidationContext createValidationContext(final FrameworkFlowContext context) {
+        final DescribedValueProvider allowableValueProvider = (stepName, groupName, propertyName) ->
+            fetchAllowableValues(stepName, groupName, propertyName, context);
+        final ConnectorConfiguration connectorConfiguration = context.getConfigurationContext().toConnectorConfiguration();
+        return new StandardConnectorValidationContext(connectorConfiguration, allowableValueProvider, context.getParameterContext());
     }
 
     private List<DescribedValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName, final FlowContext context) {

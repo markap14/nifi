@@ -104,6 +104,8 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
 
     List<ConfigVerificationResult> verifyConfigurationStep(String configurationStepName, List<PropertyGroupConfiguration> propertyGroupConfigurations);
 
+    List<ConfigVerificationResult> verify();
+
     ComponentLog getComponentLog();
 
     List<ConfigurationStep> getConfigurationSteps();

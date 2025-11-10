@@ -536,6 +536,11 @@ public class TestStandardConnectorNode {
         }
 
         @Override
+        public List<ValidationResult> validateConfigurationStep(final ConfigurationStep configurationStep, final ConnectorConfigurationContext connectorConfigurationContext, final ConnectorValidationContext connectorValidationContext) {
+            return List.of();
+        }
+
+        @Override
         public List<ConfigurationStep> getConfigurationSteps(final FlowContext flowContext) {
             return List.of();
         }
@@ -554,6 +559,11 @@ public class TestStandardConnectorNode {
 
         @Override
         public List<ConfigVerificationResult> verifyConfigurationStep(final String s, final Map<String, String> map, final FlowContext flowContext) {
+            return List.of();
+        }
+
+        @Override
+        public List<ConfigVerificationResult> verify(final FlowContext flowContext) {
             return List.of();
         }
 

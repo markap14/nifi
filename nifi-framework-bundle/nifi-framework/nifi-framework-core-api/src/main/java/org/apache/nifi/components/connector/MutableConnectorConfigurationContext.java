@@ -18,6 +18,7 @@
 package org.apache.nifi.components.connector;
 
 import java.util.List;
+import java.util.Map;
 
 public interface MutableConnectorConfigurationContext extends ConnectorConfigurationContext {
 
@@ -46,6 +47,8 @@ public interface MutableConnectorConfigurationContext extends ConnectorConfigura
      * @return the ConnectorConfiguration
      */
     ConnectorConfiguration toConnectorConfiguration();
+
+    MutableConnectorConfigurationContext createWithOverrides(String stepName, Map<String, String> propertyOverrides);
 
     /**
      * Creates a clone of this MutableConnectorConfigurationContext.
