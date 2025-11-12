@@ -548,22 +548,24 @@ public class StandardConnectorNode implements ConnectorNode {
             final ConfigurationStep configurationStep = optionalStep.get();
             final List<ValidationResult> validationResults = getConnector().validateConfigurationStep(configurationStep, configContext, validationContext);
 
-            final List<String> validationFailureExplanations = validationResults.stream()
+            final List<ConfigVerificationResult> invalidConfigResults = validationResults.stream()
                 .filter(result -> !result.isValid())
-                .map(ValidationResult::getExplanation)
+                .map(validationResult -> new ConfigVerificationResult.Builder()
+                    .verificationStepName("Property Validation - " + validationResult.getSubject())
+                    .outcome(Outcome.FAILED)
+                    .subject(validationResult.getSubject())
+                    .explanation(validationResult.getExplanation())
+                    .build()
+                )
                 .toList();
 
-            if (validationFailureExplanations.isEmpty()) {
+            if (invalidConfigResults.isEmpty()) {
                 results.add(new ConfigVerificationResult.Builder()
                     .verificationStepName("Property Validation")
                     .outcome(Outcome.SUCCESSFUL)
                     .build());
             } else {
-                results.add(new ConfigVerificationResult.Builder()
-                    .verificationStepName("Property Validation")
-                    .outcome(Outcome.FAILED)
-                    .explanation("There are " + validationFailureExplanations.size() + " property validation failures: " + validationFailureExplanations)
-                    .build());
+                results.addAll(invalidConfigResults);
             }
 
             results.addAll(getConnector().verifyConfigurationStep(stepName, properties, workingFlowContext));

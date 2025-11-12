@@ -17,7 +17,6 @@
 
 package org.apache.nifi.components.connector;
 
-import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.components.FlowContext;
@@ -41,6 +40,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -53,6 +53,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class TestStandardConnectorNode {
 
@@ -70,6 +71,8 @@ public class TestStandardConnectorNode {
     public void setUp() {
         MockitoAnnotations.openMocks(this);
         scheduler = new FlowEngine(1, "flow-engine");
+
+        when(managedProcessGroup.purge()).thenReturn(CompletableFuture.completedFuture(null));
 
         flowContextFactory = new FlowContextFactory() {
             @Override
@@ -447,6 +450,28 @@ public class TestStandardConnectorNode {
         assertTrue(trackingConnector.wasOnPropertyGroupConfiguredCalled("configurationStep1"));
     }
 
+    @Test
+    public void testVerifyConfigurationStepSurfacesInvalidValidationResults() throws FlowUpdateException {
+        final ValidationFailingConnector validationFailingConnector = new ValidationFailingConnector();
+        final StandardConnectorNode connectorNode = createConnectorNode(validationFailingConnector);
+        assertEquals(ConnectorState.STOPPED, connectorNode.getCurrentState());
+
+        connectorNode.prepareForUpdate(null);
+        final List<PropertyGroupConfiguration> groupConfig = createGroupConfig("testGroup", Map.of("testProperty", "invalidValue"));
+        final List<ConfigVerificationResult> results = connectorNode.verifyConfigurationStep("testStep", groupConfig);
+
+        assertFalse(results.isEmpty());
+        final List<ConfigVerificationResult> failedResults = results.stream()
+            .filter(result -> result.getOutcome() == ConfigVerificationResult.Outcome.FAILED)
+            .toList();
+        assertFalse(failedResults.isEmpty());
+
+        final ConfigVerificationResult failedResult = failedResults.getFirst();
+        assertEquals("Property Validation - Test Property", failedResult.getVerificationStepName());
+        assertEquals("Test Property", failedResult.getSubject());
+        assertEquals("The property value is invalid", failedResult.getExplanation());
+    }
+
     private StandardConnectorNode createConnectorNode() {
         final SleepingConnector sleepingConnector = new SleepingConnector(Duration.ofMillis(1));
         return createConnectorNode(sleepingConnector);
@@ -510,12 +535,8 @@ public class TestStandardConnectorNode {
     /**
      * Test connector that tracks method calls for verification
      */
-    private static class TrackingConnector implements Connector {
+    private static class TrackingConnector extends AbstractConnector {
         private final Set<String> onConfigurationStepConfiguredCalls = new HashSet<>();
-
-        @Override
-        public void initialize(final ConnectorInitializationContext connectorInitializationContext) {
-        }
 
         @Override
         public VersionedExternalFlow getInitialFlow() {
@@ -523,21 +544,7 @@ public class TestStandardConnectorNode {
         }
 
         @Override
-        public void start(final FlowContext flowContext) {
-        }
-
-        @Override
-        public void stop(final FlowContext flowContext) {
-        }
-
-        @Override
-        public List<ValidationResult> validate(final FlowContext flowContext, final ConnectorValidationContext connectorValidationContext) {
-            return List.of();
-        }
-
-        @Override
-        public List<ValidationResult> validateConfigurationStep(final ConfigurationStep configurationStep, final ConnectorConfigurationContext connectorConfigurationContext, final ConnectorValidationContext connectorValidationContext) {
-            return List.of();
+        public void prepareForUpdate(final FlowContext workingContext, final FlowContext activeContext) {
         }
 
         @Override
@@ -546,39 +553,16 @@ public class TestStandardConnectorNode {
         }
 
         @Override
-        public void prepareForUpdate(final FlowContext workingContext, final FlowContext activeContext) {
-        }
-
-        @Override
-        public void abortUpdate(final FlowContext flowContext, final Throwable throwable) {
-        }
-
-        @Override
         public void applyUpdate(final FlowContext workingContext, final FlowContext activeContext) {
         }
 
         @Override
-        public List<ConfigVerificationResult> verifyConfigurationStep(final String s, final Map<String, String> map, final FlowContext flowContext) {
-            return List.of();
-        }
-
-        @Override
-        public List<ConfigVerificationResult> verify(final FlowContext flowContext) {
-            return List.of();
-        }
-
-        @Override
-        public void onConfigurationStepConfigured(final String stepName, final FlowContext flowContext) {
+        protected void onStepConfigured(final String stepName, final FlowContext workingContext) {
             onConfigurationStepConfiguredCalls.add(stepName);
         }
 
         @Override
-        public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName, final FlowContext workingContext) {
-            return List.of();
-        }
-
-        @Override
-        public List<AllowableValue> fetchAllowableValues(final String stepName, final String groupName, final String propertyName, final FlowContext workingContext, final String filter) {
+        public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValueOverrides, final FlowContext flowContext) {
             return List.of();
         }
 
@@ -588,6 +572,51 @@ public class TestStandardConnectorNode {
 
         public void reset() {
             onConfigurationStepConfiguredCalls.clear();
+        }
+    }
+
+    /**
+     * Test connector that returns invalid validation results from validateConfigurationStep
+     */
+    private static class ValidationFailingConnector extends AbstractConnector {
+        @Override
+        public VersionedExternalFlow getInitialFlow() {
+            return null;
+        }
+
+        @Override
+        public void prepareForUpdate(final FlowContext workingContext, final FlowContext activeContext) {
+        }
+
+        @Override
+        public List<ValidationResult> validateConfigurationStep(final ConfigurationStep configurationStep, final ConnectorConfigurationContext connectorConfigurationContext, final ConnectorValidationContext connectorValidationContext) {
+            final ValidationResult invalidResult = new ValidationResult.Builder()
+                .subject("Test Property")
+                .valid(false)
+                .explanation("The property value is invalid")
+                .build();
+            return List.of(invalidResult);
+        }
+
+        @Override
+        public List<ConfigurationStep> getConfigurationSteps(final FlowContext flowContext) {
+            final ConfigurationStep testStep = new ConfigurationStep.Builder()
+                .name("testStep")
+                .build();
+            return List.of(testStep);
+        }
+
+        @Override
+        public void applyUpdate(final FlowContext workingContext, final FlowContext activeContext) {
+        }
+
+        @Override
+        protected void onStepConfigured(final String stepName, final FlowContext workingContext) {
+        }
+
+        @Override
+        public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValueOverrides, final FlowContext flowContext) {
+            return List.of();
         }
     }
 
