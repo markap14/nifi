@@ -1159,21 +1159,11 @@ public class VersionedFlowSynchronizer implements FlowSynchronizer {
             throw new RuntimeException(connectorNode + " failed to prepare itself for update", e);
         }
 
-        final List<VersionedConfigurationStep> configurationSteps = versionedConnector.getActiveFlowConfiguration();
-        for (final VersionedConfigurationStep configurationStep : configurationSteps) {
-            final List<PropertyGroupConfiguration> stepConfiguration = new ArrayList<>();
-
-            for (final VersionedConnectorPropertyGroup propertyGroup : configurationStep.getPropertyGroups()) {
-                final PropertyGroupConfiguration groupConfiguration = new PropertyGroupConfiguration(propertyGroup.getName(), propertyGroup.getProperties());
-                stepConfiguration.add(groupConfiguration);
-            }
-
-            try {
-                connectorRepository.configureConnector(connectorNode, configurationStep.getName(), stepConfiguration);
-            } catch (final FlowUpdateException e) {
-                connectorRepository.abortUpdatePreparation(connectorNode, e);
-                throw new RuntimeException(connectorNode + " failed to update configuration for step " + configurationStep.getName(), e);
-            }
+        try {
+            connectorRepository.inheritConfiguration(connectorNode, versionedConnector.getActiveFlowConfiguration());
+        } catch (final FlowUpdateException e) {
+            connectorRepository.abortUpdatePreparation(connectorNode, e);
+            throw new RuntimeException(connectorNode + " failed to inherit configuration", e);
         }
 
         try {

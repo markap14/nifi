@@ -17,6 +17,8 @@
 
 package org.apache.nifi.components.connector;
 
+import org.apache.nifi.flow.VersionedConfigurationStep;
+
 import java.util.List;
 import java.util.concurrent.Future;
 
@@ -79,6 +81,8 @@ public interface ConnectorRepository {
     void finishUpdate(ConnectorNode connector) throws FlowUpdateException;
 
     void configureConnector(ConnectorNode connector, String stepName, List<PropertyGroupConfiguration> stepConfiguration) throws FlowUpdateException;
+
+    void inheritConfiguration(ConnectorNode connector, List<VersionedConfigurationStep> flowConfiguration) throws FlowUpdateException;
 
     /**
      * Creates a new ConnectorStateTransition instance for managing the lifecycle state of a connector.

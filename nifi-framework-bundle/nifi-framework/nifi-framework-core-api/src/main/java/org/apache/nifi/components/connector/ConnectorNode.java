@@ -27,6 +27,7 @@ import org.apache.nifi.components.validation.ValidationState;
 import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.connectable.FlowFileTransferCounts;
 import org.apache.nifi.engine.FlowEngine;
+import org.apache.nifi.flow.VersionedConfigurationStep;
 import org.apache.nifi.logging.ComponentLog;
 
 import java.time.Duration;
@@ -172,8 +173,6 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
      */
     Future<Void> stop(FlowEngine scheduler);
 
-    void prepareForUpdate(FlowEngine scheduler) throws FlowUpdateException;
-
     /**
      * Updates the configuration of one of the configuration steps. This method should only be invoked via the ConnectorRepository.
      * @param configurationStepName the name of the configuration step being set
@@ -183,6 +182,8 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
      * @throws FlowUpdateException if unable to apply the configuration changes
      */
     void setConfiguration(String configurationStepName, List<PropertyGroupConfiguration> propertyGroupConfigurations) throws FlowUpdateException;
+
+    void prepareForUpdate(FlowEngine scheduler) throws FlowUpdateException;
 
     /**
      * Aborts the update preparation process. This method should only be invoked via the ConnectorRepository.
@@ -200,4 +201,11 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
     // TODO: Should this return a Future<Void>?
     void applyUpdate(FlowEngine scheduler) throws FlowUpdateException;
 
+    /**
+     * Inherits the given flow configuration into this Connector's active flow configuration.
+     * @param flowConfiguration the flow configuration to inherit
+     * @throws FlowUpdateException if unable to inherit the given flow configuration
+     * @throws IllegalStateException if the Connector is not in a state of UPDATING
+     */
+    void inheritConfiguration(List<VersionedConfigurationStep> flowConfiguration) throws FlowUpdateException;
 }

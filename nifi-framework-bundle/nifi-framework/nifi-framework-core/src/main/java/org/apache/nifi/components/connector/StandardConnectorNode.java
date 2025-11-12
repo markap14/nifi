@@ -35,6 +35,8 @@ import org.apache.nifi.connectable.FlowFileActivity;
 import org.apache.nifi.connectable.FlowFileTransferCounts;
 import org.apache.nifi.controller.flow.FlowManager;
 import org.apache.nifi.engine.FlowEngine;
+import org.apache.nifi.flow.VersionedConfigurationStep;
+import org.apache.nifi.flow.VersionedConnectorPropertyGroup;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
@@ -138,7 +140,36 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
+    public void inheritConfiguration(final List<VersionedConfigurationStep> flowConfiguration) throws FlowUpdateException {
+        final MutableConnectorConfigurationContext configurationContext = createConfigurationContext(flowConfiguration);
+        final FrameworkFlowContext inheritContext = flowContextFactory.createWorkingFlowContext(identifier,
+            connectorDetails.getComponentLog(), configurationContext);
+
+        applyUpdate(inheritContext);
+    }
+
+    private MutableConnectorConfigurationContext createConfigurationContext(final List<VersionedConfigurationStep> flowConfiguration) {
+        final StandardConnectorConfigurationContext configurationContext = new StandardConnectorConfigurationContext();
+        for (final VersionedConfigurationStep configStep : flowConfiguration) {
+            final List<PropertyGroupConfiguration> groupConfigurations = new ArrayList<>();
+
+            for (final VersionedConnectorPropertyGroup propertyGroup : configStep.getPropertyGroups()) {
+                final PropertyGroupConfiguration groupConfiguration = new PropertyGroupConfiguration(propertyGroup.getName(), propertyGroup.getProperties());
+                groupConfigurations.add(groupConfiguration);
+            }
+
+            configurationContext.setProperties(configStep.getName(), groupConfigurations);
+        }
+
+        return configurationContext;
+    }
+
+    @Override
     public void applyUpdate(final FlowEngine scheduler) throws FlowUpdateException {
+        applyUpdate(workingFlowContext);
+    }
+
+    private void applyUpdate(final FrameworkFlowContext contextToInherit) throws FlowUpdateException {
         final ConnectorState currentState = getCurrentState();
         if (currentState != ConnectorState.UPDATING) {
             throw new IllegalStateException("Cannot finish update for " + this + " because its state is currently " + currentState
@@ -146,7 +177,7 @@ public class StandardConnectorNode implements ConnectorNode {
         }
 
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
-            getConnector().applyUpdate(workingFlowContext, activeFlowContext);
+            getConnector().applyUpdate(contextToInherit, activeFlowContext);
         } catch (final Throwable t) {
             logger.error("Failed to finish update for {}", this, t);
             stateTransition.setCurrentState(ConnectorState.UPDATE_FAILED);
@@ -154,7 +185,7 @@ public class StandardConnectorNode implements ConnectorNode {
 
             throw new FlowUpdateException("Failed to finish update for " + this, t);
         } finally {
-            final ConnectorConfiguration workingConfig = workingFlowContext.getConfigurationContext().toConnectorConfiguration();
+            final ConnectorConfiguration workingConfig = contextToInherit.getConfigurationContext().toConnectorConfiguration();
             for (final ConfigurationStepConfiguration stepConfig : workingConfig.getConfigurationStepConfigurations()) {
                 activeFlowContext.getConfigurationContext().replaceProperties(stepConfig.stepName(), stepConfig.propertyGroupConfigurations());
             }
