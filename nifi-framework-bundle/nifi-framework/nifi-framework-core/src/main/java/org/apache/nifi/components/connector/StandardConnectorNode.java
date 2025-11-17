@@ -193,6 +193,8 @@ public class StandardConnectorNode implements ConnectorNode {
             recreateWorkingFlowContext();
         }
 
+        // TODO: This is not really correct. We need to either explicitly stop or
+        // we need to have some new state of 'UPDATED' etc.
         stateTransition.setCurrentState(ConnectorState.STOPPED);
         stateTransition.setDesiredState(ConnectorState.STOPPED);
 

@@ -23,23 +23,28 @@ import org.apache.nifi.flow.VersionedConfigurationStep;
 import org.apache.nifi.nar.ExtensionManager;
 import org.apache.nifi.nar.NarCloseable;
 import org.apache.nifi.util.ReflectionUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
 
 public class StandardConnectorRepository implements ConnectorRepository {
+    private static final Logger logger = LoggerFactory.getLogger(StandardConnectorRepository.class);
 
     private final Map<String, ConnectorNode> connectors = new HashMap<>();
     private final FlowEngine lifecycleExecutor = new FlowEngine(8, "NiFi Connector Lifecycle");
 
     private volatile ExtensionManager extensionManager;
-
+    private volatile ConnectorRequestReplicator requestReplicator;
 
     @Override
     public void initialize(final ConnectorRepositoryInitializationContext context) {
         this.extensionManager = context.getExtensionManager();
+        this.requestReplicator = context.getRequestReplicator();
     }
 
     @Override
@@ -91,18 +96,32 @@ public class StandardConnectorRepository implements ConnectorRepository {
     }
 
     @Override
-    public void prepareForUpdate(final ConnectorNode connector) throws FlowUpdateException {
+    public void applyUpdate(final ConnectorNode connector) throws FlowUpdateException {
         connector.prepareForUpdate(lifecycleExecutor);
-    }
 
-    @Override
-    public void abortUpdatePreparation(final ConnectorNode connector, final Throwable cause) {
-        connector.abortUpdate(cause);
-    }
+        try {
+            // Wait for Connector State to become UPDATING
+            while (true) {
+                final ConnectorState clusterState = requestReplicator.getState(connector.getIdentifier());
+                if (clusterState == ConnectorState.UPDATE_FAILED) {
+                    throw new FlowUpdateException("State of " + connector + " transitioned to UPDATE_FAILED");
+                } else if (clusterState == ConnectorState.UPDATING) {
+                    logger.info("State for {} is now UPDATING; will apply update", connector);
+                    break;
+                } else if (clusterState == ConnectorState.PREPARING_FOR_UPDATE) {
+                    logger.debug("State for {} is still PREPARING_FOR_UPDATE", connector);
+                    Thread.sleep(Duration.ofSeconds(1));
+                    continue;
+                }
 
-    @Override
-    public void finishUpdate(final ConnectorNode connector) throws FlowUpdateException {
-        connector.applyUpdate(lifecycleExecutor);
+                throw new FlowUpdateException("State of " + connector + " transitioned to unexpected state: " + clusterState);
+            }
+
+            // Apply the update to the connector.
+            connector.applyUpdate(lifecycleExecutor);
+        } catch (final Exception e) {
+            connector.abortUpdate(e);
+        }
     }
 
     @Override
@@ -112,7 +131,14 @@ public class StandardConnectorRepository implements ConnectorRepository {
 
     @Override
     public void inheritConfiguration(final ConnectorNode connector, final List<VersionedConfigurationStep> flowConfiguration) throws FlowUpdateException {
-        connector.inheritConfiguration(flowConfiguration);
+        connector.prepareForUpdate(lifecycleExecutor);
+
+        try {
+            connector.inheritConfiguration(flowConfiguration);
+        } catch (final Exception e) {
+            connector.abortUpdate(e);
+            throw e;
+        }
     }
 
     @Override

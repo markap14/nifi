@@ -408,6 +408,8 @@ public interface FlowManager extends ParameterProviderLookup {
 
     List<ConnectorNode> getAllConnectors();
 
+    ConnectorNode getConnector(String id);
+
     /**
      * @return the number of each type of component (Processor, Controller Service, Process Group, Funnel, Input Port, Output Port,
      * Parameter Provider, Reporting Task, Flow Analysis Rule, Remote Process Group)

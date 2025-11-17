@@ -74,13 +74,9 @@ public interface ConnectorRepository {
      */
     Future<Void> stopConnector(ConnectorNode connector);
 
-    void prepareForUpdate(ConnectorNode connector) throws FlowUpdateException;
-
-    void abortUpdatePreparation(ConnectorNode connector, Throwable cause);
-
-    void finishUpdate(ConnectorNode connector) throws FlowUpdateException;
-
     void configureConnector(ConnectorNode connector, String stepName, List<PropertyGroupConfiguration> stepConfiguration) throws FlowUpdateException;
+
+    void applyUpdate(ConnectorNode connector) throws FlowUpdateException;
 
     void inheritConfiguration(ConnectorNode connector, List<VersionedConfigurationStep> flowConfiguration) throws FlowUpdateException;
 

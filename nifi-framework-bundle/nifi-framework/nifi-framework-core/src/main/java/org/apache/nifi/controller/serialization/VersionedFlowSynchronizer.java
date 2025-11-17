@@ -1153,24 +1153,9 @@ public class VersionedFlowSynchronizer implements FlowSynchronizer {
         // prepareForUpdate. If any fails, we can restore them and throw an Exception. We don't want to be throwing an Exception in the middle
         // of updating the flow.
         try {
-            connectorRepository.prepareForUpdate(connectorNode);
-        } catch (final FlowUpdateException e) {
-            connectorRepository.abortUpdatePreparation(connectorNode, e);
-            throw new RuntimeException(connectorNode + " failed to prepare itself for update", e);
-        }
-
-        try {
             connectorRepository.inheritConfiguration(connectorNode, versionedConnector.getActiveFlowConfiguration());
         } catch (final FlowUpdateException e) {
-            connectorRepository.abortUpdatePreparation(connectorNode, e);
             throw new RuntimeException(connectorNode + " failed to inherit configuration", e);
-        }
-
-        try {
-            connectorRepository.finishUpdate(connectorNode);
-        } catch (final FlowUpdateException e) {
-            connectorRepository.abortUpdatePreparation(connectorNode, e);
-            throw new RuntimeException(connectorNode + " failed to complete update steps", e);
         }
     }
 

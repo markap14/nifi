@@ -454,6 +454,11 @@ public class StatelessFlowManager extends AbstractFlowManager implements FlowMan
     }
 
     @Override
+    public ConnectorNode getConnector(final String id) {
+        return null;
+    }
+
+    @Override
     protected Authorizable getParameterContextParent() {
         return null;
     }

@@ -29,6 +29,7 @@ import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.components.connector.ConnectorRepository;
 import org.apache.nifi.components.connector.FlowUpdateException;
 import org.apache.nifi.components.connector.PropertyGroupConfiguration;
+import org.apache.nifi.components.connector.StandaloneConnectorRequestReplicator;
 import org.apache.nifi.components.state.StateManagerProvider;
 import org.apache.nifi.components.validation.DisabledServiceValidationResult;
 import org.apache.nifi.components.validation.ValidationState;
@@ -98,7 +99,8 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
             extensionManager,
             statusHistoryRepository,
             ruleViolationManager,
-            stateManagerProvider);
+            stateManagerProvider,
+            new StandaloneConnectorRequestReplicator());
 
         try {
             flowController.getRepositoryContextFactory().getFlowFileRepository().loadFlowFiles(Collections::emptyList);

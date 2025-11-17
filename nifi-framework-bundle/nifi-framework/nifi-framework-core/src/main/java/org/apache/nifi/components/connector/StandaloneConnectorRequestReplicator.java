@@ -17,18 +17,24 @@
 
 package org.apache.nifi.components.connector;
 
-import org.apache.nifi.controller.NodeTypeProvider;
 import org.apache.nifi.controller.flow.FlowManager;
-import org.apache.nifi.nar.ExtensionManager;
 
-public interface ConnectorRepositoryInitializationContext {
+public class StandaloneConnectorRequestReplicator implements ConnectorRequestReplicator {
 
-    FlowManager getFlowManager();
+    private FlowManager flowManager;
 
-    ExtensionManager getExtensionManager();
+    @Override
+    public ConnectorState getState(final String connectorId) {
+        final ConnectorNode connectorNode = flowManager.getConnector(connectorId);
+        if (connectorNode == null) {
+            throw new IllegalArgumentException("No connector found with id: " + connectorId);
+        }
 
-    NodeTypeProvider getNodeTypeProvider();
+        return connectorNode.getCurrentState();
+    }
 
-    ConnectorRequestReplicator getRequestReplicator();
-
+    @Override
+    public void setFlowManager(final FlowManager flowManager) {
+        this.flowManager = flowManager;
+    }
 }

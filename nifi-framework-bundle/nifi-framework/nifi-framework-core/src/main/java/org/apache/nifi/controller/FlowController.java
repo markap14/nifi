@@ -50,6 +50,8 @@ import org.apache.nifi.cluster.protocol.message.HeartbeatMessage;
 import org.apache.nifi.components.ClassLoaderAwarePythonBridge;
 import org.apache.nifi.components.connector.ConnectorRepository;
 import org.apache.nifi.components.connector.ConnectorRepositoryInitializationContext;
+import org.apache.nifi.components.connector.ConnectorRequestReplicator;
+import org.apache.nifi.components.connector.StandardConnectorRepoInitializationContext;
 import org.apache.nifi.components.connector.StandardConnectorRepository;
 import org.apache.nifi.components.monitor.LongRunningTaskMonitor;
 import org.apache.nifi.components.state.StateManagerProvider;
@@ -339,6 +341,7 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
     private final RingBufferGarbageCollectionLog gcLog;
     private final Optional<FlowEngine> longRunningTaskMonitorThreadPool;
 
+
     /**
      * true if controller is configured to operate in a clustered environment
      */
@@ -412,7 +415,8 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
             final ExtensionDiscoveringManager extensionManager,
             final StatusHistoryRepository statusHistoryRepository,
             final RuleViolationsManager ruleViolationsManager,
-            final StateManagerProvider stateManagerProvider
+            final StateManagerProvider stateManagerProvider,
+            final ConnectorRequestReplicator connectorRequestReplicator
     ) {
 
         return new FlowController(
@@ -432,7 +436,8 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
                 null,
                 statusHistoryRepository,
                 ruleViolationsManager,
-                stateManagerProvider
+                stateManagerProvider,
+                connectorRequestReplicator
         );
     }
 
@@ -452,7 +457,8 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
             final RevisionManager revisionManager,
             final StatusHistoryRepository statusHistoryRepository,
             final RuleViolationsManager ruleViolationsManager,
-            final StateManagerProvider stateManagerProvider
+            final StateManagerProvider stateManagerProvider,
+            final ConnectorRequestReplicator connectorRequestReplicator
     ) {
 
         return new FlowController(
@@ -472,7 +478,8 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
                 revisionManager,
                 statusHistoryRepository,
                 ruleViolationsManager,
-                stateManagerProvider
+                stateManagerProvider,
+                connectorRequestReplicator
         );
     }
 
@@ -493,7 +500,8 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
             final RevisionManager revisionManager,
             final StatusHistoryRepository statusHistoryRepository,
             final RuleViolationsManager ruleViolationsManager,
-            final StateManagerProvider stateManagerProvider
+            final StateManagerProvider stateManagerProvider,
+            final ConnectorRequestReplicator connectorRequestReplicator
     ) {
 
         maxTimerDrivenThreads = new AtomicInteger(10);
@@ -589,11 +597,13 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
                 parameterContextManager
         );
 
+        connectorRequestReplicator.setFlowManager(flowManager);
+
         controllerServiceProvider = new StandardControllerServiceProvider(processScheduler, bulletinRepository, flowManager, extensionManager);
         controllerServiceResolver = new StandardControllerServiceResolver(authorizer, flowManager, new VersionedComponentFlowMapper(extensionManager),
                 controllerServiceProvider, new StandardControllerServiceApiLookup(extensionManager));
 
-        connectorRepository = createConnectorRepository(nifiProperties, extensionManager, flowManager, this);
+        connectorRepository = createConnectorRepository(nifiProperties, extensionManager, flowManager, this, connectorRequestReplicator);
 
         final PythonBridge rawPythonBridge = createPythonBridge(nifiProperties, controllerServiceProvider);
         final ClassLoader pythonBridgeClassLoader = rawPythonBridge.getClass().getClassLoader();
@@ -866,7 +876,7 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
     }
 
     private static ConnectorRepository createConnectorRepository(final NiFiProperties properties, final ExtensionDiscoveringManager extensionManager, final FlowManager flowManager,
-                final NodeTypeProvider nodeTypeProvider) {
+                final NodeTypeProvider nodeTypeProvider, final ConnectorRequestReplicator requestReplicator) {
 
         final String implementationClassName = properties.getProperty(NiFiProperties.CONNECTOR_REPOSITORY_IMPLEMENTATION, DEFAULT_CONNECTOR_REPOSITORY_IMPLEMENTATION);
 
@@ -877,22 +887,12 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
             extensionManager.discoverExtensions(extensionManager.getAllBundles(), Set.of(ConnectorRepository.class), true);
             final ConnectorRepository created = NarThreadContextClassLoader.createInstance(extensionManager, implementationClassName, ConnectorRepository.class, properties);
 
-            final ConnectorRepositoryInitializationContext initializationContext = new ConnectorRepositoryInitializationContext() {
-                @Override
-                public FlowManager getFlowManager() {
-                    return flowManager;
-                }
-
-                @Override
-                public ExtensionManager getExtensionManager() {
-                    return extensionManager;
-                }
-
-                @Override
-                public NodeTypeProvider getNodeTypeProvider() {
-                    return nodeTypeProvider;
-                }
-            };
+            final ConnectorRepositoryInitializationContext initializationContext = new StandardConnectorRepoInitializationContext(
+                flowManager,
+                extensionManager,
+                nodeTypeProvider,
+                requestReplicator
+            );
 
             synchronized (created) {
                 // Ensure that any NAR dependencies are available when we initialize the ConnectorRepository

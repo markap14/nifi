@@ -17,18 +17,14 @@
 
 package org.apache.nifi.components.connector;
 
-import org.apache.nifi.controller.NodeTypeProvider;
 import org.apache.nifi.controller.flow.FlowManager;
-import org.apache.nifi.nar.ExtensionManager;
 
-public interface ConnectorRepositoryInitializationContext {
+import java.io.IOException;
 
-    FlowManager getFlowManager();
+public interface ConnectorRequestReplicator {
 
-    ExtensionManager getExtensionManager();
+    ConnectorState getState(String connectorId) throws IOException;
 
-    NodeTypeProvider getNodeTypeProvider();
-
-    ConnectorRequestReplicator getRequestReplicator();
+    void setFlowManager(FlowManager flowManager);
 
 }

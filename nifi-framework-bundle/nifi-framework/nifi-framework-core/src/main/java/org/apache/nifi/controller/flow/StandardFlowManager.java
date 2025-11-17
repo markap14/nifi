@@ -863,6 +863,11 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
     }
 
     @Override
+    public ConnectorNode getConnector(final String id) {
+        return flowController.getConnectorRepository().getConnector(id);
+    }
+
+    @Override
     public ControllerServiceNode createControllerService(final String type, final String id, final BundleCoordinate bundleCoordinate, final Set<URL> additionalUrls, final boolean firstTimeAdded,
                                                          final boolean registerLogObserver, final String classloaderIsolationKey) {
         // make sure the first reference to LogRepository happens outside of a NarCloseable so that we use the framework's ClassLoader
