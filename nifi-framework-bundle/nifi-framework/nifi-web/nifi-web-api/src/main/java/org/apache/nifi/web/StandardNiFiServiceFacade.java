@@ -4111,6 +4111,7 @@ public class StandardNiFiServiceFacade implements NiFiServiceFacade {
                 case OUTPUT_PORT -> authorizableLookup.getOutputPort(sourceId);
                 case REMOTE_PROCESS_GROUP -> authorizableLookup.getRemoteProcessGroup(sourceId);
                 case PROCESS_GROUP -> authorizableLookup.getProcessGroup(sourceId).getAuthorizable();
+                case CONNECTOR -> authorizableLookup.getConnector(sourceId);
             };
         } catch (final ResourceNotFoundException e) {
             // if the underlying component is gone, disallow
