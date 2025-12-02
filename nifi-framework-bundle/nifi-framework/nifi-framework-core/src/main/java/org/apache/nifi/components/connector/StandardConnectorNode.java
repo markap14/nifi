@@ -45,6 +45,8 @@ import org.apache.nifi.nar.NarCloseable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.nifi.flow.VersionedConnectorValueReference;
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -154,7 +156,15 @@ public class StandardConnectorNode implements ConnectorNode {
             final List<PropertyGroupConfiguration> groupConfigurations = new ArrayList<>();
 
             for (final VersionedConnectorPropertyGroup propertyGroup : configStep.getPropertyGroups()) {
-                final PropertyGroupConfiguration groupConfiguration = new PropertyGroupConfiguration(propertyGroup.getName(), propertyGroup.getProperties());
+                final Map<String, ConnectorValueReference> convertedProperties = new HashMap<>();
+                if (propertyGroup.getProperties() != null) {
+                    for (final Map.Entry<String, VersionedConnectorValueReference> entry : propertyGroup.getProperties().entrySet()) {
+                        final VersionedConnectorValueReference versionedRef = entry.getValue();
+                        final ConnectorValueType valueType = ConnectorValueType.valueOf(versionedRef.getValueType());
+                        convertedProperties.put(entry.getKey(), new ConnectorValueReference(versionedRef.getValue(), valueType));
+                    }
+                }
+                final PropertyGroupConfiguration groupConfiguration = new PropertyGroupConfiguration(propertyGroup.getName(), convertedProperties);
                 groupConfigurations.add(groupConfiguration);
             }
 
@@ -556,7 +566,9 @@ public class StandardConnectorNode implements ConnectorNode {
     public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final List<PropertyGroupConfiguration> groupConfigurations) {
         final Map<String, String> properties = new HashMap<>();
         for (final PropertyGroupConfiguration groupConfiguration : groupConfigurations) {
-            properties.putAll(groupConfiguration.propertyValues());
+            for (final Map.Entry<String, ConnectorValueReference> entry : groupConfiguration.propertyValues().entrySet()) {
+                properties.put(entry.getKey(), entry.getValue() == null ? null : entry.getValue().value());
+            }
         }
 
         final List<ConfigVerificationResult> results = new ArrayList<>();

@@ -413,8 +413,10 @@ public class TestStandardConnectorNode {
         connectorNode.applyUpdate(scheduler);
 
         final List<ConfigurationStepConfiguration> expectedSteps = List.of(
-            new ConfigurationStepConfiguration("configurationStep1", List.of(new PropertyGroupConfiguration("propertyGroup1", Map.of("prop1", "value1")))),
-            new ConfigurationStepConfiguration("configurationStep2", List.of(new PropertyGroupConfiguration("propertyGroup2", Map.of("prop2", "value2"))))
+            new ConfigurationStepConfiguration("configurationStep1", List.of(new PropertyGroupConfiguration("propertyGroup1",
+                Map.of("prop1", new ConnectorValueReference("value1", ConnectorValueType.STRING_LITERAL))))),
+            new ConfigurationStepConfiguration("configurationStep2", List.of(new PropertyGroupConfiguration("propertyGroup2",
+                Map.of("prop2", new ConnectorValueReference("value2", ConnectorValueType.STRING_LITERAL)))))
         );
         final ConnectorConfiguration expectedConfiguration = new ConnectorConfiguration(expectedSteps);
         assertEquals(expectedConfiguration, connectorNode.getActiveFlowContext().getConfigurationContext().toConnectorConfiguration());
@@ -505,7 +507,11 @@ public class TestStandardConnectorNode {
     }
 
     private List<PropertyGroupConfiguration> createGroupConfig(final String groupName, final Map<String, String> properties) {
-        final PropertyGroupConfiguration propertyGroupConfiguration = new PropertyGroupConfiguration(groupName, properties);
+        final Map<String, ConnectorValueReference> valueReferences = new java.util.HashMap<>();
+        for (final Map.Entry<String, String> entry : properties.entrySet()) {
+            valueReferences.put(entry.getKey(), new ConnectorValueReference(entry.getValue(), ConnectorValueType.STRING_LITERAL));
+        }
+        final PropertyGroupConfiguration propertyGroupConfiguration = new PropertyGroupConfiguration(groupName, valueReferences);
         return List.of(propertyGroupConfiguration);
     }
 
@@ -514,18 +520,18 @@ public class TestStandardConnectorNode {
     }
 
     private ConnectorConfiguration createTestConfiguration(final String configurationStepName, final String propertyName, final String propertyValue) {
-        final Map<String, String> properties = Map.of(propertyName, propertyValue);
+        final Map<String, ConnectorValueReference> properties = Map.of(propertyName, new ConnectorValueReference(propertyValue, ConnectorValueType.STRING_LITERAL));
         final PropertyGroupConfiguration propertyGroupConfiguration = new PropertyGroupConfiguration("propertyGroup1", properties);
         final ConfigurationStepConfiguration configurationStepConfiguration = new ConfigurationStepConfiguration(configurationStepName, List.of(propertyGroupConfiguration));
         return new ConnectorConfiguration(List.of(configurationStepConfiguration));
     }
 
     private ConnectorConfiguration createTestConfigurationWithMultipleGroups() {
-        final Map<String, String> firstConfigurationStepProperties = Map.of("prop1", "value1");
+        final Map<String, ConnectorValueReference> firstConfigurationStepProperties = Map.of("prop1", new ConnectorValueReference("value1", ConnectorValueType.STRING_LITERAL));
         final PropertyGroupConfiguration firstPropertyGroupConfiguration = new PropertyGroupConfiguration("propertyGroup1", firstConfigurationStepProperties);
         final ConfigurationStepConfiguration firstConfigurationStepConfiguration = new ConfigurationStepConfiguration("configurationStep1", List.of(firstPropertyGroupConfiguration));
 
-        final Map<String, String> secondConfigurationStepProperties = Map.of("prop2", "value2");
+        final Map<String, ConnectorValueReference> secondConfigurationStepProperties = Map.of("prop2", new ConnectorValueReference("value2", ConnectorValueType.STRING_LITERAL));
         final PropertyGroupConfiguration secondPropertyGroupConfiguration = new PropertyGroupConfiguration("propertyGroup2", secondConfigurationStepProperties);
         final ConfigurationStepConfiguration secondConfigurationStepConfiguration = new ConfigurationStepConfiguration("configurationStep2", List.of(secondPropertyGroupConfiguration));
 

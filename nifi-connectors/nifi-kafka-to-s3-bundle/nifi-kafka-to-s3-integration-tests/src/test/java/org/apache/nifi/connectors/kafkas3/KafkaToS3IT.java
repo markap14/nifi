@@ -296,7 +296,7 @@ public class KafkaToS3IT {
             "Final plaintext record"
         );
 
-        final PropertyGroupConfiguration kafkaServerConfig = new PropertyGroupConfiguration("Kafka Server Settings", Map.of(
+        final PropertyGroupConfiguration kafkaServerConfig = PropertyGroupConfiguration.fromStringValues("Kafka Server Settings", Map.of(
             "Kafka Brokers", "localhost:9093",
             "Security Protocol", "SASL_PLAINTEXT",
             "SASL Mechanism", "PLAIN",
@@ -314,7 +314,7 @@ public class KafkaToS3IT {
         runner.configure("Kafka Connection", List.of(kafkaServerConfig));
 
         // Perform verification to ensure that valid topic configuration passes
-        final PropertyGroupConfiguration topic1Config = new PropertyGroupConfiguration("Kafka Topics Configuration", Map.of(
+        final PropertyGroupConfiguration topic1Config = PropertyGroupConfiguration.fromStringValues("Kafka Topics Configuration", Map.of(
             "Topic Names", "topic-1",
             "Consumer Group ID", "nifi-kafka-to-s3-testSuccessfulFlow",
             "Offset Reset", "earliest",
@@ -324,7 +324,7 @@ public class KafkaToS3IT {
         topic1VerificationResults.assertNoFailures();
 
         // Perform verification against a topic with invalid data for the selected data format
-        final PropertyGroupConfiguration importantTopicConfig = new PropertyGroupConfiguration("Kafka Topics Configuration", Map.of(
+        final PropertyGroupConfiguration importantTopicConfig = PropertyGroupConfiguration.fromStringValues("Kafka Topics Configuration", Map.of(
             "Topic Names", "an-important-topic",
             "Consumer Group ID", "nifi-kafka-to-s3-testSuccessfulFlow",
             "Offset Reset", "earliest",
@@ -357,7 +357,7 @@ public class KafkaToS3IT {
             {"page": 4, "words": "The end." }"""
         );
 
-        final PropertyGroupConfiguration kafkaServerConfig = new PropertyGroupConfiguration("Kafka Server Settings", Map.of(
+        final PropertyGroupConfiguration kafkaServerConfig = PropertyGroupConfiguration.fromStringValues("Kafka Server Settings", Map.of(
             "Kafka Brokers", "localhost:9093",
             "Security Protocol", "SASL_PLAINTEXT",
             "SASL Mechanism", "PLAIN",
@@ -365,25 +365,25 @@ public class KafkaToS3IT {
             "Password", SCRAM_PASSWORD
         ));
 
-        final PropertyGroupConfiguration kafkaTopicConfig = new PropertyGroupConfiguration("Kafka Topics Configuration", Map.of(
+        final PropertyGroupConfiguration kafkaTopicConfig = PropertyGroupConfiguration.fromStringValues("Kafka Topics Configuration", Map.of(
             "Topic Names", "story",
             "Consumer Group ID", "nifi-kafka-to-s3-testSuccessfulFlow",
             "Offset Reset", "earliest",
             "Kafka Data Format", "JSON"
         ));
 
-        final PropertyGroupConfiguration s3DestinationConfig = new PropertyGroupConfiguration("S3 Destination Configuration", Map.of(
+        final PropertyGroupConfiguration s3DestinationConfig = PropertyGroupConfiguration.fromStringValues("S3 Destination Configuration", Map.of(
             "S3 Region", S3_REGION,
             "S3 Data Format", "Avro",
             "S3 Bucket", bucketName,
             "S3 Endpoint Override URL", localStackContainer.getEndpoint().toString()
         ));
-        final PropertyGroupConfiguration s3CredentialsConfig = new PropertyGroupConfiguration("S3 Credentials", Map.of(
+        final PropertyGroupConfiguration s3CredentialsConfig = PropertyGroupConfiguration.fromStringValues("S3 Credentials", Map.of(
             "S3 Authentication Strategy", "Access Key ID and Secret Key",
             "S3 Access Key ID", localStackContainer.getAccessKey(),
             "S3 Secret Access Key", localStackContainer.getSecretKey()
         ));
-        final PropertyGroupConfiguration s3MergeConfig = new PropertyGroupConfiguration("Merge Configuration", Map.of(
+        final PropertyGroupConfiguration s3MergeConfig = PropertyGroupConfiguration.fromStringValues("Merge Configuration", Map.of(
             "Target Object Size", "1 MB",
             "Merge Latency", "1 sec"
         ));
@@ -450,7 +450,7 @@ public class KafkaToS3IT {
 
         produceAvroRecordsToTopic("avro-topic", schema, record1, record2);
 
-        final PropertyGroupConfiguration kafkaServerConfig = new PropertyGroupConfiguration("Kafka Server Settings", Map.of(
+        final PropertyGroupConfiguration kafkaServerConfig = PropertyGroupConfiguration.fromStringValues("Kafka Server Settings", Map.of(
             "Kafka Brokers", "localhost:9093",
             "Security Protocol", "SASL_PLAINTEXT",
             "SASL Mechanism", "PLAIN",
@@ -458,7 +458,7 @@ public class KafkaToS3IT {
             "Password", SCRAM_PASSWORD
         ));
 
-        final PropertyGroupConfiguration schemaRegistryConfig = new PropertyGroupConfiguration("Schema Registry Settings", Map.of(
+        final PropertyGroupConfiguration schemaRegistryConfig = PropertyGroupConfiguration.fromStringValues("Schema Registry Settings", Map.of(
             "Schema Registry URL", getSchemaRegistryUrl()
         ));
 
@@ -469,7 +469,7 @@ public class KafkaToS3IT {
 
         runner.configure("Kafka Connection", List.of(kafkaServerConfig, schemaRegistryConfig));
 
-        final PropertyGroupConfiguration avroTopicConfig = new PropertyGroupConfiguration("Kafka Topics Configuration", Map.of(
+        final PropertyGroupConfiguration avroTopicConfig = PropertyGroupConfiguration.fromStringValues("Kafka Topics Configuration", Map.of(
             "Topic Names", "avro-topic",
             "Consumer Group ID", "nifi-kafka-to-s3-testSchemaRegistryVerification",
             "Offset Reset", "earliest",
@@ -523,7 +523,7 @@ public class KafkaToS3IT {
 
         produceAvroRecordsToTopic("user-events", schema, record1, record2, record3);
 
-        final PropertyGroupConfiguration kafkaServerConfig = new PropertyGroupConfiguration("Kafka Server Settings", Map.of(
+        final PropertyGroupConfiguration kafkaServerConfig = PropertyGroupConfiguration.fromStringValues("Kafka Server Settings", Map.of(
             "Kafka Brokers", "localhost:9093",
             "Security Protocol", "SASL_PLAINTEXT",
             "SASL Mechanism", "PLAIN",
@@ -531,29 +531,29 @@ public class KafkaToS3IT {
             "Password", SCRAM_PASSWORD
         ));
 
-        final PropertyGroupConfiguration schemaRegistryConfig = new PropertyGroupConfiguration("Schema Registry Settings", Map.of(
+        final PropertyGroupConfiguration schemaRegistryConfig = PropertyGroupConfiguration.fromStringValues("Schema Registry Settings", Map.of(
             "Schema Registry URL", getSchemaRegistryUrl()
         ));
 
-        final PropertyGroupConfiguration kafkaTopicConfig = new PropertyGroupConfiguration("Kafka Topics Configuration", Map.of(
+        final PropertyGroupConfiguration kafkaTopicConfig = PropertyGroupConfiguration.fromStringValues("Kafka Topics Configuration", Map.of(
             "Topic Names", "user-events",
             "Consumer Group ID", "nifi-kafka-to-s3-testSchemaRegistry",
             "Offset Reset", "earliest",
             "Kafka Data Format", "Avro"
         ));
 
-        final PropertyGroupConfiguration s3DestinationConfig = new PropertyGroupConfiguration("S3 Destination Configuration", Map.of(
+        final PropertyGroupConfiguration s3DestinationConfig = PropertyGroupConfiguration.fromStringValues("S3 Destination Configuration", Map.of(
             "S3 Region", S3_REGION,
             "S3 Data Format", "Avro",
             "S3 Bucket", bucketName,
             "S3 Endpoint Override URL", localStackContainer.getEndpoint().toString()
         ));
-        final PropertyGroupConfiguration s3CredentialsConfig = new PropertyGroupConfiguration("S3 Credentials", Map.of(
+        final PropertyGroupConfiguration s3CredentialsConfig = PropertyGroupConfiguration.fromStringValues("S3 Credentials", Map.of(
             "S3 Authentication Strategy", "Access Key ID and Secret Key",
             "S3 Access Key ID", localStackContainer.getAccessKey(),
             "S3 Secret Access Key", localStackContainer.getSecretKey()
         ));
-        final PropertyGroupConfiguration s3MergeConfig = new PropertyGroupConfiguration("Merge Configuration", Map.of(
+        final PropertyGroupConfiguration s3MergeConfig = PropertyGroupConfiguration.fromStringValues("Merge Configuration", Map.of(
             "Target Object Size", "1 MB",
             "Merge Latency", "1 sec"
         ));
@@ -628,7 +628,7 @@ public class KafkaToS3IT {
 
         // Configure Connector to consume from JSON Kafka topic and write to S3 in JSON format, but with an invalid S3 endpoint.
         // This will cause the data to remain queued, since PutS3Object will fail to write the data.
-        final PropertyGroupConfiguration kafkaServerConfig = new PropertyGroupConfiguration("Kafka Server Settings", Map.of(
+        final PropertyGroupConfiguration kafkaServerConfig = PropertyGroupConfiguration.fromStringValues("Kafka Server Settings", Map.of(
             "Kafka Brokers", "localhost:9093",
             "Security Protocol", "SASL_PLAINTEXT",
             "SASL Mechanism", "PLAIN",
@@ -636,29 +636,29 @@ public class KafkaToS3IT {
             "Password", SCRAM_PASSWORD
         ));
 
-        final PropertyGroupConfiguration schemaRegistryConfig = new PropertyGroupConfiguration("Schema Registry Settings", Map.of(
+        final PropertyGroupConfiguration schemaRegistryConfig = PropertyGroupConfiguration.fromStringValues("Schema Registry Settings", Map.of(
             "Schema Registry URL", getSchemaRegistryUrl()
         ));
 
-        final PropertyGroupConfiguration jsonTopicConfig = new PropertyGroupConfiguration("Kafka Topics Configuration", Map.of(
+        final PropertyGroupConfiguration jsonTopicConfig = PropertyGroupConfiguration.fromStringValues("Kafka Topics Configuration", Map.of(
             "Topic Names", "json",
             "Consumer Group ID", "nifi-kafka-to-s3-testReconfiguration",
             "Offset Reset", "earliest",
             "Kafka Data Format", "JSON"
         ));
 
-        final PropertyGroupConfiguration s3InvalidDestinationConfig = new PropertyGroupConfiguration("S3 Destination Configuration", Map.of(
+        final PropertyGroupConfiguration s3InvalidDestinationConfig = PropertyGroupConfiguration.fromStringValues("S3 Destination Configuration", Map.of(
             "S3 Region", S3_REGION,
             "S3 Data Format", "JSON",
             "S3 Bucket", bucketName,
             "S3 Endpoint Override URL", "http://invalid-s3-endpoint:9999"
         ));
-        final PropertyGroupConfiguration s3CredentialsConfig = new PropertyGroupConfiguration("S3 Credentials", Map.of(
+        final PropertyGroupConfiguration s3CredentialsConfig = PropertyGroupConfiguration.fromStringValues("S3 Credentials", Map.of(
             "S3 Authentication Strategy", "Access Key ID and Secret Key",
             "S3 Access Key ID", localStackContainer.getAccessKey(),
             "S3 Secret Access Key", localStackContainer.getSecretKey()
         ));
-        final PropertyGroupConfiguration s3MergeConfig = new PropertyGroupConfiguration("Merge Configuration", Map.of(
+        final PropertyGroupConfiguration s3MergeConfig = PropertyGroupConfiguration.fromStringValues("Merge Configuration", Map.of(
             "Target Object Size", "1 MB",
             "Merge Latency", "1 sec"
         ));
@@ -679,7 +679,7 @@ public class KafkaToS3IT {
 
         // Apply configuration to specify the correct S3 endpoint. Keep S3 Data Format as JSON for now.
         // This will allow the Connector to write data to S3 and properly drain the data when we switch the S3 format from JSON to Avro.
-        final PropertyGroupConfiguration s3ValidDestinationJsonConfig = new PropertyGroupConfiguration("S3 Destination Configuration", Map.of(
+        final PropertyGroupConfiguration s3ValidDestinationJsonConfig = PropertyGroupConfiguration.fromStringValues("S3 Destination Configuration", Map.of(
             "S3 Region", S3_REGION,
             "S3 Data Format", "JSON",
             "S3 Bucket", bucketName,
@@ -696,7 +696,7 @@ public class KafkaToS3IT {
         assertEquals(List.of(), initialS3Objects);
 
         // Now change the S3 Data Format from JSON to Avro. This should trigger draining of the queued JSON data.
-        final PropertyGroupConfiguration s3ValidDestinationAvroConfig = new PropertyGroupConfiguration("S3 Destination Configuration", Map.of(
+        final PropertyGroupConfiguration s3ValidDestinationAvroConfig = PropertyGroupConfiguration.fromStringValues("S3 Destination Configuration", Map.of(
             "S3 Region", S3_REGION,
             "S3 Data Format", "Avro",
             "S3 Bucket", bucketName,
@@ -704,7 +704,7 @@ public class KafkaToS3IT {
         ));
 
         // Configure to consume from the Avro topic and change S3 format to Avro
-        final PropertyGroupConfiguration avroTopicConfig = new PropertyGroupConfiguration("Kafka Topics Configuration", Map.of(
+        final PropertyGroupConfiguration avroTopicConfig = PropertyGroupConfiguration.fromStringValues("Kafka Topics Configuration", Map.of(
             "Topic Names", "avro",
             "Consumer Group ID", "nifi-kafka-to-s3-testReconfiguration",
             "Offset Reset", "earliest",

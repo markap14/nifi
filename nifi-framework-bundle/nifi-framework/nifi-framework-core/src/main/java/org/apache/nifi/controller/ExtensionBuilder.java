@@ -534,7 +534,7 @@ public class ExtensionBuilder {
                        defaultValues.put(name, defaultValue);
                    }
 
-                   propertyGroupConfigurations.add(new PropertyGroupConfiguration(propertyGroup.getName(), defaultValues));
+                    propertyGroupConfigurations.add(PropertyGroupConfiguration.fromStringValues(propertyGroup.getName(), defaultValues));
                }
 
                flowContext.getConfigurationContext().setProperties(step.getName(), propertyGroupConfigurations);

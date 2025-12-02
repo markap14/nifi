@@ -63,6 +63,7 @@ import org.apache.nifi.flow.VersionedConfigurationStep;
 import org.apache.nifi.flow.VersionedConnection;
 import org.apache.nifi.flow.VersionedConnector;
 import org.apache.nifi.flow.VersionedConnectorPropertyGroup;
+import org.apache.nifi.flow.VersionedConnectorValueReference;
 import org.apache.nifi.flow.VersionedControllerService;
 import org.apache.nifi.flow.VersionedFlowAnalysisRule;
 import org.apache.nifi.flow.VersionedFlowCoordinates;
@@ -1067,12 +1068,22 @@ public class VersionedComponentFlowMapper {
             for (final PropertyGroupConfiguration groupConfiguration : stepConfiguration.propertyGroupConfigurations()) {
                 final VersionedConnectorPropertyGroup versionedGroup = new VersionedConnectorPropertyGroup();
                 versionedGroup.setName(groupConfiguration.groupName());
-                versionedGroup.setProperties(groupConfiguration.propertyValues());
+                versionedGroup.setProperties(mapPropertyValues(groupConfiguration.propertyValues()));
                 propertyGroups.add(versionedGroup);
             }
         }
 
         return configurationSteps;
+    }
+
+    private Map<String, VersionedConnectorValueReference> mapPropertyValues(final Map<String, org.apache.nifi.components.connector.ConnectorValueReference> propertyValues) {
+        final Map<String, VersionedConnectorValueReference> versionedProperties = new HashMap<>();
+        for (final Map.Entry<String, org.apache.nifi.components.connector.ConnectorValueReference> entry : propertyValues.entrySet()) {
+            final org.apache.nifi.components.connector.ConnectorValueReference valueReference = entry.getValue();
+            final VersionedConnectorValueReference versionedRef = new VersionedConnectorValueReference(valueReference.value(), valueReference.valueType().name());
+            versionedProperties.put(entry.getKey(), versionedRef);
+        }
+        return versionedProperties;
     }
 
     private org.apache.nifi.flow.ScheduledState mapConnectorState(final ConnectorState connectorState) {

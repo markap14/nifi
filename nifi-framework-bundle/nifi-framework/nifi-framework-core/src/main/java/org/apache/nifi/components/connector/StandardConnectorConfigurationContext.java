@@ -51,9 +51,9 @@ public class StandardConnectorConfigurationContext implements MutableConnectorCo
 
             String propertyValue = defaultValue;
             for (final PropertyGroupConfiguration groupConfig : groupConfigs) {
-                final String value = groupConfig.propertyValues().get(propertyName);
-                if (value != null) {
-                    propertyValue = value;
+                final ConnectorValueReference valueReference = groupConfig.propertyValues().get(propertyName);
+                if (valueReference != null) {
+                    propertyValue = valueReference.value();
                     break;
                 }
             }
@@ -79,7 +79,7 @@ public class StandardConnectorConfigurationContext implements MutableConnectorCo
                 final List<PropertyGroupConfiguration> createdGroupConfigs = new ArrayList<>();
 
                 for (final PropertyGroupConfiguration groupConfig : entry.getValue()) {
-                    final Map<String, String> mergedProperties = new HashMap<>(groupConfig.propertyValues());
+                    final Map<String, ConnectorValueReference> mergedProperties = new HashMap<>(groupConfig.propertyValues());
 
                     if (Objects.equals(existingStepName, stepName)) {
                         for (final Map.Entry<String, String> overrideEntry : propertyOverrides.entrySet()) {
@@ -88,7 +88,7 @@ public class StandardConnectorConfigurationContext implements MutableConnectorCo
                                 if (overrideEntry.getValue() == null) {
                                     mergedProperties.remove(overrideEntry.getKey());
                                 } else {
-                                    mergedProperties.put(overrideEntry.getKey(), overrideEntry.getValue());
+                                    mergedProperties.put(overrideEntry.getKey(), new ConnectorValueReference(overrideEntry.getValue(), ConnectorValueType.STRING_LITERAL));
                                 }
                             }
                         }
@@ -142,7 +142,7 @@ public class StandardConnectorConfigurationContext implements MutableConnectorCo
         final List<PropertyGroupConfiguration> copiedConfigs = new ArrayList<>();
 
         for (final PropertyGroupConfiguration groupConfig : groupConfigs) {
-            final Map<String, String> copiedProperties = new HashMap<>(groupConfig.propertyValues());
+            final Map<String, ConnectorValueReference> copiedProperties = new HashMap<>(groupConfig.propertyValues());
             copiedConfigs.add(new PropertyGroupConfiguration(groupConfig.groupName(), copiedProperties));
         }
 
@@ -201,7 +201,7 @@ public class StandardConnectorConfigurationContext implements MutableConnectorCo
             return existingConfiguration;
         }
 
-        final Map<String, String> mergedProperties = new HashMap<>(existingConfiguration.propertyValues());
+        final Map<String, ConnectorValueReference> mergedProperties = new HashMap<>(existingConfiguration.propertyValues());
         mergedProperties.putAll(newConfiguration.propertyValues());
         return new PropertyGroupConfiguration(existingConfiguration.groupName(), mergedProperties);
     }
@@ -216,7 +216,7 @@ public class StandardConnectorConfigurationContext implements MutableConnectorCo
 
                 final List<PropertyGroupConfiguration> clonedGroupConfigs = new ArrayList<>();
                 for (final PropertyGroupConfiguration groupConfig : groupConfigurations) {
-                    final Map<String, String> clonedProperties = new HashMap<>(groupConfig.propertyValues());
+                    final Map<String, ConnectorValueReference> clonedProperties = new HashMap<>(groupConfig.propertyValues());
                     clonedGroupConfigs.add(new PropertyGroupConfiguration(groupConfig.groupName(), clonedProperties));
                 }
 

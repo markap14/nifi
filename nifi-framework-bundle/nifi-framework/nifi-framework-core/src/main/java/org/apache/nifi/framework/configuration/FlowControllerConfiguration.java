@@ -146,7 +146,7 @@ public class FlowControllerConfiguration {
         this.bulletinRepository = bulletinRepository;
     }
 
-    @Autowired
+    @Autowired(required = false)
     public void setConnectorRequestReplicator(final ConnectorRequestReplicator connectorRequestReplicator) {
         this.connectorRequestReplicator = connectorRequestReplicator;
     }

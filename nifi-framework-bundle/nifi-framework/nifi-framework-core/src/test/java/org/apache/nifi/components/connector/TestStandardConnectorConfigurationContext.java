@@ -35,13 +35,22 @@ public class TestStandardConnectorConfigurationContext {
         context = new StandardConnectorConfigurationContext();
     }
 
+    private Map<String, ConnectorValueReference> toValueReferences(final Map<String, String> stringProperties) {
+        final Map<String, ConnectorValueReference> valueReferences = new HashMap<>();
+        for (final Map.Entry<String, String> entry : stringProperties.entrySet()) {
+            final String value = entry.getValue();
+            valueReferences.put(entry.getKey(), value == null ? null : new ConnectorValueReference(value, ConnectorValueType.STRING_LITERAL));
+        }
+        return valueReferences;
+    }
+
     @Test
     public void testSetPropertiesWithNoExistingConfigurations() {
         final Map<String, String> properties = new HashMap<>();
         properties.put("key1", "value1");
         properties.put("key2", "value2");
 
-        final PropertyGroupConfiguration group = new PropertyGroupConfiguration("group1", properties);
+        final PropertyGroupConfiguration group = new PropertyGroupConfiguration("group1", toValueReferences(properties));
         context.setProperties("step1", List.of(group));
 
         assertEquals("value1", context.getProperty("step1", "key1").getValue());
@@ -52,12 +61,12 @@ public class TestStandardConnectorConfigurationContext {
     public void testSetPropertiesAddsNewPropertyGroup() {
         final Map<String, String> initialProperties = new HashMap<>();
         initialProperties.put("key1", "value1");
-        final PropertyGroupConfiguration initialGroup = new PropertyGroupConfiguration("group1", initialProperties);
+        final PropertyGroupConfiguration initialGroup = new PropertyGroupConfiguration("group1", toValueReferences(initialProperties));
         context.setProperties("step1", List.of(initialGroup));
 
         final Map<String, String> newProperties = new HashMap<>();
         newProperties.put("key3", "value3");
-        final PropertyGroupConfiguration newGroup = new PropertyGroupConfiguration("group2", newProperties);
+        final PropertyGroupConfiguration newGroup = new PropertyGroupConfiguration("group2", toValueReferences(newProperties));
         context.setProperties("step1", List.of(newGroup));
 
         assertEquals("value1", context.getProperty("step1", "key1").getValue());
@@ -69,13 +78,13 @@ public class TestStandardConnectorConfigurationContext {
         final Map<String, String> initialProperties = new HashMap<>();
         initialProperties.put("key1", "value1");
         initialProperties.put("key2", "value2");
-        final PropertyGroupConfiguration initialGroup = new PropertyGroupConfiguration("group1", initialProperties);
+        final PropertyGroupConfiguration initialGroup = new PropertyGroupConfiguration("group1", toValueReferences(initialProperties));
         context.setProperties("step1", List.of(initialGroup));
 
         final Map<String, String> updatedProperties = new HashMap<>();
         updatedProperties.put("key2", "updatedValue2");
         updatedProperties.put("key3", "value3");
-        final PropertyGroupConfiguration updatedGroup = new PropertyGroupConfiguration("group1", updatedProperties);
+        final PropertyGroupConfiguration updatedGroup = new PropertyGroupConfiguration("group1", toValueReferences(updatedProperties));
         context.setProperties("step1", List.of(updatedGroup));
 
         assertEquals("value1", context.getProperty("step1", "key1").getValue());
@@ -89,14 +98,14 @@ public class TestStandardConnectorConfigurationContext {
         initialProperties.put("key1", "value1");
         initialProperties.put("key2", "value2");
         initialProperties.put("key3", "value3");
-        final PropertyGroupConfiguration initialGroup = new PropertyGroupConfiguration("group1", initialProperties);
+        final PropertyGroupConfiguration initialGroup = new PropertyGroupConfiguration("group1", toValueReferences(initialProperties));
         context.setProperties("step1", List.of(initialGroup));
 
         assertEquals("value2", context.getProperty("step1", "key2").getValue());
 
         final Map<String, String> updatedProperties = new HashMap<>();
         updatedProperties.put("key2", null);
-        final PropertyGroupConfiguration updatedGroup = new PropertyGroupConfiguration("group1", updatedProperties);
+        final PropertyGroupConfiguration updatedGroup = new PropertyGroupConfiguration("group1", toValueReferences(updatedProperties));
         context.setProperties("step1", List.of(updatedGroup));
 
         assertEquals("value1", context.getProperty("step1", "key1").getValue());
@@ -110,12 +119,12 @@ public class TestStandardConnectorConfigurationContext {
         initialProperties.put("key1", "value1");
         initialProperties.put("key2", "value2");
         initialProperties.put("key3", "value3");
-        final PropertyGroupConfiguration initialGroup = new PropertyGroupConfiguration("group1", initialProperties);
+        final PropertyGroupConfiguration initialGroup = new PropertyGroupConfiguration("group1", toValueReferences(initialProperties));
         context.setProperties("step1", List.of(initialGroup));
 
         final Map<String, String> updatedProperties = new HashMap<>();
         updatedProperties.put("key2", "updatedValue2");
-        final PropertyGroupConfiguration updatedGroup = new PropertyGroupConfiguration("group1", updatedProperties);
+        final PropertyGroupConfiguration updatedGroup = new PropertyGroupConfiguration("group1", toValueReferences(updatedProperties));
         context.setProperties("step1", List.of(updatedGroup));
 
         assertEquals("value1", context.getProperty("step1", "key1").getValue());
@@ -127,17 +136,17 @@ public class TestStandardConnectorConfigurationContext {
     public void testSetPropertiesPreservesUnmodifiedGroups() {
         final Map<String, String> group1Properties = new HashMap<>();
         group1Properties.put("key1", "value1");
-        final PropertyGroupConfiguration group1 = new PropertyGroupConfiguration("group1", group1Properties);
+        final PropertyGroupConfiguration group1 = new PropertyGroupConfiguration("group1", toValueReferences(group1Properties));
 
         final Map<String, String> group2Properties = new HashMap<>();
         group2Properties.put("key2", "value2");
-        final PropertyGroupConfiguration group2 = new PropertyGroupConfiguration("group2", group2Properties);
+        final PropertyGroupConfiguration group2 = new PropertyGroupConfiguration("group2", toValueReferences(group2Properties));
 
         context.setProperties("step1", List.of(group1, group2));
 
         final Map<String, String> group3Properties = new HashMap<>();
         group3Properties.put("key3", "value3");
-        final PropertyGroupConfiguration group3 = new PropertyGroupConfiguration("group3", group3Properties);
+        final PropertyGroupConfiguration group3 = new PropertyGroupConfiguration("group3", toValueReferences(group3Properties));
 
         context.setProperties("step1", List.of(group3));
 
@@ -151,22 +160,22 @@ public class TestStandardConnectorConfigurationContext {
         final Map<String, String> group1Properties = new HashMap<>();
         group1Properties.put("key1", "value1");
         group1Properties.put("key2", "value2");
-        final PropertyGroupConfiguration group1 = new PropertyGroupConfiguration("group1", group1Properties);
+        final PropertyGroupConfiguration group1 = new PropertyGroupConfiguration("group1", toValueReferences(group1Properties));
 
         final Map<String, String> group2Properties = new HashMap<>();
         group2Properties.put("key3", "value3");
-        final PropertyGroupConfiguration group2 = new PropertyGroupConfiguration("group2", group2Properties);
+        final PropertyGroupConfiguration group2 = new PropertyGroupConfiguration("group2", toValueReferences(group2Properties));
 
         context.setProperties("step1", List.of(group1, group2));
 
         final Map<String, String> updatedGroup1Properties = new HashMap<>();
         updatedGroup1Properties.put("key2", "updatedValue2");
         updatedGroup1Properties.put("key4", "value4");
-        final PropertyGroupConfiguration updatedGroup1 = new PropertyGroupConfiguration("group1", updatedGroup1Properties);
+        final PropertyGroupConfiguration updatedGroup1 = new PropertyGroupConfiguration("group1", toValueReferences(updatedGroup1Properties));
 
         final Map<String, String> group3Properties = new HashMap<>();
         group3Properties.put("key5", "value5");
-        final PropertyGroupConfiguration group3 = new PropertyGroupConfiguration("group3", group3Properties);
+        final PropertyGroupConfiguration group3 = new PropertyGroupConfiguration("group3", toValueReferences(group3Properties));
 
         context.setProperties("step1", List.of(updatedGroup1, group3));
 
@@ -181,12 +190,12 @@ public class TestStandardConnectorConfigurationContext {
     public void testSetPropertiesForDifferentSteps() {
         final Map<String, String> step1Properties = new HashMap<>();
         step1Properties.put("key1", "value1");
-        final PropertyGroupConfiguration step1Group = new PropertyGroupConfiguration("group1", step1Properties);
+        final PropertyGroupConfiguration step1Group = new PropertyGroupConfiguration("group1", toValueReferences(step1Properties));
         context.setProperties("step1", List.of(step1Group));
 
         final Map<String, String> step2Properties = new HashMap<>();
         step2Properties.put("key2", "value2");
-        final PropertyGroupConfiguration step2Group = new PropertyGroupConfiguration("group1", step2Properties);
+        final PropertyGroupConfiguration step2Group = new PropertyGroupConfiguration("group1", toValueReferences(step2Properties));
         context.setProperties("step2", List.of(step2Group));
 
         assertEquals("value1", context.getProperty("step1", "key1").getValue());
@@ -205,7 +214,7 @@ public class TestStandardConnectorConfigurationContext {
     public void testGetPropertyReturnsEmptyForNonExistentProperty() {
         final Map<String, String> properties = new HashMap<>();
         properties.put("key1", "value1");
-        final PropertyGroupConfiguration group = new PropertyGroupConfiguration("group1", properties);
+        final PropertyGroupConfiguration group = new PropertyGroupConfiguration("group1", toValueReferences(properties));
         context.setProperties("step1", List.of(group));
 
         final ConnectorPropertyValue propertyValue = context.getProperty("step1", "nonExistentProperty");
@@ -218,16 +227,16 @@ public class TestStandardConnectorConfigurationContext {
         group1InitialProps.put("a", "1");
         group1InitialProps.put("b", "2");
         group1InitialProps.put("c", "3");
-        final PropertyGroupConfiguration group1Initial = new PropertyGroupConfiguration("group1", group1InitialProps);
+        final PropertyGroupConfiguration group1Initial = new PropertyGroupConfiguration("group1", toValueReferences(group1InitialProps));
 
         final Map<String, String> group2InitialProps = new HashMap<>();
         group2InitialProps.put("d", "4");
         group2InitialProps.put("e", "5");
-        final PropertyGroupConfiguration group2Initial = new PropertyGroupConfiguration("group2", group2InitialProps);
+        final PropertyGroupConfiguration group2Initial = new PropertyGroupConfiguration("group2", toValueReferences(group2InitialProps));
 
         final Map<String, String> group3InitialProps = new HashMap<>();
         group3InitialProps.put("f", "6");
-        final PropertyGroupConfiguration group3Initial = new PropertyGroupConfiguration("group3", group3InitialProps);
+        final PropertyGroupConfiguration group3Initial = new PropertyGroupConfiguration("group3", toValueReferences(group3InitialProps));
 
         context.setProperties("step1", List.of(group1Initial, group2Initial, group3Initial));
 
@@ -235,11 +244,11 @@ public class TestStandardConnectorConfigurationContext {
         group1UpdateProps.put("b", null);
         group1UpdateProps.put("c", "30");
         group1UpdateProps.put("g", "7");
-        final PropertyGroupConfiguration group1Update = new PropertyGroupConfiguration("group1", group1UpdateProps);
+        final PropertyGroupConfiguration group1Update = new PropertyGroupConfiguration("group1", toValueReferences(group1UpdateProps));
 
         final Map<String, String> group4Props = new HashMap<>();
         group4Props.put("h", "8");
-        final PropertyGroupConfiguration group4 = new PropertyGroupConfiguration("group4", group4Props);
+        final PropertyGroupConfiguration group4 = new PropertyGroupConfiguration("group4", toValueReferences(group4Props));
 
         context.setProperties("step1", List.of(group1Update, group4));
 

@@ -295,7 +295,7 @@ public class StandardConnectorNodeIT {
         assertEquals("Hello", textParameter.getValue());
 
         // Set the value of the 'Text' property to Hi. This should result in the parameter context being updated.
-        final Map<String, String> sourceProperties = Map.of("Text", "Hi.");
+        final Map<String, ConnectorValueReference> sourceProperties = Map.of("Text", new ConnectorValueReference("Hi.", ConnectorValueType.STRING_LITERAL));
         final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration(null, sourceProperties);
         final ConfigurationStepConfiguration sourceConfigurationStepConfiguration = new ConfigurationStepConfiguration("Text Configuration", List.of(sourcePropertyGroupConfiguration));
         final ConnectorConfiguration connectorConfiguration = new ConnectorConfiguration(List.of(sourceConfigurationStepConfiguration));
@@ -434,7 +434,7 @@ public class StandardConnectorNodeIT {
         assertEquals(ValidationStatus.VALID, initialValidationState.getStatus());
         assertEquals(List.of(), initialValidationState.getValidationErrors());
 
-        final Map<String, String> sourceProperties = Map.of("Sleep Duration", "Hi.");
+        final Map<String, ConnectorValueReference> sourceProperties = Map.of("Sleep Duration", new ConnectorValueReference("Hi.", ConnectorValueType.STRING_LITERAL));
         final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration(null, sourceProperties);
         final ConfigurationStepConfiguration sourceConfigurationStepConfiguration = new ConfigurationStepConfiguration("Text Configuration", List.of(sourcePropertyGroupConfiguration));
         final ConnectorConfiguration connectorConfiguration = new ConnectorConfiguration(List.of(sourceConfigurationStepConfiguration));
@@ -508,17 +508,21 @@ public class StandardConnectorNodeIT {
 
     private ConnectorConfiguration createConnectorConfiguration(final String sourceText, final int numberOfCopies, final boolean logContents, final boolean countFlowFiles) {
         // Source configuration step
-        final Map<String, String> sourceProperties = Map.of("Source Text", sourceText, "Count FlowFiles", Boolean.toString(countFlowFiles));
+        final Map<String, ConnectorValueReference> sourceProperties = Map.of(
+            "Source Text", new ConnectorValueReference(sourceText, ConnectorValueType.STRING_LITERAL),
+            "Count FlowFiles", new ConnectorValueReference(Boolean.toString(countFlowFiles), ConnectorValueType.STRING_LITERAL));
         final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration(null, sourceProperties);
         final ConfigurationStepConfiguration sourceConfigurationStepConfiguration = new ConfigurationStepConfiguration("Source", List.of(sourcePropertyGroupConfiguration));
 
         // Duplication configuration step
-        final Map<String, String> duplicationProperties = Map.of("Number of Copies", Integer.toString(numberOfCopies));
+        final Map<String, ConnectorValueReference> duplicationProperties = Map.of(
+            "Number of Copies", new ConnectorValueReference(Integer.toString(numberOfCopies), ConnectorValueType.STRING_LITERAL));
         final PropertyGroupConfiguration duplicationPropertyGroupConfiguration = new PropertyGroupConfiguration(null, duplicationProperties);
         final ConfigurationStepConfiguration duplicationConfigurationStepConfiguration = new ConfigurationStepConfiguration("Duplication", List.of(duplicationPropertyGroupConfiguration));
 
         // Destination configuration step
-        final Map<String, String> destinationProperties = Map.of("Log FlowFile Contents", Boolean.toString(logContents));
+        final Map<String, ConnectorValueReference> destinationProperties = Map.of(
+            "Log FlowFile Contents", new ConnectorValueReference(Boolean.toString(logContents), ConnectorValueType.STRING_LITERAL));
         final PropertyGroupConfiguration destinationPropertyGroupConfiguration = new PropertyGroupConfiguration(null, destinationProperties);
         final ConfigurationStepConfiguration destinationConfigurationStepConfiguration = new ConfigurationStepConfiguration("Destination", List.of(destinationPropertyGroupConfiguration));
 
@@ -527,7 +531,8 @@ public class StandardConnectorNodeIT {
 
     private ConnectorConfiguration createFileConfiguration(final String filename) {
         // File configuration step
-        final Map<String, String> fileProperties = Map.of("File Path", filename);
+        final Map<String, ConnectorValueReference> fileProperties = Map.of(
+            "File Path", new ConnectorValueReference(filename, ConnectorValueType.STRING_LITERAL));
         final PropertyGroupConfiguration filePropertyGroupConfiguration = new PropertyGroupConfiguration("", fileProperties);
         final ConfigurationStepConfiguration fileConfigurationStepConfiguration = new ConfigurationStepConfiguration("File", List.of(filePropertyGroupConfiguration));
 

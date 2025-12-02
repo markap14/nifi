@@ -28,6 +28,7 @@ import org.apache.nifi.cluster.protocol.DataFlow;
 import org.apache.nifi.cluster.protocol.StandardDataFlow;
 import org.apache.nifi.components.connector.ConfigurationStepConfiguration;
 import org.apache.nifi.components.connector.ConnectorConfiguration;
+import org.apache.nifi.components.connector.ConnectorValueReference;
 import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.components.connector.ConnectorRepository;
 import org.apache.nifi.components.connector.FlowUpdateException;
@@ -64,6 +65,7 @@ import org.apache.nifi.flow.VersionedComponent;
 import org.apache.nifi.flow.VersionedConfigurationStep;
 import org.apache.nifi.flow.VersionedConnector;
 import org.apache.nifi.flow.VersionedConnectorPropertyGroup;
+import org.apache.nifi.flow.VersionedConnectorValueReference;
 import org.apache.nifi.flow.VersionedControllerService;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.flow.VersionedFlowAnalysisRule;
@@ -1113,8 +1115,8 @@ public class VersionedFlowSynchronizer implements FlowSynchronizer {
     }
 
     private boolean isPropertyGroupUpdated(final PropertyGroupConfiguration existingGroup, final VersionedConnectorPropertyGroup versionedGroup) {
-        final Map<String, String> existingProperties = existingGroup.propertyValues();
-        final Map<String, String> versionedProperties = versionedGroup.getProperties();
+        final Map<String, ConnectorValueReference> existingProperties = existingGroup.propertyValues();
+        final Map<String, VersionedConnectorValueReference> versionedProperties = versionedGroup.getProperties();
 
         if (versionedProperties == null || versionedProperties.isEmpty()) {
             return existingProperties != null && !existingProperties.isEmpty();
@@ -1124,13 +1126,29 @@ public class VersionedFlowSynchronizer implements FlowSynchronizer {
             return true;
         }
 
-        for (final Map.Entry<String, String> versionedEntry : versionedProperties.entrySet()) {
+        for (final Map.Entry<String, VersionedConnectorValueReference> versionedEntry : versionedProperties.entrySet()) {
             final String propertyName = versionedEntry.getKey();
-            final String versionedValue = versionedEntry.getValue();
-            final String existingValue = existingProperties.get(propertyName);
+            final VersionedConnectorValueReference versionedRef = versionedEntry.getValue();
+            final ConnectorValueReference existingRef = existingProperties.get(propertyName);
 
-            if (!Objects.equals(existingValue, versionedValue)) {
+            if (existingRef == null && versionedRef != null) {
                 return true;
+            }
+            if (existingRef != null && versionedRef == null) {
+                return true;
+            }
+            if (existingRef != null) {
+                final String existingValue = existingRef.value();
+                final String versionedValue = versionedRef.getValue();
+                if (!Objects.equals(existingValue, versionedValue)) {
+                    return true;
+                }
+
+                final String existingValueType = existingRef.valueType().name();
+                final String versionedValueType = versionedRef.getValueType();
+                if (!Objects.equals(existingValueType, versionedValueType)) {
+                    return true;
+                }
             }
         }
 
