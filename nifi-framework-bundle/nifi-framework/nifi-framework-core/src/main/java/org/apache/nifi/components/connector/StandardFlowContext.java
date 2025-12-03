@@ -21,6 +21,7 @@ import org.apache.nifi.asset.AssetManager;
 import org.apache.nifi.components.connector.components.FlowContextType;
 import org.apache.nifi.components.connector.components.ParameterContextFacade;
 import org.apache.nifi.components.connector.components.ProcessGroupFacade;
+import org.apache.nifi.flow.Bundle;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.flow.VersionedProcessGroup;
 import org.apache.nifi.groups.ProcessGroup;
@@ -33,6 +34,7 @@ public class StandardFlowContext implements FrameworkFlowContext {
     private final ParameterContextFacadeFactory parameterContextFacadeFactory;
     private final ComponentLog connectorLog;
     private final FlowContextType flowContextType;
+    private final Bundle bundle;
 
     private volatile ProcessGroupFacade rootGroup;
     private volatile ParameterContextFacade parameterContext;
@@ -40,7 +42,8 @@ public class StandardFlowContext implements FrameworkFlowContext {
 
     public StandardFlowContext(final ProcessGroup managedProcessGroup, final MutableConnectorConfigurationContext configurationContext,
                 final ProcessGroupFacadeFactory groupFacadeFactory, final ParameterContextFacadeFactory parameterContextFacadeFactory,
-                final ComponentLog connectorLog, final FlowContextType flowContextType) {
+                final ComponentLog connectorLog, final FlowContextType flowContextType,
+                final Bundle bundle) {
 
         this.managedProcessGroup = managedProcessGroup;
         this.groupFacadeFactory = groupFacadeFactory;
@@ -48,6 +51,7 @@ public class StandardFlowContext implements FrameworkFlowContext {
         this.connectorLog = connectorLog;
         this.configurationContext = configurationContext;
         this.flowContextType = flowContextType;
+        this.bundle = bundle;
 
         this.rootGroup = groupFacadeFactory.create(managedProcessGroup, connectorLog);
         this.parameterContext = parameterContextFacadeFactory.create(managedProcessGroup);
@@ -98,6 +102,10 @@ public class StandardFlowContext implements FrameworkFlowContext {
     }
 
 
+    @Override
+    public Bundle getBundle() {
+        return bundle;
+    }
 
     @Override
     public FlowContextType getType() {

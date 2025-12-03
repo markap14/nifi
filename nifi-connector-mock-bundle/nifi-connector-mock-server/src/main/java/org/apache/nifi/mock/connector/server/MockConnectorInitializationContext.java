@@ -38,8 +38,6 @@ public class MockConnectorInitializationContext implements ConnectorInitializati
     private final String name;
     private final ComponentLog componentLog;
     private final SecretsManager secretsManager;
-    private final Bundle configuredBundle;
-    private final Bundle activeBundle;
     private final AssetManager assetManager;
 
     private final MockExtensionMapper mockExtensionMapper;
@@ -49,8 +47,6 @@ public class MockConnectorInitializationContext implements ConnectorInitializati
         this.name = builder.name;
         this.componentLog = builder.componentLog;
         this.secretsManager = builder.secretsManager;
-        this.configuredBundle = builder.configuredBundle;
-        this.activeBundle = builder.activeBundle;
         this.assetManager = builder.assetManager;
         this.mockExtensionMapper = builder.mockExtensionMapper;
     }
@@ -112,16 +108,6 @@ public class MockConnectorInitializationContext implements ConnectorInitializati
         }
     }
 
-    @Override
-    public Bundle getConfiguredBundle() {
-        return configuredBundle;
-    }
-
-    @Override
-    public Bundle getBundle() {
-        return activeBundle;
-    }
-
 
     public static class Builder implements ConnectorInitializationContextBuilder {
         private final MockExtensionMapper mockExtensionMapper;
@@ -129,8 +115,6 @@ public class MockConnectorInitializationContext implements ConnectorInitializati
         private String name;
         private ComponentLog componentLog;
         private SecretsManager secretsManager;
-        private Bundle configuredBundle;
-        private Bundle activeBundle;
         private AssetManager assetManager;
 
         public Builder(final MockExtensionMapper mockExtensionMapper) {
@@ -154,16 +138,6 @@ public class MockConnectorInitializationContext implements ConnectorInitializati
 
         public Builder secretsManager(final SecretsManager secretsManager) {
             this.secretsManager = secretsManager;
-            return this;
-        }
-
-        public Builder configuredBundle(final Bundle configuredBundle) {
-            this.configuredBundle = configuredBundle;
-            return this;
-        }
-
-        public Builder activeBundle(final Bundle activeBundle) {
-            this.activeBundle = activeBundle;
             return this;
         }
 

@@ -18,7 +18,6 @@
 package org.apache.nifi.components.connector;
 
 import org.apache.nifi.asset.AssetManager;
-import org.apache.nifi.flow.Bundle;
 import org.apache.nifi.logging.ComponentLog;
 
 public interface ConnectorInitializationContextBuilder {
@@ -32,10 +31,6 @@ public interface ConnectorInitializationContextBuilder {
     ConnectorInitializationContextBuilder assetManager(AssetManager assetManager);
 
     ConnectorInitializationContextBuilder secretsManager(SecretsManager secretsManager);
-
-    ConnectorInitializationContextBuilder configuredBundle(Bundle configuredBundle);
-
-    ConnectorInitializationContextBuilder activeBundle(Bundle activeBundle);
 
     ConnectorInitializationContext build();
 }

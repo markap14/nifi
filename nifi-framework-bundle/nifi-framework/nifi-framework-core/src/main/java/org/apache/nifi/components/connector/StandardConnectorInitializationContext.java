@@ -29,8 +29,6 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
     private final String name;
     private final ComponentLog componentLog;
     private final SecretsManager secretsManager;
-    private final Bundle configuredBundle;
-    private final Bundle activeBundle;
     private final AssetManager assetManager;
 
 
@@ -39,8 +37,6 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
         this.name = builder.name;
         this.componentLog = builder.componentLog;
         this.secretsManager = builder.secretsManager;
-        this.configuredBundle = builder.configuredBundle;
-        this.activeBundle = builder.activeBundle;
         this.assetManager = builder.assetManager;
     }
 
@@ -66,16 +62,6 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
     }
 
     @Override
-    public Bundle getConfiguredBundle() {
-        return configuredBundle;
-    }
-
-    @Override
-    public Bundle getBundle() {
-        return activeBundle;
-    }
-
-    @Override
     public void updateFlow(final FlowContext flowContext, final VersionedExternalFlow versionedExternalFlow) throws FlowUpdateException {
         if (!(flowContext instanceof final FrameworkFlowContext frameworkFlowContext)) {
             throw new IllegalArgumentException("FlowContext is not an instance provided by the framework");
@@ -98,8 +84,6 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
         private String name;
         private ComponentLog componentLog;
         private SecretsManager secretsManager;
-        private Bundle configuredBundle;
-        private Bundle activeBundle;
         private AssetManager assetManager;
 
         public Builder identifier(final String identifier) {
@@ -124,16 +108,6 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
 
         public Builder assetManager(final AssetManager assetManager) {
             this.assetManager = assetManager;
-            return this;
-        }
-
-        public Builder configuredBundle(final Bundle configuredBundle) {
-            this.configuredBundle = configuredBundle;
-            return this;
-        }
-
-        public Builder activeBundle(final Bundle activeBundle) {
-            this.activeBundle = activeBundle;
             return this;
         }
 

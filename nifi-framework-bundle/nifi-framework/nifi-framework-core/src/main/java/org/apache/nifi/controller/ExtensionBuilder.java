@@ -504,7 +504,6 @@ public class ExtensionBuilder {
            flowController,
            connectorDetails,
            componentType,
-           bundleCoordinate,
            activeConfigurationContext,
            connectorStateTransition,
            flowContextFactory
@@ -544,7 +543,6 @@ public class ExtensionBuilder {
 
    private ConnectorInitializationContext createConnectorInitializationContext(final ProcessGroup managedProcessGroup, final ComponentLog componentLog) {
 
-       final org.apache.nifi.flow.Bundle bundle = new org.apache.nifi.flow.Bundle(bundleCoordinate.getGroup(), bundleCoordinate.getId(), bundleCoordinate.getVersion());
        final String name = type.contains(".") ? StringUtils.substringAfterLast(type, ".") : type;
        final SecretsManager secretsManager = null;
 
@@ -553,8 +551,6 @@ public class ExtensionBuilder {
            .name(name)
            .componentLog(componentLog)
            .secretsManager(secretsManager)
-           .configuredBundle(bundle)
-           .activeBundle(bundle)
            .assetManager(flowController.getAssetManager())
            .build();
    }

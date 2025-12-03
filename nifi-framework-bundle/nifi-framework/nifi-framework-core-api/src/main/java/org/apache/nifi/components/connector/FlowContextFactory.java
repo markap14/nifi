@@ -17,10 +17,11 @@
 
 package org.apache.nifi.components.connector;
 
+import org.apache.nifi.flow.Bundle;
 import org.apache.nifi.logging.ComponentLog;
 
 public interface FlowContextFactory {
-    FrameworkFlowContext createActiveFlowContext(String connectorId, ComponentLog connectorLogger);
+    FrameworkFlowContext createActiveFlowContext(String connectorId, ComponentLog connectorLogger, Bundle bundle);
 
-    FrameworkFlowContext createWorkingFlowContext(String connectorId, ComponentLog connectorLogger, MutableConnectorConfigurationContext currentConfiguration);
+    FrameworkFlowContext createWorkingFlowContext(String connectorId, ComponentLog connectorLogger, MutableConnectorConfigurationContext currentConfiguration, Bundle bundle);
 }

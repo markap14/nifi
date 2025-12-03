@@ -27,6 +27,7 @@ import org.apache.nifi.components.validation.ValidationState;
 import org.apache.nifi.components.validation.ValidationStatus;
 import org.apache.nifi.connectable.FlowFileTransferCounts;
 import org.apache.nifi.engine.FlowEngine;
+import org.apache.nifi.flow.Bundle;
 import org.apache.nifi.flow.VersionedConfigurationStep;
 import org.apache.nifi.logging.ComponentLog;
 
@@ -204,8 +205,9 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
     /**
      * Inherits the given flow configuration into this Connector's active flow configuration.
      * @param flowConfiguration the flow configuration to inherit
+     * @param flowContextBundle the bundle associated with the provided configuration
      * @throws FlowUpdateException if unable to inherit the given flow configuration
      * @throws IllegalStateException if the Connector is not in a state of UPDATING
      */
-    void inheritConfiguration(List<VersionedConfigurationStep> flowConfiguration) throws FlowUpdateException;
+    void inheritConfiguration(List<VersionedConfigurationStep> flowConfiguration, Bundle flowContextBundle) throws FlowUpdateException;
 }

@@ -19,6 +19,7 @@ package org.apache.nifi.components.connector;
 
 import org.apache.nifi.annotation.lifecycle.OnRemoved;
 import org.apache.nifi.engine.FlowEngine;
+import org.apache.nifi.flow.Bundle;
 import org.apache.nifi.flow.VersionedConfigurationStep;
 import org.apache.nifi.nar.ExtensionManager;
 import org.apache.nifi.nar.NarCloseable;
@@ -130,11 +131,11 @@ public class StandardConnectorRepository implements ConnectorRepository {
     }
 
     @Override
-    public void inheritConfiguration(final ConnectorNode connector, final List<VersionedConfigurationStep> flowConfiguration) throws FlowUpdateException {
+    public void inheritConfiguration(final ConnectorNode connector, final List<VersionedConfigurationStep> flowConfiguration, final Bundle flowContextBundle) throws FlowUpdateException {
         connector.prepareForUpdate(lifecycleExecutor);
 
         try {
-            connector.inheritConfiguration(flowConfiguration);
+            connector.inheritConfiguration(flowConfiguration, flowContextBundle);
         } catch (final Exception e) {
             connector.abortUpdate(e);
             throw e;

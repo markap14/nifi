@@ -29,6 +29,7 @@ import org.apache.nifi.components.connector.components.ParameterContextFacade;
 import org.apache.nifi.components.connector.components.ProcessGroupFacade;
 import org.apache.nifi.components.connector.facades.standalone.StandaloneParameterContextFacade;
 import org.apache.nifi.controller.FlowController;
+import org.apache.nifi.flow.Bundle;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.flow.VersionedParameterContext;
 import org.apache.nifi.groups.ProcessGroup;
@@ -64,13 +65,15 @@ public class FlowControllerFlowContextFactory implements FlowContextFactory {
     }
 
     @Override
-    public FrameworkFlowContext createActiveFlowContext(final String connectorId, final ComponentLog connectorLogger) {
+    public FrameworkFlowContext createActiveFlowContext(final String connectorId, final ComponentLog connectorLogger, final Bundle bundle) {
         return new StandardFlowContext(activeManagedProcessGroup, activeConfigurationContext, processGroupFacadeFactory,
-            parameterContextFacadeFactory, connectorLogger, FlowContextType.ACTIVE);
+            parameterContextFacadeFactory, connectorLogger, FlowContextType.ACTIVE, bundle);
     }
 
     @Override
-    public FrameworkFlowContext createWorkingFlowContext(final String connectorId, final ComponentLog connectorLogger, final MutableConnectorConfigurationContext activeConfigurationContext) {
+    public FrameworkFlowContext createWorkingFlowContext(final String connectorId, final ComponentLog connectorLogger,
+                final MutableConnectorConfigurationContext activeConfigurationContext, final Bundle bundle) {
+
         final String workingGroupId = UUID.nameUUIDFromBytes((connectorId + "-working").getBytes(StandardCharsets.UTF_8)).toString();
         final ProcessGroup processGroup = processGroupFactory.create(workingGroupId);
         copyGroupContents(activeManagedProcessGroup, processGroup, connectorId + "-working-context");
@@ -80,7 +83,7 @@ public class FlowControllerFlowContextFactory implements FlowContextFactory {
         final MutableConnectorConfigurationContext workingConfigurationContext = activeConfigurationContext.clone();
 
         return new StandardFlowContext(processGroup, workingConfigurationContext, processGroupFacadeFactory,
-            parameterContextFacadeFactory, connectorLogger, FlowContextType.WORKING);
+            parameterContextFacadeFactory, connectorLogger, FlowContextType.WORKING, bundle);
     }
 
     private void copyGroupContents(final ProcessGroup sourceGroup, final ProcessGroup destinationGroup, final String componentIdSeed) {

@@ -35,6 +35,7 @@ import org.apache.nifi.connectable.FlowFileActivity;
 import org.apache.nifi.connectable.FlowFileTransferCounts;
 import org.apache.nifi.controller.flow.FlowManager;
 import org.apache.nifi.engine.FlowEngine;
+import org.apache.nifi.flow.Bundle;
 import org.apache.nifi.flow.VersionedConfigurationStep;
 import org.apache.nifi.flow.VersionedConnectorPropertyGroup;
 import org.apache.nifi.flow.VersionedExternalFlow;
@@ -87,7 +88,7 @@ public class StandardConnectorNode implements ConnectorNode {
 
     public StandardConnectorNode(final String identifier, final FlowManager flowManager, final ExtensionManager extensionManager,
         final Authorizable parentAuthorizable, final ConnectorDetails connectorDetails, final String componentType,
-        final BundleCoordinate bundleCoordinate, final MutableConnectorConfigurationContext configurationContext,
+        final MutableConnectorConfigurationContext configurationContext,
         final ConnectorStateTransition stateTransition, final FlowContextFactory flowContextFactory) {
 
         this.identifier = identifier;
@@ -96,12 +97,14 @@ public class StandardConnectorNode implements ConnectorNode {
         this.parentAuthorizable = parentAuthorizable;
         this.connectorDetails = connectorDetails;
         this.componentType = componentType;
-        this.bundleCoordinate = bundleCoordinate;
+        this.bundleCoordinate = connectorDetails.getBundleCoordinate();
         this.stateTransition = stateTransition;
         this.flowContextFactory = flowContextFactory;
 
         this.name = connectorDetails.getConnector().getClass().getSimpleName();
-        this.activeFlowContext = flowContextFactory.createActiveFlowContext(identifier, connectorDetails.getComponentLog());
+
+        final Bundle activeFlowBundle = new Bundle(bundleCoordinate.getGroup(), bundleCoordinate.getId(), bundleCoordinate.getVersion());
+        this.activeFlowContext = flowContextFactory.createActiveFlowContext(identifier, connectorDetails.getComponentLog(), activeFlowBundle);
     }
 
     @Override
@@ -142,10 +145,10 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
-    public void inheritConfiguration(final List<VersionedConfigurationStep> flowConfiguration) throws FlowUpdateException {
+    public void inheritConfiguration(final List<VersionedConfigurationStep> flowConfiguration, final Bundle flowContextBundle) throws FlowUpdateException {
         final MutableConnectorConfigurationContext configurationContext = createConfigurationContext(flowConfiguration);
         final FrameworkFlowContext inheritContext = flowContextFactory.createWorkingFlowContext(identifier,
-            connectorDetails.getComponentLog(), configurationContext);
+            connectorDetails.getComponentLog(), configurationContext, flowContextBundle);
 
         applyUpdate(inheritContext);
     }
@@ -546,7 +549,7 @@ public class StandardConnectorNode implements ConnectorNode {
     private void recreateWorkingFlowContext() {
         destroyWorkingContext();
         workingFlowContext = flowContextFactory.createWorkingFlowContext(identifier,
-            connectorDetails.getComponentLog(), activeFlowContext.getConfigurationContext());
+            connectorDetails.getComponentLog(), activeFlowContext.getConfigurationContext(), activeFlowContext.getBundle());
     }
 
     @Override

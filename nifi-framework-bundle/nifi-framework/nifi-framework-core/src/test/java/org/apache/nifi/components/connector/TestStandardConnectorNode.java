@@ -17,12 +17,14 @@
 
 package org.apache.nifi.components.connector;
 
+import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.components.connector.components.FlowContextType;
 import org.apache.nifi.controller.flow.FlowManager;
 import org.apache.nifi.engine.FlowEngine;
+import org.apache.nifi.flow.Bundle;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
@@ -76,19 +78,23 @@ public class TestStandardConnectorNode {
 
         flowContextFactory = new FlowContextFactory() {
             @Override
-            public FrameworkFlowContext createActiveFlowContext(final String connectorId, final ComponentLog connectorLogger) {
+            public FrameworkFlowContext createActiveFlowContext(final String connectorId, final ComponentLog connectorLogger, final Bundle bundle) {
                 final MutableConnectorConfigurationContext activeConfigurationContext = new StandardConnectorConfigurationContext();
                 final ProcessGroupFacadeFactory processGroupFacadeFactory = mock(ProcessGroupFacadeFactory.class);
                 final ParameterContextFacadeFactory parameterContextFacadeFactory = mock(ParameterContextFacadeFactory.class);
-                return new StandardFlowContext(managedProcessGroup, activeConfigurationContext, processGroupFacadeFactory, parameterContextFacadeFactory, connectorLogger, FlowContextType.ACTIVE);
+                return new StandardFlowContext(managedProcessGroup, activeConfigurationContext, processGroupFacadeFactory,
+                    parameterContextFacadeFactory, connectorLogger, FlowContextType.ACTIVE, bundle);
             }
 
             @Override
-            public FrameworkFlowContext createWorkingFlowContext(final String connectorId, final ComponentLog connectorLogger, final MutableConnectorConfigurationContext currentConfiguration) {
+            public FrameworkFlowContext createWorkingFlowContext(final String connectorId, final ComponentLog connectorLogger,
+                    final MutableConnectorConfigurationContext currentConfiguration, final Bundle bundle) {
+
                 final ProcessGroupFacadeFactory processGroupFacadeFactory = mock(ProcessGroupFacadeFactory.class);
                 final ParameterContextFacadeFactory parameterContextFacadeFactory = mock(ParameterContextFacadeFactory.class);
 
-                return new StandardFlowContext(managedProcessGroup, currentConfiguration, processGroupFacadeFactory, parameterContextFacadeFactory, connectorLogger, FlowContextType.WORKING);
+                return new StandardFlowContext(managedProcessGroup, currentConfiguration, processGroupFacadeFactory,
+                    parameterContextFacadeFactory, connectorLogger, FlowContextType.WORKING, bundle);
             }
         };
     }
@@ -487,7 +493,6 @@ public class TestStandardConnectorNode {
             extensionManager, null,
             createConnectorDetails(connector),
             "TestConnector",
-            null,
             new StandardConnectorConfigurationContext(),
             stateTransition,
             flowContextFactory);
@@ -499,7 +504,8 @@ public class TestStandardConnectorNode {
 
     private ConnectorDetails createConnectorDetails(final Connector connector) {
         final ComponentLog componentLog = new MockComponentLog("TestConnector", connector);
-        return new ConnectorDetails(connector, null, componentLog);
+        final BundleCoordinate bundleCoordinate = new BundleCoordinate("org.apache.nifi", "test-standard-connector-node", "1.0.0");
+        return new ConnectorDetails(connector, bundleCoordinate, componentLog);
     }
 
     private List<PropertyGroupConfiguration> createGroupConfig() {
