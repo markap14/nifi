@@ -69,7 +69,7 @@ public class KafkaConnectionStep {
         .name("Password")
         .description("The password for SASL authentication.")
         .required(true)
-        .type(PropertyType.PASSWORD)
+        .type(PropertyType.SECRET)
         .validators(StandardValidators.NON_EMPTY_VALIDATOR)
         .dependsOn(SECURITY_PROTOCOL, "SASL_PLAINTEXT", "SASL_SSL")
         .build();
@@ -108,7 +108,7 @@ public class KafkaConnectionStep {
         .name("Schema Registry Password")
         .description("The password for Schema Registry authentication.")
         .required(false)
-        .type(PropertyType.PASSWORD)
+        .type(PropertyType.SECRET)
         .validators(StandardValidators.NON_EMPTY_VALIDATOR)
         .dependsOn(SCHEMA_REGISTRY_URL)
         .build();

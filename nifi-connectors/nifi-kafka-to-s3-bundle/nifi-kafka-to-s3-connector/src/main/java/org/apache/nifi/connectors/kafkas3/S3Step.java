@@ -107,7 +107,7 @@ public class S3Step {
         .name("S3 Secret Access Key")
         .description("The AWS Secret Access Key used to authenticate to S3.")
         .required(true)
-        .type(PropertyType.PASSWORD)
+        .type(PropertyType.SECRET)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
         .dependsOn(S3_AUTHENTICATION_STRATEGY, ACCESS_KEY_ID_SECRET_KEY)
         .build();
