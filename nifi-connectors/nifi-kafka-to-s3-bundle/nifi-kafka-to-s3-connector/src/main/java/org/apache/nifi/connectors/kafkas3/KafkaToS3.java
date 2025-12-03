@@ -27,6 +27,7 @@ import org.apache.nifi.components.connector.ConfigurationStep;
 import org.apache.nifi.components.connector.ConnectorConfigurationContext;
 import org.apache.nifi.components.connector.FlowUpdateException;
 import org.apache.nifi.components.connector.InvocationFailedException;
+import org.apache.nifi.components.connector.PropertyGroupConfiguration;
 import org.apache.nifi.components.connector.components.ControllerServiceFacade;
 import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.components.connector.components.ProcessGroupFacade;
@@ -67,9 +68,9 @@ public class KafkaToS3 extends AbstractConnector {
     @Override
     public void prepareForUpdate(final FlowContext workingContext, final FlowContext activeContext) throws FlowUpdateException {
         final String activeS3DataFormat = activeContext.getConfigurationContext().getProperty(
-            S3Step.S3_STEP_NAME, S3Step.S3_DATA_FORMAT.getName()).getValue();
+            S3Step.S3_STEP_NAME, S3Step.S3_DESTINATION_GROUP.getName(), S3Step.S3_DATA_FORMAT.getName()).getValue();
         final String workingS3DataFormat = workingContext.getConfigurationContext().getProperty(
-            S3Step.S3_STEP_NAME, S3Step.S3_DATA_FORMAT.getName()).getValue();
+            S3Step.S3_STEP_NAME, S3Step.S3_DESTINATION_GROUP.getName(), S3Step.S3_DATA_FORMAT.getName()).getValue();
 
         if (!activeS3DataFormat.equals(workingS3DataFormat)) {
             getLogger().info("S3 Data Format changed from {} to {}; draining flow before updating it", activeS3DataFormat, workingS3DataFormat);
@@ -116,9 +117,9 @@ public class KafkaToS3 extends AbstractConnector {
     }
 
     @Override
-    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues, final FlowContext workingFlowContext) {
+    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final List<PropertyGroupConfiguration> propertyOverrides, final FlowContext workingFlowContext) {
         // Get the current ConfigurationContext and then create a new one that contains the provided property values
-        final ConnectorConfigurationContext configurationContext = workingFlowContext.getConfigurationContext().createWithOverrides(stepName, propertyValues);
+        final ConnectorConfigurationContext configurationContext = workingFlowContext.getConfigurationContext().createWithOverrides(stepName, propertyOverrides);
         final VersionedExternalFlow flow = buildFlow(configurationContext);
 
         // Validate Connectivity
@@ -189,7 +190,8 @@ public class KafkaToS3 extends AbstractConnector {
         }
 
         final Set<String> topicNames = new HashSet<>(topicsAvailable);
-        final List<String> specifiedTopics = workingFlowContext.getConfigurationContext().getProperty(KafkaTopicsStep.STEP_NAME, KafkaTopicsStep.TOPIC_NAMES.getName()).asList();
+        final List<String> specifiedTopics = workingFlowContext.getConfigurationContext().getProperty(KafkaTopicsStep.STEP_NAME,
+            KafkaTopicsStep.KAFKA_TOPICS_GROUP.getName(), KafkaTopicsStep.TOPIC_NAMES.getName()).asList();
         final String missingTopics = specifiedTopics.stream()
             .filter(topic -> !topicNames.contains(topic))
             .collect(Collectors.joining(", "));
@@ -255,7 +257,7 @@ public class KafkaToS3 extends AbstractConnector {
     private List<String> getAvailableTopics(final FlowContext flowContext) {
         // If Kafka Brokers not yet set, return empty list
         final ConnectorConfigurationContext config = flowContext.getConfigurationContext();
-        if (!config.getProperty(KafkaConnectionStep.KAFKA_CONNECTION_STEP, KafkaConnectionStep.KAFKA_BROKERS).isSet()) {
+        if (!config.getProperty(KafkaConnectionStep.KAFKA_CONNECTION_STEP, KafkaConnectionStep.KAFKA_SERVER_GROUP, KafkaConnectionStep.KAFKA_BROKERS).isSet()) {
             return List.of();
         }
 

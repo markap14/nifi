@@ -99,7 +99,7 @@ public class SleepingConnector implements Connector {
     }
 
     @Override
-    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues, final FlowContext activeContext) {
+    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final List<PropertyGroupConfiguration> overrides, final FlowContext activeContext) {
         return List.of();
     }
 

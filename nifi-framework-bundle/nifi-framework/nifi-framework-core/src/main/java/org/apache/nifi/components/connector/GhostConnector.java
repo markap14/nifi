@@ -102,7 +102,7 @@ public class GhostConnector implements Connector {
     }
 
     @Override
-    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValues, final FlowContext workingContext) {
+    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final List<PropertyGroupConfiguration> overrides, final FlowContext workingContext) {
         return configVerificationResults;
     }
 

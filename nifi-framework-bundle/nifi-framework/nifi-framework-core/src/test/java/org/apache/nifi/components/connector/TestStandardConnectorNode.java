@@ -574,7 +574,7 @@ public class TestStandardConnectorNode {
         }
 
         @Override
-        public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValueOverrides, final FlowContext flowContext) {
+        public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final List<PropertyGroupConfiguration> overrides, final FlowContext flowContext) {
             return List.of();
         }
 
@@ -627,7 +627,7 @@ public class TestStandardConnectorNode {
         }
 
         @Override
-        public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> propertyValueOverrides, final FlowContext flowContext) {
+        public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final List<PropertyGroupConfiguration> overrides, final FlowContext flowContext) {
             return List.of();
         }
     }

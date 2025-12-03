@@ -53,8 +53,8 @@ public class TestStandardConnectorConfigurationContext {
         final PropertyGroupConfiguration group = new PropertyGroupConfiguration("group1", toValueReferences(properties));
         context.setProperties("step1", List.of(group));
 
-        assertEquals("value1", context.getProperty("step1", "key1").getValue());
-        assertEquals("value2", context.getProperty("step1", "key2").getValue());
+        assertEquals("value1", context.getProperty("step1", "group1", "key1").getValue());
+        assertEquals("value2", context.getProperty("step1", "group1", "key2").getValue());
     }
 
     @Test
@@ -69,8 +69,8 @@ public class TestStandardConnectorConfigurationContext {
         final PropertyGroupConfiguration newGroup = new PropertyGroupConfiguration("group2", toValueReferences(newProperties));
         context.setProperties("step1", List.of(newGroup));
 
-        assertEquals("value1", context.getProperty("step1", "key1").getValue());
-        assertEquals("value3", context.getProperty("step1", "key3").getValue());
+        assertEquals("value1", context.getProperty("step1", "group1", "key1").getValue());
+        assertEquals("value3", context.getProperty("step1", "group2", "key3").getValue());
     }
 
     @Test
@@ -87,9 +87,9 @@ public class TestStandardConnectorConfigurationContext {
         final PropertyGroupConfiguration updatedGroup = new PropertyGroupConfiguration("group1", toValueReferences(updatedProperties));
         context.setProperties("step1", List.of(updatedGroup));
 
-        assertEquals("value1", context.getProperty("step1", "key1").getValue());
-        assertEquals("updatedValue2", context.getProperty("step1", "key2").getValue());
-        assertEquals("value3", context.getProperty("step1", "key3").getValue());
+        assertEquals("value1", context.getProperty("step1", "group1", "key1").getValue());
+        assertEquals("updatedValue2", context.getProperty("step1", "group1", "key2").getValue());
+        assertEquals("value3", context.getProperty("step1", "group1", "key3").getValue());
     }
 
     @Test
@@ -101,16 +101,16 @@ public class TestStandardConnectorConfigurationContext {
         final PropertyGroupConfiguration initialGroup = new PropertyGroupConfiguration("group1", toValueReferences(initialProperties));
         context.setProperties("step1", List.of(initialGroup));
 
-        assertEquals("value2", context.getProperty("step1", "key2").getValue());
+        assertEquals("value2", context.getProperty("step1", "group1", "key2").getValue());
 
         final Map<String, String> updatedProperties = new HashMap<>();
         updatedProperties.put("key2", null);
         final PropertyGroupConfiguration updatedGroup = new PropertyGroupConfiguration("group1", toValueReferences(updatedProperties));
         context.setProperties("step1", List.of(updatedGroup));
 
-        assertEquals("value1", context.getProperty("step1", "key1").getValue());
-        assertNull(context.getProperty("step1", "key2").getValue());
-        assertEquals("value3", context.getProperty("step1", "key3").getValue());
+        assertEquals("value1", context.getProperty("step1", "group1", "key1").getValue());
+        assertNull(context.getProperty("step1", "group1", "key2").getValue());
+        assertEquals("value3", context.getProperty("step1", "group1", "key3").getValue());
     }
 
     @Test
@@ -127,9 +127,9 @@ public class TestStandardConnectorConfigurationContext {
         final PropertyGroupConfiguration updatedGroup = new PropertyGroupConfiguration("group1", toValueReferences(updatedProperties));
         context.setProperties("step1", List.of(updatedGroup));
 
-        assertEquals("value1", context.getProperty("step1", "key1").getValue());
-        assertEquals("updatedValue2", context.getProperty("step1", "key2").getValue());
-        assertEquals("value3", context.getProperty("step1", "key3").getValue());
+        assertEquals("value1", context.getProperty("step1", "group1", "key1").getValue());
+        assertEquals("updatedValue2", context.getProperty("step1", "group1", "key2").getValue());
+        assertEquals("value3", context.getProperty("step1", "group1", "key3").getValue());
     }
 
     @Test
@@ -150,9 +150,9 @@ public class TestStandardConnectorConfigurationContext {
 
         context.setProperties("step1", List.of(group3));
 
-        assertEquals("value1", context.getProperty("step1", "key1").getValue());
-        assertEquals("value2", context.getProperty("step1", "key2").getValue());
-        assertEquals("value3", context.getProperty("step1", "key3").getValue());
+        assertEquals("value1", context.getProperty("step1", "group1", "key1").getValue());
+        assertEquals("value2", context.getProperty("step1", "group2", "key2").getValue());
+        assertEquals("value3", context.getProperty("step1", "group3", "key3").getValue());
     }
 
     @Test
@@ -179,11 +179,11 @@ public class TestStandardConnectorConfigurationContext {
 
         context.setProperties("step1", List.of(updatedGroup1, group3));
 
-        assertEquals("value1", context.getProperty("step1", "key1").getValue());
-        assertEquals("updatedValue2", context.getProperty("step1", "key2").getValue());
-        assertEquals("value3", context.getProperty("step1", "key3").getValue());
-        assertEquals("value4", context.getProperty("step1", "key4").getValue());
-        assertEquals("value5", context.getProperty("step1", "key5").getValue());
+        assertEquals("value1", context.getProperty("step1", "group1", "key1").getValue());
+        assertEquals("updatedValue2", context.getProperty("step1", "group1", "key2").getValue());
+        assertEquals("value3", context.getProperty("step1", "group2", "key3").getValue());
+        assertEquals("value4", context.getProperty("step1", "group1", "key4").getValue());
+        assertEquals("value5", context.getProperty("step1", "group3", "key5").getValue());
     }
 
     @Test
@@ -198,15 +198,15 @@ public class TestStandardConnectorConfigurationContext {
         final PropertyGroupConfiguration step2Group = new PropertyGroupConfiguration("group1", toValueReferences(step2Properties));
         context.setProperties("step2", List.of(step2Group));
 
-        assertEquals("value1", context.getProperty("step1", "key1").getValue());
-        assertNull(context.getProperty("step1", "key2").getValue());
-        assertEquals("value2", context.getProperty("step2", "key2").getValue());
-        assertNull(context.getProperty("step2", "key1").getValue());
+        assertEquals("value1", context.getProperty("step1", "group1", "key1").getValue());
+        assertNull(context.getProperty("step1", "group1", "key2").getValue());
+        assertEquals("value2", context.getProperty("step2", "group1", "key2").getValue());
+        assertNull(context.getProperty("step2", "group1", "key1").getValue());
     }
 
     @Test
     public void testGetPropertyReturnsEmptyForNonExistentStep() {
-        final ConnectorPropertyValue propertyValue = context.getProperty("nonExistentStep", "someProperty");
+        final ConnectorPropertyValue propertyValue = context.getProperty("nonExistentStep", "someGroup", "someProperty");
         assertNull(propertyValue.getValue());
     }
 
@@ -217,7 +217,7 @@ public class TestStandardConnectorConfigurationContext {
         final PropertyGroupConfiguration group = new PropertyGroupConfiguration("group1", toValueReferences(properties));
         context.setProperties("step1", List.of(group));
 
-        final ConnectorPropertyValue propertyValue = context.getProperty("step1", "nonExistentProperty");
+        final ConnectorPropertyValue propertyValue = context.getProperty("step1", "group1", "nonExistentProperty");
         assertNull(propertyValue.getValue());
     }
 
@@ -252,14 +252,14 @@ public class TestStandardConnectorConfigurationContext {
 
         context.setProperties("step1", List.of(group1Update, group4));
 
-        assertEquals("1", context.getProperty("step1", "a").getValue());
-        assertNull(context.getProperty("step1", "b").getValue());
-        assertEquals("30", context.getProperty("step1", "c").getValue());
-        assertEquals("4", context.getProperty("step1", "d").getValue());
-        assertEquals("5", context.getProperty("step1", "e").getValue());
-        assertEquals("6", context.getProperty("step1", "f").getValue());
-        assertEquals("7", context.getProperty("step1", "g").getValue());
-        assertEquals("8", context.getProperty("step1", "h").getValue());
+        assertEquals("1", context.getProperty("step1", "group1", "a").getValue());
+        assertNull(context.getProperty("step1", "group1", "b").getValue());
+        assertEquals("30", context.getProperty("step1", "group1", "c").getValue());
+        assertEquals("4", context.getProperty("step1", "group2", "d").getValue());
+        assertEquals("5", context.getProperty("step1", "group2", "e").getValue());
+        assertEquals("6", context.getProperty("step1", "group3", "f").getValue());
+        assertEquals("7", context.getProperty("step1", "group1", "g").getValue());
+        assertEquals("8", context.getProperty("step1", "group4", "h").getValue());
     }
 }
 

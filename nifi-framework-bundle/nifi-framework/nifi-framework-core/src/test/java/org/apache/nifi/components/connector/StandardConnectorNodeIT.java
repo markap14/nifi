@@ -86,6 +86,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 
 import static java.util.Objects.requireNonNull;
@@ -113,6 +114,7 @@ public class StandardConnectorNodeIT {
     @BeforeEach
     public void setup() {
         final ControllerServiceProvider controllerServiceProvider = mock(ControllerServiceProvider.class);
+        when(controllerServiceProvider.disableControllerServicesAsync(anyCollection())).thenReturn(CompletableFuture.completedFuture(null));
         connectorRepository = new StandardConnectorRepository();
 
         final ExtensionDiscoveringManager extensionManager = new StandardExtensionDiscoveringManager();
@@ -296,7 +298,7 @@ public class StandardConnectorNodeIT {
 
         // Set the value of the 'Text' property to Hi. This should result in the parameter context being updated.
         final Map<String, ConnectorValueReference> sourceProperties = Map.of("Text", new ConnectorValueReference("Hi.", ConnectorValueType.STRING_LITERAL));
-        final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration(null, sourceProperties);
+        final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration("Text Settings", sourceProperties);
         final ConfigurationStepConfiguration sourceConfigurationStepConfiguration = new ConfigurationStepConfiguration("Text Configuration", List.of(sourcePropertyGroupConfiguration));
         final ConnectorConfiguration connectorConfiguration = new ConnectorConfiguration(List.of(sourceConfigurationStepConfiguration));
         configure(connectorNode, connectorConfiguration);
@@ -435,7 +437,7 @@ public class StandardConnectorNodeIT {
         assertEquals(List.of(), initialValidationState.getValidationErrors());
 
         final Map<String, ConnectorValueReference> sourceProperties = Map.of("Sleep Duration", new ConnectorValueReference("Hi.", ConnectorValueType.STRING_LITERAL));
-        final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration(null, sourceProperties);
+        final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration("Text Settings", sourceProperties);
         final ConfigurationStepConfiguration sourceConfigurationStepConfiguration = new ConfigurationStepConfiguration("Text Configuration", List.of(sourcePropertyGroupConfiguration));
         final ConnectorConfiguration connectorConfiguration = new ConnectorConfiguration(List.of(sourceConfigurationStepConfiguration));
         configure(connectorNode, connectorConfiguration);
@@ -511,7 +513,7 @@ public class StandardConnectorNodeIT {
         final Map<String, ConnectorValueReference> sourceProperties = Map.of(
             "Source Text", new ConnectorValueReference(sourceText, ConnectorValueType.STRING_LITERAL),
             "Count FlowFiles", new ConnectorValueReference(Boolean.toString(countFlowFiles), ConnectorValueType.STRING_LITERAL));
-        final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration(null, sourceProperties);
+        final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration("Source Settings", sourceProperties);
         final ConfigurationStepConfiguration sourceConfigurationStepConfiguration = new ConfigurationStepConfiguration("Source", List.of(sourcePropertyGroupConfiguration));
 
         // Duplication configuration step

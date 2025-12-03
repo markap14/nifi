@@ -48,7 +48,7 @@ public interface MutableConnectorConfigurationContext extends ConnectorConfigura
      */
     ConnectorConfiguration toConnectorConfiguration();
 
-    MutableConnectorConfigurationContext createWithOverrides(String stepName, Map<String, String> propertyOverrides);
+    MutableConnectorConfigurationContext createWithOverrides(String stepName, List<PropertyGroupConfiguration> propertyGroupConfigurations);
 
     /**
      * Creates a clone of this MutableConnectorConfigurationContext.

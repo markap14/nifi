@@ -574,12 +574,13 @@ public class StandardConnectorNode implements ConnectorNode {
             }
         }
 
+        final List<PropertyGroupConfiguration> propertyOverrides = Collections.unmodifiableList(groupConfigurations);
         final List<ConfigVerificationResult> results = new ArrayList<>();
         try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
             final DescribedValueProvider allowableValueProvider = (step, groupName, propertyName) ->
                 fetchAllowableValues(step, groupName, propertyName, workingFlowContext);
             final MutableConnectorConfigurationContext configContext = workingFlowContext.getConfigurationContext()
-                .createWithOverrides(stepName, properties);
+                .createWithOverrides(stepName, propertyOverrides);
             final ConnectorValidationContext validationContext = new StandardConnectorValidationContext(
                 configContext.toConnectorConfiguration(), allowableValueProvider, workingFlowContext.getParameterContext());
 
@@ -616,7 +617,7 @@ public class StandardConnectorNode implements ConnectorNode {
                 results.addAll(invalidConfigResults);
             }
 
-            results.addAll(getConnector().verifyConfigurationStep(stepName, properties, workingFlowContext));
+            results.addAll(getConnector().verifyConfigurationStep(stepName, propertyOverrides, workingFlowContext));
             return results;
         }
     }

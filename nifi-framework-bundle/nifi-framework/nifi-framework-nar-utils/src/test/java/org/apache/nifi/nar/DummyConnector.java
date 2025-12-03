@@ -26,6 +26,7 @@ import org.apache.nifi.components.connector.ConnectorConfigurationContext;
 import org.apache.nifi.components.connector.ConnectorInitializationContext;
 import org.apache.nifi.components.connector.ConnectorValidationContext;
 import org.apache.nifi.components.connector.FlowUpdateException;
+import org.apache.nifi.components.connector.PropertyGroupConfiguration;
 import org.apache.nifi.components.connector.components.FlowContext;
 import org.apache.nifi.flow.VersionedExternalFlow;
 
@@ -82,7 +83,7 @@ public class DummyConnector implements Connector {
     }
 
     @Override
-    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final Map<String, String> properties, final FlowContext flowContext) {
+    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final List<PropertyGroupConfiguration> overrides, final FlowContext flowContext) {
         return List.of();
     }
 

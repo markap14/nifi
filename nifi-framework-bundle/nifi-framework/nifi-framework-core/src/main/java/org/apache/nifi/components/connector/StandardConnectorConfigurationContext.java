@@ -37,11 +37,11 @@ public class StandardConnectorConfigurationContext implements MutableConnectorCo
     }
 
     @Override
-    public ConnectorPropertyValue getProperty(final String stepName, final String propertyName) {
-        return getProperty(stepName, propertyName, null);
+    public ConnectorPropertyValue getProperty(final String stepName, final String groupName, final String propertyName) {
+        return getProperty(stepName, groupName, propertyName, null);
     }
 
-    private ConnectorPropertyValue getProperty(final String stepName, final String propertyName, final String defaultValue) {
+    private ConnectorPropertyValue getProperty(final String stepName, final String groupName, final String propertyName, final String defaultValue) {
         readLock.lock();
         try {
             final List<PropertyGroupConfiguration> groupConfigs = propertyGroupConfigurations.get(stepName);
@@ -49,55 +49,67 @@ public class StandardConnectorConfigurationContext implements MutableConnectorCo
                 return new StandardConnectorPropertyValue(defaultValue);
             }
 
-            String propertyValue = defaultValue;
             for (final PropertyGroupConfiguration groupConfig : groupConfigs) {
-                final ConnectorValueReference valueReference = groupConfig.propertyValues().get(propertyName);
-                if (valueReference != null) {
-                    propertyValue = valueReference.value();
-                    break;
+                if (!Objects.equals(groupConfig.groupName(), groupName)) {
+                    continue;
                 }
+
+                final ConnectorValueReference valueReference = groupConfig.propertyValues().get(propertyName);
+                if (valueReference == null) {
+                    return new StandardConnectorPropertyValue(defaultValue);
+                }
+
+                return new StandardConnectorPropertyValue(valueReference.value());
             }
 
-            return new StandardConnectorPropertyValue(propertyValue);
+            // Property Group not found
+            return new StandardConnectorPropertyValue(defaultValue);
         } finally {
             readLock.unlock();
         }
     }
 
     @Override
-    public ConnectorPropertyValue getProperty(final ConfigurationStep configurationStep, final ConnectorPropertyDescriptor connectorPropertyDescriptor) {
-        return getProperty(configurationStep.getName(), connectorPropertyDescriptor.getName(), connectorPropertyDescriptor.getDefaultValue());
+    public ConnectorPropertyValue getProperty(final ConfigurationStep configurationStep, final ConnectorPropertyGroup group, final ConnectorPropertyDescriptor connectorPropertyDescriptor) {
+        return getProperty(configurationStep.getName(), group.getName(), connectorPropertyDescriptor.getName(), connectorPropertyDescriptor.getDefaultValue());
     }
 
     @Override
-    public StandardConnectorConfigurationContext createWithOverrides(final String stepName, final Map<String, String> propertyOverrides) {
+    public StandardConnectorConfigurationContext createWithOverrides(final String stepName, final List<PropertyGroupConfiguration> propertyOverrides) {
         final StandardConnectorConfigurationContext created = new StandardConnectorConfigurationContext();
         readLock.lock();
         try {
-            for (final Map.Entry<String, List<PropertyGroupConfiguration>> entry : propertyGroupConfigurations.entrySet()) {
-                final String existingStepName = entry.getKey();
-                final List<PropertyGroupConfiguration> createdGroupConfigs = new ArrayList<>();
+            for (final Map.Entry<String, List<PropertyGroupConfiguration>> stepEntry : propertyGroupConfigurations.entrySet()) {
+                final String existingStepName = stepEntry.getKey();
+                final List<PropertyGroupConfiguration> existingGroupConfigs = stepEntry.getValue();
 
-                for (final PropertyGroupConfiguration groupConfig : entry.getValue()) {
-                    final Map<String, ConnectorValueReference> mergedProperties = new HashMap<>(groupConfig.propertyValues());
-
-                    if (Objects.equals(existingStepName, stepName)) {
-                        for (final Map.Entry<String, String> overrideEntry : propertyOverrides.entrySet()) {
-                            // Only consider if mergedProperties contains the key because this means it's the correct property group.
-                            if (mergedProperties.containsKey(overrideEntry.getKey())) {
-                                if (overrideEntry.getValue() == null) {
-                                    mergedProperties.remove(overrideEntry.getKey());
-                                } else {
-                                    mergedProperties.put(overrideEntry.getKey(), new ConnectorValueReference(overrideEntry.getValue(), ConnectorValueType.STRING_LITERAL));
-                                }
-                            }
-                        }
-                    }
-
-                    createdGroupConfigs.add(new PropertyGroupConfiguration(groupConfig.groupName(), mergedProperties));
+                // If this is not the step to override, just copy the existing configs.
+                if (!existingStepName.equals(stepName)) {
+                    created.setProperties(existingStepName, existingGroupConfigs);
+                    continue;
                 }
 
-                created.setProperties(existingStepName, createdGroupConfigs);
+                final List<PropertyGroupConfiguration> createdGroupConfigs = new ArrayList<>();
+
+                // Merge properties for this step.
+                final Map<String, PropertyGroupConfiguration> existingGroupConfigMap = new HashMap<>();
+                for (final PropertyGroupConfiguration existingGroupConfig : existingGroupConfigs) {
+                    existingGroupConfigMap.put(existingGroupConfig.groupName(), existingGroupConfig);
+                }
+
+                for (final PropertyGroupConfiguration override : propertyOverrides) {
+                    final Map<String, ConnectorValueReference> mergedProperties = new HashMap<>();
+
+                    final PropertyGroupConfiguration existing = existingGroupConfigMap.get(override.groupName());
+                    if (existing != null) {
+                        mergedProperties.putAll(existing.propertyValues());
+                    }
+                    mergedProperties.putAll(override.propertyValues());
+
+                    createdGroupConfigs.add(new PropertyGroupConfiguration(override.groupName(), mergedProperties));
+                }
+
+                created.setProperties(stepName, createdGroupConfigs);
             }
 
             return created;
@@ -105,6 +117,7 @@ public class StandardConnectorConfigurationContext implements MutableConnectorCo
             readLock.unlock();
         }
     }
+
 
     @Override
     public ConfigurationUpdateResult setProperties(final String stepName, final List<PropertyGroupConfiguration> propertyGroupConfigurations) {

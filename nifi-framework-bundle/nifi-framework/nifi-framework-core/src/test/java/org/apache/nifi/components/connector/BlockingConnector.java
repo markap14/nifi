@@ -104,7 +104,7 @@ public class BlockingConnector implements Connector {
     }
 
     @Override
-    public List<ConfigVerificationResult> verifyConfigurationStep(final String s, final Map<String, String> map, final FlowContext flowContext) {
+    public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final List<PropertyGroupConfiguration> overrides, final FlowContext flowContext) {
         return List.of();
     }
 
