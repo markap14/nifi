@@ -163,8 +163,8 @@ public class StandardConnectorNode implements ConnectorNode {
                 if (propertyGroup.getProperties() != null) {
                     for (final Map.Entry<String, VersionedConnectorValueReference> entry : propertyGroup.getProperties().entrySet()) {
                         final VersionedConnectorValueReference versionedRef = entry.getValue();
-                        final ConnectorValueType valueType = ConnectorValueType.valueOf(versionedRef.getValueType());
-                        convertedProperties.put(entry.getKey(), new ConnectorValueReference(versionedRef.getValue(), valueType));
+                        final ConnectorValueReference valueReference = createValueReference(versionedRef);
+                        convertedProperties.put(entry.getKey(), valueReference);
                     }
                 }
                 final PropertyGroupConfiguration groupConfiguration = new PropertyGroupConfiguration(propertyGroup.getName(), convertedProperties);
@@ -175,6 +175,15 @@ public class StandardConnectorNode implements ConnectorNode {
         }
 
         return configurationContext;
+    }
+
+    private ConnectorValueReference createValueReference(final VersionedConnectorValueReference versionedReference) {
+        final ConnectorValueType valueType = ConnectorValueType.valueOf(versionedReference.getValueType());
+        return switch (valueType) {
+            case STRING_LITERAL -> new StringLiteralValue(versionedReference.getValue());
+            case ASSET_REFERENCE -> new AssetReference(versionedReference.getAssetId());
+            case SECRET_REFERENCE -> new SecretReference(versionedReference.getProviderId(), versionedReference.getSecretName());
+        };
     }
 
     @Override
@@ -567,20 +576,15 @@ public class StandardConnectorNode implements ConnectorNode {
 
     @Override
     public List<ConfigVerificationResult> verifyConfigurationStep(final String stepName, final List<PropertyGroupConfiguration> groupConfigurations) {
-        final Map<String, String> properties = new HashMap<>();
-        for (final PropertyGroupConfiguration groupConfiguration : groupConfigurations) {
-            for (final Map.Entry<String, ConnectorValueReference> entry : groupConfiguration.propertyValues().entrySet()) {
-                properties.put(entry.getKey(), entry.getValue() == null ? null : entry.getValue().value());
-            }
-        }
 
-        final List<PropertyGroupConfiguration> propertyOverrides = Collections.unmodifiableList(groupConfigurations);
         final List<ConfigVerificationResult> results = new ArrayList<>();
         try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
+
             final DescribedValueProvider allowableValueProvider = (step, groupName, propertyName) ->
                 fetchAllowableValues(step, groupName, propertyName, workingFlowContext);
-            final MutableConnectorConfigurationContext configContext = workingFlowContext.getConfigurationContext()
-                .createWithOverrides(stepName, propertyOverrides);
+
+            final List<PropertyGroupConfiguration> propertyOverrides = Collections.unmodifiableList(groupConfigurations);
+            final MutableConnectorConfigurationContext configContext = workingFlowContext.getConfigurationContext().createWithOverrides(stepName, propertyOverrides);
             final ConnectorValidationContext validationContext = new StandardConnectorValidationContext(
                 configContext.toConnectorConfiguration(), allowableValueProvider, workingFlowContext.getParameterContext());
 

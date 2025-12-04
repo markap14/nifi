@@ -28,7 +28,10 @@ import org.apache.nifi.cluster.protocol.DataFlow;
 import org.apache.nifi.cluster.protocol.StandardDataFlow;
 import org.apache.nifi.components.connector.ConfigurationStepConfiguration;
 import org.apache.nifi.components.connector.ConnectorConfiguration;
+import org.apache.nifi.components.connector.AssetReference;
 import org.apache.nifi.components.connector.ConnectorValueReference;
+import org.apache.nifi.components.connector.SecretReference;
+import org.apache.nifi.components.connector.StringLiteralValue;
 import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.components.connector.ConnectorRepository;
 import org.apache.nifi.components.connector.FlowUpdateException;
@@ -1131,28 +1134,35 @@ public class VersionedFlowSynchronizer implements FlowSynchronizer {
             final VersionedConnectorValueReference versionedRef = versionedEntry.getValue();
             final ConnectorValueReference existingRef = existingProperties.get(propertyName);
 
-            if (existingRef == null && versionedRef != null) {
+            final boolean valuesMatch = equals(versionedRef, existingRef);
+            if (!valuesMatch) {
                 return true;
-            }
-            if (existingRef != null && versionedRef == null) {
-                return true;
-            }
-            if (existingRef != null) {
-                final String existingValue = existingRef.value();
-                final String versionedValue = versionedRef.getValue();
-                if (!Objects.equals(existingValue, versionedValue)) {
-                    return true;
-                }
-
-                final String existingValueType = existingRef.valueType().name();
-                final String versionedValueType = versionedRef.getValueType();
-                if (!Objects.equals(existingValueType, versionedValueType)) {
-                    return true;
-                }
             }
         }
 
         return false;
+    }
+
+    private boolean equals(final VersionedConnectorValueReference versionedReference, final ConnectorValueReference existingReference) {
+        if (versionedReference == null && existingReference == null) {
+            return true;
+        }
+        if (versionedReference == null || existingReference == null) {
+            return false;
+        }
+
+        final String versionedValueType = versionedReference.getValueType();
+        final String existingValueType = existingReference.getValueType().name();
+        if (!Objects.equals(versionedValueType, existingValueType)) {
+            return false;
+        }
+
+        return switch (existingReference) {
+            case StringLiteralValue stringLiteral -> Objects.equals(stringLiteral.getValue(), versionedReference.getValue());
+            case AssetReference assetRef -> Objects.equals(assetRef.getAssetIdentifier(), versionedReference.getAssetId());
+            case SecretReference secretRef -> Objects.equals(secretRef.getProviderId(), versionedReference.getProviderId())
+                                              && Objects.equals(secretRef.getSecretName(), versionedReference.getSecretName());
+        };
     }
 
     private void addConnector(final VersionedConnector versionedConnector, final ConnectorRepository connectorRepository, final FlowManager flowManager) {

@@ -39,7 +39,7 @@ public class TestStandardConnectorConfigurationContext {
         final Map<String, ConnectorValueReference> valueReferences = new HashMap<>();
         for (final Map.Entry<String, String> entry : stringProperties.entrySet()) {
             final String value = entry.getValue();
-            valueReferences.put(entry.getKey(), value == null ? null : new ConnectorValueReference(value, ConnectorValueType.STRING_LITERAL));
+            valueReferences.put(entry.getKey(), value == null ? null : new StringLiteralValue(value));
         }
         return valueReferences;
     }

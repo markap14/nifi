@@ -297,7 +297,7 @@ public class StandardConnectorNodeIT {
         assertEquals("Hello", textParameter.getValue());
 
         // Set the value of the 'Text' property to Hi. This should result in the parameter context being updated.
-        final Map<String, ConnectorValueReference> sourceProperties = Map.of("Text", new ConnectorValueReference("Hi.", ConnectorValueType.STRING_LITERAL));
+        final Map<String, ConnectorValueReference> sourceProperties = Map.of("Text", new StringLiteralValue("Hi."));
         final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration("Text Settings", sourceProperties);
         final ConfigurationStepConfiguration sourceConfigurationStepConfiguration = new ConfigurationStepConfiguration("Text Configuration", List.of(sourcePropertyGroupConfiguration));
         final ConnectorConfiguration connectorConfiguration = new ConnectorConfiguration(List.of(sourceConfigurationStepConfiguration));
@@ -436,7 +436,7 @@ public class StandardConnectorNodeIT {
         assertEquals(ValidationStatus.VALID, initialValidationState.getStatus());
         assertEquals(List.of(), initialValidationState.getValidationErrors());
 
-        final Map<String, ConnectorValueReference> sourceProperties = Map.of("Sleep Duration", new ConnectorValueReference("Hi.", ConnectorValueType.STRING_LITERAL));
+        final Map<String, ConnectorValueReference> sourceProperties = Map.of("Sleep Duration", new StringLiteralValue("Hi."));
         final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration("Text Settings", sourceProperties);
         final ConfigurationStepConfiguration sourceConfigurationStepConfiguration = new ConfigurationStepConfiguration("Text Configuration", List.of(sourcePropertyGroupConfiguration));
         final ConnectorConfiguration connectorConfiguration = new ConnectorConfiguration(List.of(sourceConfigurationStepConfiguration));

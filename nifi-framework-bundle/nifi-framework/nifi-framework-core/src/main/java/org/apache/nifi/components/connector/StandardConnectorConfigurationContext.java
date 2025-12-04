@@ -59,7 +59,16 @@ public class StandardConnectorConfigurationContext implements MutableConnectorCo
                     return new StandardConnectorPropertyValue(defaultValue);
                 }
 
-                return new StandardConnectorPropertyValue(valueReference.value());
+                if (valueReference instanceof StringLiteralValue stringLiteral) {
+                    return new StandardConnectorPropertyValue(stringLiteral.getValue());
+                } else if (valueReference instanceof AssetReference) {
+                    // TODO: Resolve the asset value using AssetManager
+                    throw new UnsupportedOperationException("Asset references are not yet supported");
+                } else if (valueReference instanceof SecretReference) {
+                    // TODO: Resolve the secret value using SecretManager
+                    throw new UnsupportedOperationException("Secret references are not yet supported");
+                }
+                return new StandardConnectorPropertyValue(defaultValue);
             }
 
             // Property Group not found

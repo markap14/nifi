@@ -56,7 +56,11 @@ public class StandardConnectorValidationContext implements ConnectorValidationCo
                 final Map<String, String> stringValues = new HashMap<>();
                 for (final Map.Entry<String, ConnectorValueReference> entry : groupConfiguration.propertyValues().entrySet()) {
                     final ConnectorValueReference valueRef = entry.getValue();
-                    stringValues.put(entry.getKey(), valueRef == null ? null : valueRef.value());
+                    if (valueRef instanceof StringLiteralValue stringLiteral) {
+                        stringValues.put(entry.getKey(), stringLiteral.getValue());
+                    } else {
+                        stringValues.put(entry.getKey(), null);
+                    }
                 }
                 return new ConnectorValidationContextBridge(stringValues, parameterLookup);
             }

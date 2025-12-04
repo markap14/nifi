@@ -22,12 +22,16 @@ import org.apache.nifi.asset.Asset;
 import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.listen.ListenPortDefinition;
+import org.apache.nifi.components.connector.AssetReference;
 import org.apache.nifi.components.connector.ConfigurationStepConfiguration;
 import org.apache.nifi.components.connector.ConnectorConfiguration;
 import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.components.connector.ConnectorState;
+import org.apache.nifi.components.connector.ConnectorValueReference;
 import org.apache.nifi.components.connector.FrameworkFlowContext;
 import org.apache.nifi.components.connector.PropertyGroupConfiguration;
+import org.apache.nifi.components.connector.SecretReference;
+import org.apache.nifi.components.connector.StringLiteralValue;
 import org.apache.nifi.components.resource.ResourceCardinality;
 import org.apache.nifi.components.resource.ResourceDefinition;
 import org.apache.nifi.connectable.Connectable;
@@ -1076,12 +1080,24 @@ public class VersionedComponentFlowMapper {
         return configurationSteps;
     }
 
-    private Map<String, VersionedConnectorValueReference> mapPropertyValues(final Map<String, org.apache.nifi.components.connector.ConnectorValueReference> propertyValues) {
+    private Map<String, VersionedConnectorValueReference> mapPropertyValues(final Map<String, ConnectorValueReference> propertyValues) {
         final Map<String, VersionedConnectorValueReference> versionedProperties = new HashMap<>();
-        for (final Map.Entry<String, org.apache.nifi.components.connector.ConnectorValueReference> entry : propertyValues.entrySet()) {
-            final org.apache.nifi.components.connector.ConnectorValueReference valueReference = entry.getValue();
-            final VersionedConnectorValueReference versionedRef = new VersionedConnectorValueReference(valueReference.value(), valueReference.valueType().name());
-            versionedProperties.put(entry.getKey(), versionedRef);
+        for (final Map.Entry<String, ConnectorValueReference> entry : propertyValues.entrySet()) {
+            final ConnectorValueReference valueReference = entry.getValue();
+
+            final VersionedConnectorValueReference versionedReference = new VersionedConnectorValueReference();
+            versionedReference.setValueType(valueReference.getValueType().name());
+
+            switch (valueReference) {
+                case StringLiteralValue stringLiteral -> versionedReference.setValue(stringLiteral.getValue());
+                case AssetReference assetRef -> versionedReference.setAssetId(assetRef.getAssetIdentifier());
+                case SecretReference secretRef -> {
+                    versionedReference.setProviderId(secretRef.getProviderId());
+                    versionedReference.setSecretName(secretRef.getSecretName());
+                }
+            }
+
+            versionedProperties.put(entry.getKey(), versionedReference);
         }
         return versionedProperties;
     }
