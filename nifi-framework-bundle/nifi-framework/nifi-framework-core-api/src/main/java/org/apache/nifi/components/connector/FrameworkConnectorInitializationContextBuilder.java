@@ -20,17 +20,17 @@ package org.apache.nifi.components.connector;
 import org.apache.nifi.asset.AssetManager;
 import org.apache.nifi.logging.ComponentLog;
 
-public interface ConnectorInitializationContextBuilder {
+public interface FrameworkConnectorInitializationContextBuilder {
 
-    ConnectorInitializationContextBuilder identifier(String identifier);
+    FrameworkConnectorInitializationContextBuilder identifier(String identifier);
 
-    ConnectorInitializationContextBuilder name(String name);
+    FrameworkConnectorInitializationContextBuilder name(String name);
 
-    ConnectorInitializationContextBuilder componentLog(ComponentLog componentLog);
+    FrameworkConnectorInitializationContextBuilder componentLog(ComponentLog componentLog);
 
-    ConnectorInitializationContextBuilder assetManager(AssetManager assetManager);
+    FrameworkConnectorInitializationContextBuilder assetManager(AssetManager assetManager);
 
-    ConnectorInitializationContextBuilder secretsManager(SecretsManager secretsManager);
+    FrameworkConnectorInitializationContextBuilder secretsManager(SecretsManager secretsManager);
 
-    ConnectorInitializationContext build();
+    FrameworkConnectorInitializationContext build();
 }

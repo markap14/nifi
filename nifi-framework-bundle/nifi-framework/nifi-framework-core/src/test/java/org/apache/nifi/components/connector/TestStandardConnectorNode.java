@@ -17,6 +17,7 @@
 
 package org.apache.nifi.components.connector;
 
+import org.apache.nifi.asset.AssetManager;
 import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.ConfigVerificationResult;
 import org.apache.nifi.components.ValidationResult;
@@ -63,9 +64,12 @@ public class TestStandardConnectorNode {
 
     @Mock
     private ExtensionManager extensionManager;
-
     @Mock
     private ProcessGroup managedProcessGroup;
+    @Mock
+    private AssetManager assetManager;
+    @Mock
+    private SecretsManager secretsManager;
 
     private FlowContextFactory flowContextFactory;
 
@@ -79,7 +83,7 @@ public class TestStandardConnectorNode {
         flowContextFactory = new FlowContextFactory() {
             @Override
             public FrameworkFlowContext createActiveFlowContext(final String connectorId, final ComponentLog connectorLogger, final Bundle bundle) {
-                final MutableConnectorConfigurationContext activeConfigurationContext = new StandardConnectorConfigurationContext();
+                final MutableConnectorConfigurationContext activeConfigurationContext = new StandardConnectorConfigurationContext(assetManager, secretsManager);
                 final ProcessGroupFacadeFactory processGroupFacadeFactory = mock(ProcessGroupFacadeFactory.class);
                 final ParameterContextFacadeFactory parameterContextFacadeFactory = mock(ParameterContextFacadeFactory.class);
                 return new StandardFlowContext(managedProcessGroup, activeConfigurationContext, processGroupFacadeFactory,
@@ -493,11 +497,11 @@ public class TestStandardConnectorNode {
             extensionManager, null,
             createConnectorDetails(connector),
             "TestConnector",
-            new StandardConnectorConfigurationContext(),
+            new StandardConnectorConfigurationContext(assetManager, secretsManager),
             stateTransition,
             flowContextFactory);
 
-        node.initializeConnector(mock(ConnectorInitializationContext.class));
+        node.initializeConnector(mock(FrameworkConnectorInitializationContext.class));
         assertDoesNotThrow(node::loadInitialFlow);
         return node;
     }

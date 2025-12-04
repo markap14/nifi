@@ -15,21 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.nifi.mock.connector.server;
+package org.apache.nifi.components.connector;
 
-import org.apache.nifi.components.connector.FrameworkConnectorInitializationContextBuilder;
-import org.apache.nifi.components.connector.StandardConnectorRepository;
+import org.apache.nifi.asset.AssetManager;
 
-public class MockConnectorRepository extends StandardConnectorRepository {
+public interface FrameworkConnectorInitializationContext extends ConnectorInitializationContext {
 
-    private volatile MockExtensionMapper mockExtensionMapper;
+    SecretsManager getSecretsManager();
 
-    public void setMockExtensionMapper(final MockExtensionMapper mapper) {
-        mockExtensionMapper = mapper;
-    }
+    AssetManager getAssetManager();
 
-    @Override
-    public FrameworkConnectorInitializationContextBuilder createInitializationContextBuilder() {
-        return new MockConnectorInitializationContext.Builder(mockExtensionMapper);
-    }
 }

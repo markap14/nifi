@@ -67,7 +67,7 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
 
     List<AllowableValue> fetchAllowableValues(String stepName, String groupName, String propertyName, String filter);
 
-    void initializeConnector(ConnectorInitializationContext initializationContext);
+    void initializeConnector(FrameworkConnectorInitializationContext initializationContext);
 
     void loadInitialFlow() throws FlowUpdateException;
 

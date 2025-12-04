@@ -51,17 +51,20 @@ public class StandardConnectorValidationContext implements ConnectorValidationCo
     @Override
     public ValidationContext createValidationContext(final String stepName, final String propertyGroupName) {
         final List<PropertyGroupConfiguration> propertyGroupConfigurations = groupConfigurations.getOrDefault(stepName, Collections.emptyList());
+
         for (final PropertyGroupConfiguration groupConfiguration : propertyGroupConfigurations) {
             if (Objects.equals(groupConfiguration.groupName(), propertyGroupName)) {
                 final Map<String, String> stringValues = new HashMap<>();
                 for (final Map.Entry<String, ConnectorValueReference> entry : groupConfiguration.propertyValues().entrySet()) {
                     final ConnectorValueReference valueRef = entry.getValue();
+
                     if (valueRef instanceof StringLiteralValue stringLiteral) {
                         stringValues.put(entry.getKey(), stringLiteral.getValue());
                     } else {
                         stringValues.put(entry.getKey(), null);
                     }
                 }
+
                 return new ConnectorValidationContextBridge(stringValues, parameterLookup);
             }
         }

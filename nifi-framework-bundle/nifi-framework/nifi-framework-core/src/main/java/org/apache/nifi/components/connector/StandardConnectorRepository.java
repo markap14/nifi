@@ -149,7 +149,7 @@ public class StandardConnectorRepository implements ConnectorRepository {
     }
 
     @Override
-    public ConnectorInitializationContextBuilder createInitializationContextBuilder() {
+    public FrameworkConnectorInitializationContextBuilder createInitializationContextBuilder() {
         return new StandardConnectorInitializationContext.Builder();
     }
 

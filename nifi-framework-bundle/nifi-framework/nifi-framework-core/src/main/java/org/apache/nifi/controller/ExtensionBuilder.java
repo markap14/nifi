@@ -28,13 +28,13 @@ import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.connector.ConfigurationStep;
 import org.apache.nifi.components.connector.Connector;
 import org.apache.nifi.components.connector.ConnectorDetails;
-import org.apache.nifi.components.connector.ConnectorInitializationContext;
-import org.apache.nifi.components.connector.ConnectorInitializationContextBuilder;
 import org.apache.nifi.components.connector.ConnectorNode;
 import org.apache.nifi.components.connector.ConnectorPropertyDescriptor;
 import org.apache.nifi.components.connector.ConnectorPropertyGroup;
 import org.apache.nifi.components.connector.ConnectorStateTransition;
 import org.apache.nifi.components.connector.FlowContextFactory;
+import org.apache.nifi.components.connector.FrameworkConnectorInitializationContext;
+import org.apache.nifi.components.connector.FrameworkConnectorInitializationContextBuilder;
 import org.apache.nifi.components.connector.FrameworkFlowContext;
 import org.apache.nifi.components.connector.GhostConnector;
 import org.apache.nifi.components.connector.MutableConnectorConfigurationContext;
@@ -141,7 +141,7 @@ public class ExtensionBuilder {
    private FlowContextFactory flowContextFactory;
    private MutableConnectorConfigurationContext activeConfigurationContext;
    private ConnectorStateTransition connectorStateTransition;
-   private ConnectorInitializationContextBuilder connectorInitializationContextBuilder;
+   private FrameworkConnectorInitializationContextBuilder connectorInitializationContextBuilder;
 
    public ExtensionBuilder type(final String type) {
        this.type = type;
@@ -266,7 +266,7 @@ public class ExtensionBuilder {
        return this;
    }
 
-   public ExtensionBuilder connectorInitializationContextBuilder(final ConnectorInitializationContextBuilder contextBuilder) {
+   public ExtensionBuilder connectorInitializationContextBuilder(final FrameworkConnectorInitializationContextBuilder contextBuilder) {
        this.connectorInitializationContextBuilder = contextBuilder;
        return this;
    }
@@ -495,7 +495,7 @@ public class ExtensionBuilder {
        final ComponentLog logger = new SimpleProcessLogger(identifier, connector, new StandardLoggingContext());
        final ConnectorDetails connectorDetails = new ConnectorDetails(connector, bundleCoordinate, logger);
 
-       final ConnectorInitializationContext initContext = createConnectorInitializationContext(managedProcessGroup, logger);
+       final FrameworkConnectorInitializationContext initContext = createConnectorInitializationContext(managedProcessGroup, logger);
 
        final ConnectorNode connectorNode = new StandardConnectorNode(
            identifier,
@@ -541,7 +541,7 @@ public class ExtensionBuilder {
        }
    }
 
-   private ConnectorInitializationContext createConnectorInitializationContext(final ProcessGroup managedProcessGroup, final ComponentLog componentLog) {
+   private FrameworkConnectorInitializationContext createConnectorInitializationContext(final ProcessGroup managedProcessGroup, final ComponentLog componentLog) {
 
        final String name = type.contains(".") ? StringUtils.substringAfterLast(type, ".") : type;
        final SecretsManager secretsManager = null;

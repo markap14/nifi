@@ -19,12 +19,11 @@ package org.apache.nifi.components.connector;
 
 import org.apache.nifi.asset.AssetManager;
 import org.apache.nifi.components.connector.components.FlowContext;
-import org.apache.nifi.flow.Bundle;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.flow.VersionedProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 
-public class StandardConnectorInitializationContext implements ConnectorInitializationContext {
+public class StandardConnectorInitializationContext implements FrameworkConnectorInitializationContext {
     private final String identifier;
     private final String name;
     private final ComponentLog componentLog;
@@ -62,6 +61,11 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
     }
 
     @Override
+    public AssetManager getAssetManager() {
+        return assetManager;
+    }
+
+    @Override
     public void updateFlow(final FlowContext flowContext, final VersionedExternalFlow versionedExternalFlow) throws FlowUpdateException {
         if (!(flowContext instanceof final FrameworkFlowContext frameworkFlowContext)) {
             throw new IllegalArgumentException("FlowContext is not an instance provided by the framework");
@@ -79,7 +83,7 @@ public class StandardConnectorInitializationContext implements ConnectorInitiali
         }
     }
 
-    public static class Builder implements ConnectorInitializationContextBuilder {
+    public static class Builder implements FrameworkConnectorInitializationContextBuilder {
         private String identifier;
         private String name;
         private ComponentLog componentLog;

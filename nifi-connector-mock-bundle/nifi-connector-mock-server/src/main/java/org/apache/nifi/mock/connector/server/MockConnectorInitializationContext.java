@@ -18,21 +18,18 @@
 package org.apache.nifi.mock.connector.server;
 
 import org.apache.nifi.asset.AssetManager;
-import org.apache.nifi.components.connector.ConnectorInitializationContext;
-import org.apache.nifi.components.connector.ConnectorInitializationContextBuilder;
-import org.apache.nifi.components.connector.ConnectorParameterLookup;
+import org.apache.nifi.components.connector.FrameworkConnectorInitializationContextBuilder;
 import org.apache.nifi.components.connector.FlowUpdateException;
+import org.apache.nifi.components.connector.FrameworkConnectorInitializationContext;
 import org.apache.nifi.components.connector.FrameworkFlowContext;
 import org.apache.nifi.components.connector.SecretsManager;
 import org.apache.nifi.components.connector.components.FlowContext;
-import org.apache.nifi.flow.Bundle;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.flow.VersionedProcessGroup;
 import org.apache.nifi.flow.VersionedProcessor;
-import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
 
-public class MockConnectorInitializationContext implements ConnectorInitializationContext {
+public class MockConnectorInitializationContext implements FrameworkConnectorInitializationContext {
 
     private final String identifier;
     private final String name;
@@ -73,6 +70,11 @@ public class MockConnectorInitializationContext implements ConnectorInitializati
     }
 
     @Override
+    public AssetManager getAssetManager() {
+        return assetManager;
+    }
+
+    @Override
     public void updateFlow(final FlowContext flowContext, final VersionedExternalFlow versionedExternalFlow) throws FlowUpdateException {
         if (!(flowContext instanceof final FrameworkFlowContext frameworkFlowContext)) {
             throw new IllegalArgumentException("FlowContext is not an instance provided by the framework");
@@ -109,7 +111,7 @@ public class MockConnectorInitializationContext implements ConnectorInitializati
     }
 
 
-    public static class Builder implements ConnectorInitializationContextBuilder {
+    public static class Builder implements FrameworkConnectorInitializationContextBuilder {
         private final MockExtensionMapper mockExtensionMapper;
         private String identifier;
         private String name;

@@ -17,6 +17,10 @@
 
 package org.apache.nifi.components.connector;
 
+import org.apache.nifi.asset.AssetManager;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -30,10 +34,15 @@ public class StandardConnectorConfigurationContext implements MutableConnectorCo
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final Lock readLock = rwLock.readLock();
     private final Lock writeLock = rwLock.writeLock();
+    private final AssetManager assetManager;
+    private final SecretsManager secretsManager;
 
     final Map<String, List<PropertyGroupConfiguration>> propertyGroupConfigurations = new HashMap<>();
+    final Map<String, List<PropertyGroupConfiguration>> resolvedPropertyGroupConfigurations = new HashMap<>();
 
-    public StandardConnectorConfigurationContext() {
+    public StandardConnectorConfigurationContext(final AssetManager assetManager, final SecretsManager secretsManager) {
+        this.assetManager = assetManager;
+        this.secretsManager = secretsManager;
     }
 
     @Override
@@ -44,7 +53,7 @@ public class StandardConnectorConfigurationContext implements MutableConnectorCo
     private ConnectorPropertyValue getProperty(final String stepName, final String groupName, final String propertyName, final String defaultValue) {
         readLock.lock();
         try {
-            final List<PropertyGroupConfiguration> groupConfigs = propertyGroupConfigurations.get(stepName);
+            final List<PropertyGroupConfiguration> groupConfigs = resolvedPropertyGroupConfigurations.get(stepName);
             if (groupConfigs == null) {
                 return new StandardConnectorPropertyValue(defaultValue);
             }
@@ -59,16 +68,8 @@ public class StandardConnectorConfigurationContext implements MutableConnectorCo
                     return new StandardConnectorPropertyValue(defaultValue);
                 }
 
-                if (valueReference instanceof StringLiteralValue stringLiteral) {
-                    return new StandardConnectorPropertyValue(stringLiteral.getValue());
-                } else if (valueReference instanceof AssetReference) {
-                    // TODO: Resolve the asset value using AssetManager
-                    throw new UnsupportedOperationException("Asset references are not yet supported");
-                } else if (valueReference instanceof SecretReference) {
-                    // TODO: Resolve the secret value using SecretManager
-                    throw new UnsupportedOperationException("Secret references are not yet supported");
-                }
-                return new StandardConnectorPropertyValue(defaultValue);
+                // The resolvedPropertyGroupConfigurations contains only StringLiteralValue references.
+                return new StandardConnectorPropertyValue(((StringLiteralValue) valueReference).getValue());
             }
 
             // Property Group not found
@@ -85,7 +86,7 @@ public class StandardConnectorConfigurationContext implements MutableConnectorCo
 
     @Override
     public StandardConnectorConfigurationContext createWithOverrides(final String stepName, final List<PropertyGroupConfiguration> propertyOverrides) {
-        final StandardConnectorConfigurationContext created = new StandardConnectorConfigurationContext();
+        final StandardConnectorConfigurationContext created = new StandardConnectorConfigurationContext(assetManager, secretsManager);
         readLock.lock();
         try {
             for (final Map.Entry<String, List<PropertyGroupConfiguration>> stepEntry : propertyGroupConfigurations.entrySet()) {
@@ -137,10 +138,55 @@ public class StandardConnectorConfigurationContext implements MutableConnectorCo
                 return ConfigurationUpdateResult.NO_CHANGES;
             }
 
+            final List<PropertyGroupConfiguration> resolvedConfigs = propertyGroupConfigurations.stream()
+                .map(this::resolvePropertyGroupConfiguration)
+                .toList();
+
+            // Merge the new configurations with existing ones.
             this.propertyGroupConfigurations.put(stepName, merge(existingGroupConfigs, propertyGroupConfigurations));
+            this.resolvedPropertyGroupConfigurations.compute(stepName, (key, existingResolvedConfigs) -> merge(existingResolvedConfigs, resolvedConfigs));
+
             return ConfigurationUpdateResult.CHANGES_MADE;
         } finally {
             writeLock.unlock();
+        }
+    }
+
+    private PropertyGroupConfiguration resolvePropertyGroupConfiguration(final PropertyGroupConfiguration groupConfig) {
+        final Map<String, ConnectorValueReference> resolvedProperties = new HashMap<>();
+
+        for (final Map.Entry<String, ConnectorValueReference> entry : groupConfig.propertyValues().entrySet()) {
+            final String propertyName = entry.getKey();
+            final ConnectorValueReference reference = entry.getValue();
+            final ConnectorValueReference resolved = resolve(reference);
+            resolvedProperties.put(propertyName, resolved);
+        }
+
+        return new PropertyGroupConfiguration(groupConfig.groupName(), resolvedProperties);
+    }
+
+    private ConnectorValueReference resolve(final ConnectorValueReference reference) {
+        if (reference == null) {
+            return null;
+        }
+
+        try {
+            return switch (reference) {
+                case StringLiteralValue stringLiteral -> stringLiteral;
+                case AssetReference assetReference -> assetManager.getAsset(assetReference.getAssetIdentifier())
+                    .map(asset -> asset.getFile().getAbsolutePath())
+                    .map(StringLiteralValue::new)
+                    .orElse(null);
+                case SecretReference secretReference -> secretsManager.getSecrets().stream()
+                    .filter(secret -> Objects.equals(secret.getGroupName(), secretReference.getProviderId()))
+                    .filter(secret -> Objects.equals(secret.getName(), secretReference.getSecretName()))
+                    .findFirst()
+                    .map(Secret::getValue)
+                    .map(StringLiteralValue::new)
+                    .orElse(null);
+            };
+        } catch (final IOException ioe) {
+            throw new UncheckedIOException("Unable to obtain Secrets from Secret Manager", ioe);
         }
     }
 
@@ -153,7 +199,13 @@ public class StandardConnectorConfigurationContext implements MutableConnectorCo
                 return ConfigurationUpdateResult.NO_CHANGES;
             }
 
+            final List<PropertyGroupConfiguration> resolvedConfigs = propertyGroupConfigurations.stream()
+                .map(this::resolvePropertyGroupConfiguration)
+                .toList();
+
             this.propertyGroupConfigurations.put(stepName, copyPropertyGroupConfigurations(propertyGroupConfigurations));
+            this.resolvedPropertyGroupConfigurations.put(stepName, copyPropertyGroupConfigurations(resolvedConfigs));
+
             return ConfigurationUpdateResult.CHANGES_MADE;
         } finally {
             writeLock.unlock();
@@ -228,21 +280,21 @@ public class StandardConnectorConfigurationContext implements MutableConnectorCo
         return new PropertyGroupConfiguration(existingConfiguration.groupName(), mergedProperties);
     }
 
+    @Override
     public MutableConnectorConfigurationContext clone() {
         readLock.lock();
         try {
-            final StandardConnectorConfigurationContext cloned = new StandardConnectorConfigurationContext();
+            final StandardConnectorConfigurationContext cloned = new StandardConnectorConfigurationContext(assetManager, secretsManager);
             for (final Map.Entry<String, List<PropertyGroupConfiguration>> entry : this.propertyGroupConfigurations.entrySet()) {
                 final String stepName = entry.getKey();
-                final List<PropertyGroupConfiguration> groupConfigurations = entry.getValue();
-
-                final List<PropertyGroupConfiguration> clonedGroupConfigs = new ArrayList<>();
-                for (final PropertyGroupConfiguration groupConfig : groupConfigurations) {
-                    final Map<String, ConnectorValueReference> clonedProperties = new HashMap<>(groupConfig.propertyValues());
-                    clonedGroupConfigs.add(new PropertyGroupConfiguration(groupConfig.groupName(), clonedProperties));
-                }
-
+                final List<PropertyGroupConfiguration> clonedGroupConfigs = copyPropertyGroupConfigurations(entry.getValue());
                 cloned.propertyGroupConfigurations.put(stepName, clonedGroupConfigs);
+            }
+
+            for (final Map.Entry<String, List<PropertyGroupConfiguration>> entry : this.resolvedPropertyGroupConfigurations.entrySet()) {
+                final String stepName = entry.getKey();
+                final List<PropertyGroupConfiguration> clonedGroupConfigs = copyPropertyGroupConfigurations(entry.getValue());
+                cloned.resolvedPropertyGroupConfigurations.put(stepName, clonedGroupConfigs);
             }
 
             return cloned;
@@ -250,4 +302,5 @@ public class StandardConnectorConfigurationContext implements MutableConnectorCo
             readLock.unlock();
         }
     }
+
 }

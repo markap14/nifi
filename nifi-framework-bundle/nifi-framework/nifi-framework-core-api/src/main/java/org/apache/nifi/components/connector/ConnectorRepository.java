@@ -90,6 +90,6 @@ public interface ConnectorRepository {
      */
     ConnectorStateTransition createStateTransition(String type, String id);
 
-    ConnectorInitializationContextBuilder createInitializationContextBuilder();
+    FrameworkConnectorInitializationContextBuilder createInitializationContextBuilder();
 
 }

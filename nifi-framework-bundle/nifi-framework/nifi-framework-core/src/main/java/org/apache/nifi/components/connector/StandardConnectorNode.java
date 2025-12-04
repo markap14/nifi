@@ -38,6 +38,7 @@ import org.apache.nifi.engine.FlowEngine;
 import org.apache.nifi.flow.Bundle;
 import org.apache.nifi.flow.VersionedConfigurationStep;
 import org.apache.nifi.flow.VersionedConnectorPropertyGroup;
+import org.apache.nifi.flow.VersionedConnectorValueReference;
 import org.apache.nifi.flow.VersionedExternalFlow;
 import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.logging.ComponentLog;
@@ -45,8 +46,6 @@ import org.apache.nifi.nar.ExtensionManager;
 import org.apache.nifi.nar.NarCloseable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.apache.nifi.flow.VersionedConnectorValueReference;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -83,7 +82,7 @@ public class StandardConnectorNode implements ConnectorNode {
 
     private volatile String name;
     private volatile boolean performValidation = true;
-    private volatile ConnectorInitializationContext initializationContext;
+    private volatile FrameworkConnectorInitializationContext initializationContext;
 
 
     public StandardConnectorNode(final String identifier, final FlowManager flowManager, final ExtensionManager extensionManager,
@@ -154,7 +153,9 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     private MutableConnectorConfigurationContext createConfigurationContext(final List<VersionedConfigurationStep> flowConfiguration) {
-        final StandardConnectorConfigurationContext configurationContext = new StandardConnectorConfigurationContext();
+        final StandardConnectorConfigurationContext configurationContext = new StandardConnectorConfigurationContext(
+            initializationContext.getAssetManager(), initializationContext.getSecretsManager());
+
         for (final VersionedConfigurationStep configStep : flowConfiguration) {
             final List<PropertyGroupConfiguration> groupConfigurations = new ArrayList<>();
 
@@ -167,6 +168,7 @@ public class StandardConnectorNode implements ConnectorNode {
                         convertedProperties.put(entry.getKey(), valueReference);
                     }
                 }
+
                 final PropertyGroupConfiguration groupConfiguration = new PropertyGroupConfiguration(propertyGroup.getName(), convertedProperties);
                 groupConfigurations.add(groupConfiguration);
             }
@@ -524,12 +526,12 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
-    public void initializeConnector(final ConnectorInitializationContext initializationContext) {
+    public void initializeConnector(final FrameworkConnectorInitializationContext initializationContext) {
+        this.initializationContext = initializationContext;
+
         try (final NarCloseable narCloseable = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
             getConnector().initialize(initializationContext);
         }
-
-        this.initializationContext = initializationContext;
 
         recreateWorkingFlowContext();
     }

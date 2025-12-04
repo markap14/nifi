@@ -17,6 +17,7 @@
 
 package org.apache.nifi.components.connector;
 
+import org.apache.nifi.asset.AssetManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -26,13 +27,16 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.Mockito.mock;
 
 public class TestStandardConnectorConfigurationContext {
     private StandardConnectorConfigurationContext context;
 
     @BeforeEach
     public void setUp() {
-        context = new StandardConnectorConfigurationContext();
+        final AssetManager assetManager = mock(AssetManager.class);
+        final SecretsManager secretsManager = mock(SecretsManager.class);
+        context = new StandardConnectorConfigurationContext(assetManager, secretsManager);
     }
 
     private Map<String, ConnectorValueReference> toValueReferences(final Map<String, String> stringProperties) {
@@ -260,6 +264,36 @@ public class TestStandardConnectorConfigurationContext {
         assertEquals("6", context.getProperty("step1", "group3", "f").getValue());
         assertEquals("7", context.getProperty("step1", "group1", "g").getValue());
         assertEquals("8", context.getProperty("step1", "group4", "h").getValue());
+    }
+
+    @Test
+    public void testCloneHasCorrectResolvedValues() {
+        final Map<String, String> group1Properties = new HashMap<>();
+        group1Properties.put("key1", "value1");
+        group1Properties.put("key2", "value2");
+        final PropertyGroupConfiguration group1 = new PropertyGroupConfiguration("group1", toValueReferences(group1Properties));
+
+        final Map<String, String> group2Properties = new HashMap<>();
+        group2Properties.put("key3", "value3");
+        final PropertyGroupConfiguration group2 = new PropertyGroupConfiguration("group2", toValueReferences(group2Properties));
+
+        context.setProperties("step1", List.of(group1, group2));
+
+        final Map<String, String> step2Properties = new HashMap<>();
+        step2Properties.put("keyA", "valueA");
+        step2Properties.put("keyB", "valueB");
+        final PropertyGroupConfiguration step2Group = new PropertyGroupConfiguration("groupA", toValueReferences(step2Properties));
+        context.setProperties("step2", List.of(step2Group));
+
+        final MutableConnectorConfigurationContext clonedContext = context.clone();
+
+        assertEquals("value1", clonedContext.getProperty("step1", "group1", "key1").getValue());
+        assertEquals("value2", clonedContext.getProperty("step1", "group1", "key2").getValue());
+        assertEquals("value3", clonedContext.getProperty("step1", "group2", "key3").getValue());
+        assertEquals("valueA", clonedContext.getProperty("step2", "groupA", "keyA").getValue());
+        assertEquals("valueB", clonedContext.getProperty("step2", "groupA", "keyB").getValue());
+        assertNull(clonedContext.getProperty("step1", "group1", "nonExistent").getValue());
+        assertNull(clonedContext.getProperty("nonExistentStep", "group1", "key1").getValue());
     }
 }
 

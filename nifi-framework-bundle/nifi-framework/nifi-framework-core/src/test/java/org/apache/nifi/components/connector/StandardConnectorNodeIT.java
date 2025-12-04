@@ -511,20 +511,18 @@ public class StandardConnectorNodeIT {
     private ConnectorConfiguration createConnectorConfiguration(final String sourceText, final int numberOfCopies, final boolean logContents, final boolean countFlowFiles) {
         // Source configuration step
         final Map<String, ConnectorValueReference> sourceProperties = Map.of(
-            "Source Text", new ConnectorValueReference(sourceText, ConnectorValueType.STRING_LITERAL),
-            "Count FlowFiles", new ConnectorValueReference(Boolean.toString(countFlowFiles), ConnectorValueType.STRING_LITERAL));
+            "Source Text", new StringLiteralValue(sourceText),
+            "Count FlowFiles", new StringLiteralValue(Boolean.toString(countFlowFiles)));
         final PropertyGroupConfiguration sourcePropertyGroupConfiguration = new PropertyGroupConfiguration("Source Settings", sourceProperties);
         final ConfigurationStepConfiguration sourceConfigurationStepConfiguration = new ConfigurationStepConfiguration("Source", List.of(sourcePropertyGroupConfiguration));
 
         // Duplication configuration step
-        final Map<String, ConnectorValueReference> duplicationProperties = Map.of(
-            "Number of Copies", new ConnectorValueReference(Integer.toString(numberOfCopies), ConnectorValueType.STRING_LITERAL));
+        final Map<String, ConnectorValueReference> duplicationProperties = Map.of("Number of Copies", new StringLiteralValue(Integer.toString(numberOfCopies)));
         final PropertyGroupConfiguration duplicationPropertyGroupConfiguration = new PropertyGroupConfiguration(null, duplicationProperties);
         final ConfigurationStepConfiguration duplicationConfigurationStepConfiguration = new ConfigurationStepConfiguration("Duplication", List.of(duplicationPropertyGroupConfiguration));
 
         // Destination configuration step
-        final Map<String, ConnectorValueReference> destinationProperties = Map.of(
-            "Log FlowFile Contents", new ConnectorValueReference(Boolean.toString(logContents), ConnectorValueType.STRING_LITERAL));
+        final Map<String, ConnectorValueReference> destinationProperties = Map.of("Log FlowFile Contents", new StringLiteralValue(Boolean.toString(logContents)));
         final PropertyGroupConfiguration destinationPropertyGroupConfiguration = new PropertyGroupConfiguration(null, destinationProperties);
         final ConfigurationStepConfiguration destinationConfigurationStepConfiguration = new ConfigurationStepConfiguration("Destination", List.of(destinationPropertyGroupConfiguration));
 
@@ -533,8 +531,7 @@ public class StandardConnectorNodeIT {
 
     private ConnectorConfiguration createFileConfiguration(final String filename) {
         // File configuration step
-        final Map<String, ConnectorValueReference> fileProperties = Map.of(
-            "File Path", new ConnectorValueReference(filename, ConnectorValueType.STRING_LITERAL));
+        final Map<String, ConnectorValueReference> fileProperties = Map.of("File Path", new StringLiteralValue(filename));
         final PropertyGroupConfiguration filePropertyGroupConfiguration = new PropertyGroupConfiguration("", fileProperties);
         final ConfigurationStepConfiguration fileConfigurationStepConfiguration = new ConfigurationStepConfiguration("File", List.of(filePropertyGroupConfiguration));
 
