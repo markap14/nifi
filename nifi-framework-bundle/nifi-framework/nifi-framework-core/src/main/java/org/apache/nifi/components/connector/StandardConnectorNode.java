@@ -74,7 +74,6 @@ public class StandardConnectorNode implements ConnectorNode {
     private final BundleCoordinate bundleCoordinate;
     private final ConnectorStateTransition stateTransition;
     private final AtomicReference<String> versionedComponentId = new AtomicReference<>();
-    private final AtomicReference<ConnectorState> updateResumeState = new AtomicReference<>(null);
     private final FlowContextFactory flowContextFactory;
     private final FrameworkFlowContext activeFlowContext;
 
@@ -117,13 +116,12 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
-    public void prepareForUpdate(final FlowEngine scheduler) throws FlowUpdateException {
+    public void prepareForUpdate() throws FlowUpdateException {
         final ConnectorState initialState = getCurrentState();
         if (initialState == ConnectorState.UPDATING || initialState == ConnectorState.PREPARING_FOR_UPDATE) {
             return;
         }
 
-        updateResumeState.set(initialState);
         stateTransition.setDesiredState(ConnectorState.UPDATING);
         stateTransition.setCurrentState(ConnectorState.PREPARING_FOR_UPDATE);
 
@@ -189,7 +187,7 @@ public class StandardConnectorNode implements ConnectorNode {
     }
 
     @Override
-    public void applyUpdate(final FlowEngine scheduler) throws FlowUpdateException {
+    public void applyUpdate() throws FlowUpdateException {
         applyUpdate(workingFlowContext);
     }
 
@@ -202,34 +200,25 @@ public class StandardConnectorNode implements ConnectorNode {
 
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
             getConnector().applyUpdate(contextToInherit, activeFlowContext);
+
+            // Update the active flow context based on the properties of the provided context, as the connector has now been updated.
+            final ConnectorConfiguration workingConfig = contextToInherit.getConfigurationContext().toConnectorConfiguration();
+            for (final ConfigurationStepConfiguration stepConfig : workingConfig.getConfigurationStepConfigurations()) {
+                activeFlowContext.getConfigurationContext().replaceProperties(stepConfig.stepName(), stepConfig.propertyGroupConfigurations());
+            }
+
+            // The update has been completed. Tear down and recreate the working flow context to ensure it is in a clean state.
+            recreateWorkingFlowContext();
         } catch (final Throwable t) {
             logger.error("Failed to finish update for {}", this, t);
             stateTransition.setCurrentState(ConnectorState.UPDATE_FAILED);
             stateTransition.setDesiredState(ConnectorState.UPDATE_FAILED);
 
             throw new FlowUpdateException("Failed to finish update for " + this, t);
-        } finally {
-            final ConnectorConfiguration workingConfig = contextToInherit.getConfigurationContext().toConnectorConfiguration();
-            for (final ConfigurationStepConfiguration stepConfig : workingConfig.getConfigurationStepConfigurations()) {
-                activeFlowContext.getConfigurationContext().replaceProperties(stepConfig.stepName(), stepConfig.propertyGroupConfigurations());
-            }
-
-            recreateWorkingFlowContext();
         }
 
-        // TODO: This is not really correct. We need to either explicitly stop or
-        // we need to have some new state of 'UPDATED' etc.
-        stateTransition.setCurrentState(ConnectorState.STOPPED);
-        stateTransition.setDesiredState(ConnectorState.STOPPED);
-
-//        final ConnectorState stateToResume = updateResumeState.getAndSet(null);
-//        if (stateToResume == ConnectorState.DISABLED) {
-//            disable();
-//        } else if (stateToResume == ConnectorState.STOPPED) {
-//            scheduler.submit(() -> stopComponent(scheduler, new CompletableFuture<>()));
-//        } else if (stateToResume == ConnectorState.RUNNING) {
-//            start(scheduler);
-//        }
+        stateTransition.setCurrentState(ConnectorState.UPDATED);
+        stateTransition.setDesiredState(ConnectorState.UPDATED);
     }
 
     private void destroyWorkingContext() {
@@ -253,11 +242,8 @@ public class StandardConnectorNode implements ConnectorNode {
         stateTransition.setCurrentState(ConnectorState.UPDATE_FAILED);
         stateTransition.setDesiredState(ConnectorState.UPDATE_FAILED);
 
-        final FlowContext updateContext = workingFlowContext;
-        recreateWorkingFlowContext();
-
         try (final NarCloseable ignored = NarCloseable.withComponentNarLoader(extensionManager, getConnector().getClass(), getIdentifier())) {
-            getConnector().abortUpdate(updateContext, cause);
+            getConnector().abortUpdate(workingFlowContext, cause);
         }
     }
 
@@ -375,7 +361,7 @@ public class StandardConnectorNode implements ConnectorNode {
                 logger.info("{} is currently stopping so will not trigger Connector to start until it has fully stopped", this);
                 stateTransition.addPendingStartFuture(startCompleteFuture);
             }
-            case STOPPED, PREPARING_FOR_UPDATE -> {
+            case STOPPED, PREPARING_FOR_UPDATE, UPDATED -> {
                 stateTransition.setCurrentState(ConnectorState.STARTING);
                 scheduler.schedule(() -> startComponent(scheduler, startCompleteFuture), 0, TimeUnit.SECONDS);
             }

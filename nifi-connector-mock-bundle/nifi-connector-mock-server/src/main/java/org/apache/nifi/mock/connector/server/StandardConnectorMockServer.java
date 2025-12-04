@@ -186,12 +186,12 @@ public class StandardConnectorMockServer implements ConnectorMockServer {
 
     @Override
     public void prepareForUpdate() throws FlowUpdateException {
-        connectorNode.prepareForUpdate(flowEngine);
+        connectorNode.prepareForUpdate();
     }
 
     @Override
     public void finishUpdate() throws FlowUpdateException {
-        connectorNode.applyUpdate(flowEngine);
+        connectorNode.applyUpdate();
     }
 
     @Override

@@ -184,7 +184,7 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
      */
     void setConfiguration(String configurationStepName, List<PropertyGroupConfiguration> propertyGroupConfigurations) throws FlowUpdateException;
 
-    void prepareForUpdate(FlowEngine scheduler) throws FlowUpdateException;
+    void prepareForUpdate() throws FlowUpdateException;
 
     /**
      * Aborts the update preparation process. This method should only be invoked via the ConnectorRepository.
@@ -196,11 +196,9 @@ public interface ConnectorNode extends ComponentAuthorizable, VersionedComponent
     /**
      * Notifies the Connector that the update process is finished and it can apply any changes that were made during the
      * update process. This method should only be invoked via the ConnectorRepository.
-     * @param scheduler the ScheduledExecutorService to use for scheduling any tasks that the Connector needs to perform
      * @throws FlowUpdateException if unable to apply the changes made during the update process
      */
-    // TODO: Should this return a Future<Void>?
-    void applyUpdate(FlowEngine scheduler) throws FlowUpdateException;
+    void applyUpdate() throws FlowUpdateException;
 
     /**
      * Inherits the given flow configuration into this Connector's active flow configuration.

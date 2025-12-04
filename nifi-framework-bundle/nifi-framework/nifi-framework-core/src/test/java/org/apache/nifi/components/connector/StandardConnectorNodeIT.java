@@ -227,11 +227,11 @@ public class StandardConnectorNodeIT {
 
     private void configure(final ConnectorNode connectorNode, final ConnectorConfiguration configuration) throws FlowUpdateException {
         try (final FlowEngine flowEngine = new FlowEngine(1, "flow-engine")) {
-            connectorNode.prepareForUpdate(flowEngine);
+            connectorNode.prepareForUpdate();
             for (final ConfigurationStepConfiguration stepConfig : configuration.getConfigurationStepConfigurations()) {
                 connectorNode.setConfiguration(stepConfig.stepName(), stepConfig.propertyGroupConfigurations());
             }
-            connectorNode.applyUpdate(flowEngine);
+            connectorNode.applyUpdate();
         }
     }
 
@@ -351,7 +351,7 @@ public class StandardConnectorNodeIT {
         final ConnectorConfiguration removeLogConfiguration = createConnectorConfiguration("Second Iteration", 5, false, false);
 
         try (final FlowEngine flowEngine = new FlowEngine(1, "flow-engine")) {
-            connectorNode.prepareForUpdate(flowEngine);
+            connectorNode.prepareForUpdate();
             final Throwable cause = assertThrows(FlowUpdateException.class, () -> configure(connectorNode, removeLogConfiguration));
             connectorNode.abortUpdate(cause);
 
@@ -368,7 +368,7 @@ public class StandardConnectorNodeIT {
         assertNotNull(connectorNode);
 
         try (final FlowEngine flowEngine = new FlowEngine(1, "flow-engine")) {
-            connectorNode.prepareForUpdate(flowEngine);
+            connectorNode.prepareForUpdate();
             assertEquals(List.of("File"), getConfigurationStepNames(connectorNode));
 
             final Path tempFile = Files.createTempFile("StandardConnectorNodeIT", ".txt");
@@ -377,7 +377,7 @@ public class StandardConnectorNodeIT {
             final ConnectorConfiguration configuration = createFileConfiguration(tempFile.toFile().getAbsolutePath());
             configure(connectorNode, configuration);
 
-            connectorNode.prepareForUpdate(flowEngine);
+            connectorNode.prepareForUpdate();
             assertEquals(List.of("File", "Colors"), getConfigurationStepNames(connectorNode));
 
             final ConfigurationStep colorConfigurationStep = connectorNode.getConfigurationSteps().stream()
@@ -403,7 +403,7 @@ public class StandardConnectorNodeIT {
         assertNotNull(connectorNode);
 
         try (final FlowEngine flowEngine = new FlowEngine(1, "testSimpleValidation")) {
-            connectorNode.prepareForUpdate(flowEngine);
+            connectorNode.prepareForUpdate();
             assertEquals(List.of("File"), getConfigurationStepNames(connectorNode));
 
             final ConnectorConfiguration configuration = createFileConfiguration("/non/existent/file");
