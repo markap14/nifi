@@ -1,0 +1,100 @@
+---
+description: Guidelines for creating implementation plans for complex features. Covers corner cases, testing strategy, logging guidance, TODO lists, and test-driven development practices.
+alwaysApply: false
+---
+
+# Planning Complex Features
+
+When creating a plan for a complex feature, follow this structure and ensure that every
+section below is addressed. A plan that omits any of these sections is incomplete.
+
+## Corner Cases
+
+Identify and explicitly list all corner cases that must be considered. Corner cases include
+but are not limited to:
+
+- Null or empty inputs
+- Boundary values (zero, negative, maximum)
+- Concurrent access and race conditions
+- Error and exception paths
+- I/O and networking failures
+- Timeouts
+- Resource exhaustion (memory, threads, file handles, connections)
+- Component lifecycle transitions (starting, stopping, restarting, disabling)
+- Backward compatibility with existing configurations and APIs
+- Interaction with other components that may be in unexpected states
+
+Every corner case that is called out must have a corresponding test designed to verify
+appropriate behavior, with the exception of trivially verifiable cases (for example, we don't need a unit test
+that verifies that an Exception is thrown if an empty value is provided).
+
+## Testing Strategy
+
+Testing is not a separate phase. Tests should be incorporated throughout the plan and
+should generally be written before the implementation (Test-Driven Development). Never
+create a standalone "Testing Phase" or "Testing Stage" in the plan, with the exception of
+System Testing. System Tests can be their own phase, as they are expensive and can only be
+run once everything is implemented and may require significant recompilation.
+
+For each area of functionality, the plan must specify:
+
+### Unit Tests
+
+List the unit tests that will be created. Each entry should name the test class and
+describe the scenarios it covers, including the corner cases identified above.
+
+### Integration Tests
+
+List the integration tests that will be created. Describe which classes are exercised
+together and what interactions are being verified.
+
+### System Tests
+
+List the system tests that will be created. Describe the end-to-end behavior being
+verified and which modules participate.
+
+If a particular test category is not applicable (for example, a change that is purely
+internal to a single utility class may not warrant system tests), state that explicitly
+and explain why.
+
+System Tests are only applicable to changes to the framework or classes that the framework
+depends on, such as nifi-commons.
+
+## Logging Guidance
+
+The plan must describe the key logging points and their levels. This does not need to
+specify exact log messages, but it must identify the categories of events and the
+appropriate log level for each. For example:
+
+- INFO: Component lifecycle events (created, started, stopped)
+- WARN: Retryable errors, degraded conditions, configuration that may indicate a mistake
+- ERROR: Non-retryable failures, data loss, unrecoverable states
+- DEBUG: Detailed processing information useful during development or troubleshooting
+
+Identify the specific areas in the feature where each level applies. For example,
+"ERROR level logs should be emitted when a FlowFile is routed to a failure relationship"
+or "INFO level logs should be emitted when the scheduling strategy changes for a processor."
+
+## Phasing
+
+When a plan is complex enough to break into stages or phases, each phase should include
+its own tests inline. Do not defer testing to a later phase. A phase is complete only when
+its tests are written and passing.
+
+## TODO List
+
+Every plan must end with a detailed TODO list. This list becomes the implementation
+checklist for the agent. It should be specific and actionable rather than vague or
+high-level, even if this makes the plan somewhat repetitive.
+
+Each TODO item should be concrete enough that the agent can execute it without ambiguity.
+For example, prefer "Create `FooBarTest` with tests for null input, empty list, and
+concurrent access" over "Write tests for FooBar."
+
+The TODO list must always include the following items at the end:
+
+1. Review all new and modified code for correctness and adherence to coding standards.
+2. Review all new and modified code for thread safety.
+3. Verify PMD and checkstyle pass via `mvn checkstyle:check pmd:check -T 1C`.
+4. Run all newly added tests and verify they pass.
+5. Run all existing tests for any modified classes and verify they pass.

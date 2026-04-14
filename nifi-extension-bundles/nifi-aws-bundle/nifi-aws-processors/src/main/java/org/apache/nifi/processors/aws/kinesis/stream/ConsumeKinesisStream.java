@@ -22,6 +22,7 @@ import org.apache.commons.beanutils.ConvertUtilsBean2;
 import org.apache.commons.beanutils.FluentPropertyBeanIntrospector;
 import org.apache.commons.beanutils.PropertyUtilsBean;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.nifi.annotation.behavior.AllowsAutoScheduling;
 import org.apache.nifi.annotation.behavior.DynamicProperties;
 import org.apache.nifi.annotation.behavior.DynamicProperty;
 import org.apache.nifi.annotation.behavior.InputRequirement;
@@ -160,6 +161,7 @@ import static org.apache.nifi.processors.aws.region.RegionUtil.getRegion;
 @SystemResourceConsideration(resource = SystemResource.NETWORK, description = "Kinesis Client Library will continually poll for new Records, " +
         "requesting up to a maximum number of Records/bytes per call. This can result in sustained network usage.")
 @SeeAlso(PutKinesisStream.class)
+@AllowsAutoScheduling(false) // Creates one Kinesis client per concurrent task at schedule time
 public class ConsumeKinesisStream extends AbstractAwsAsyncProcessor<KinesisAsyncClient, KinesisAsyncClientBuilder> {
 
     private static final int INITIAL_WINDOW_SIZE_BYTES = 512 * 1024; // 512 KB - suggested by KinesisClientUtil

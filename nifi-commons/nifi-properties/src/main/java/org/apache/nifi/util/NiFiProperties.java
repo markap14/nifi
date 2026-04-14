@@ -82,6 +82,8 @@ public class NiFiProperties extends ApplicationProperties {
     public static final String ADMINISTRATIVE_YIELD_DURATION = "nifi.administrative.yield.duration";
     public static final String BORED_YIELD_DURATION = "nifi.bored.yield.duration";
     public static final String PROCESSOR_SCHEDULING_TIMEOUT = "nifi.processor.scheduling.timeout";
+    public static final String PROCESSOR_MAX_CONCURRENT_TASKS = "nifi.processor.max.concurrent.tasks";
+    public static final String PROCESSOR_DEFAULT_SCHEDULING_STRATEGY = "nifi.processor.default.scheduling.strategy";
     public static final String BACKPRESSURE_COUNT = "nifi.queue.backpressure.count";
     public static final String BACKPRESSURE_SIZE = "nifi.queue.backpressure.size";
     public static final String UPLOAD_WORKING_DIRECTORY = "nifi.upload.working.directory";
@@ -371,6 +373,8 @@ public class NiFiProperties extends ApplicationProperties {
     public static final String DEFAULT_ADMINISTRATIVE_YIELD_DURATION = "30 sec";
     public static final String DEFAULT_COMPONENT_STATUS_SNAPSHOT_FREQUENCY = "5 mins";
     public static final String DEFAULT_BORED_YIELD_DURATION = "10 millis";
+    public static final int DEFAULT_PROCESSOR_MAX_CONCURRENT_TASKS = 12;
+    public static final String DEFAULT_PROCESSOR_DEFAULT_SCHEDULING_STRATEGY = "TIMER_DRIVEN";
     public static final String DEFAULT_ZOOKEEPER_CONNECT_TIMEOUT = "3 secs";
     public static final String DEFAULT_ZOOKEEPER_SESSION_TIMEOUT = "3 secs";
     public static final String DEFAULT_ZOOKEEPER_ROOT_NODE = "/nifi";
@@ -1442,6 +1446,23 @@ public class NiFiProperties extends ApplicationProperties {
 
     public String getBoredYieldDuration() {
         return getProperty(BORED_YIELD_DURATION, DEFAULT_BORED_YIELD_DURATION);
+    }
+
+    public int getMaxConcurrentTasks() {
+        final int value = getIntegerProperty(PROCESSOR_MAX_CONCURRENT_TASKS, DEFAULT_PROCESSOR_MAX_CONCURRENT_TASKS);
+        return value > 0 ? value : DEFAULT_PROCESSOR_MAX_CONCURRENT_TASKS;
+    }
+
+    /**
+     * Returns the default scheduling strategy for newly created processors. Valid values are
+     * "AUTO" and "TIMER_DRIVEN". Returns "TIMER_DRIVEN" if the property is not set or is invalid.
+     */
+    public String getDefaultSchedulingStrategy() {
+        final String value = getProperty(PROCESSOR_DEFAULT_SCHEDULING_STRATEGY, DEFAULT_PROCESSOR_DEFAULT_SCHEDULING_STRATEGY);
+        if ("TIMER_DRIVEN".equalsIgnoreCase(value) || "AUTO".equalsIgnoreCase(value)) {
+            return value.toUpperCase();
+        }
+        return DEFAULT_PROCESSOR_DEFAULT_SCHEDULING_STRATEGY;
     }
 
     public File getStateManagementConfigFile() {

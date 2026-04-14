@@ -28,13 +28,15 @@ public class SchedulingDefaultsFactory {
         final Map<String, Integer> defaultConcurrentTasks = new LinkedHashMap<>(3);
         defaultConcurrentTasks.put(SchedulingStrategy.TIMER_DRIVEN.name(), SchedulingStrategy.TIMER_DRIVEN.getDefaultConcurrentTasks());
         defaultConcurrentTasks.put(SchedulingStrategy.CRON_DRIVEN.name(), SchedulingStrategy.CRON_DRIVEN.getDefaultConcurrentTasks());
+        defaultConcurrentTasks.put(SchedulingStrategy.AUTO.name(), SchedulingStrategy.AUTO.getDefaultConcurrentTasks());
 
-        final Map<String, String> defaultSchedulingPeriods = new LinkedHashMap<>(2);
+        final Map<String, String> defaultSchedulingPeriods = new LinkedHashMap<>(3);
         defaultSchedulingPeriods.put(SchedulingStrategy.TIMER_DRIVEN.name(), SchedulingStrategy.TIMER_DRIVEN.getDefaultSchedulingPeriod());
         defaultSchedulingPeriods.put(SchedulingStrategy.CRON_DRIVEN.name(), SchedulingStrategy.CRON_DRIVEN.getDefaultSchedulingPeriod());
+        defaultSchedulingPeriods.put(SchedulingStrategy.AUTO.name(), SchedulingStrategy.AUTO.getDefaultSchedulingPeriod());
 
         final SchedulingDefaults schedulingDefaults = new SchedulingDefaults();
-        schedulingDefaults.setDefaultSchedulingStrategy(SchedulingStrategy.TIMER_DRIVEN);
+        schedulingDefaults.setDefaultSchedulingStrategy(SchedulingStrategy.AUTO);
         schedulingDefaults.setDefaultSchedulingPeriodMillis(0);
         schedulingDefaults.setPenalizationPeriodMillis(30000);
         schedulingDefaults.setYieldDurationMillis(1000);

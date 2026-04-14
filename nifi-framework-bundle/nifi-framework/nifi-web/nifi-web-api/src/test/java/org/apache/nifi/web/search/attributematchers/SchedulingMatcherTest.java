@@ -83,6 +83,28 @@ public class SchedulingMatcherTest extends AbstractAttributeMatcherTest {
         thenMatchConsistsOf("Scheduling strategy: CRON driven");
     }
 
+    @Test
+    public void testWhenKeywordAppearsAndAuto() {
+        final SchedulingMatcher testSubject = new SchedulingMatcher();
+        givenSchedulingStrategy(SchedulingStrategy.AUTO);
+        givenSearchTerm("auto");
+
+        testSubject.match(component, searchQuery, matches);
+
+        thenMatchConsistsOf("Scheduling strategy: Auto");
+    }
+
+    @Test
+    public void testWhenKeywordDoesNotAppearAndAuto() {
+        final SchedulingMatcher testSubject = new SchedulingMatcher();
+        givenSchedulingStrategy(SchedulingStrategy.AUTO);
+        givenSearchTerm("timer");
+
+        testSubject.match(component, searchQuery, matches);
+
+        thenNoMatches();
+    }
+
     private void givenSchedulingStrategy(final SchedulingStrategy schedulingStrategy) {
         Mockito.when(component.getSchedulingStrategy()).thenReturn(schedulingStrategy);
     }

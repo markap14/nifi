@@ -16,6 +16,7 @@
  */
 package org.apache.nifi.processors.standard;
 
+import org.apache.nifi.annotation.behavior.AllowsAutoScheduling;
 import org.apache.nifi.annotation.behavior.DynamicProperty;
 import org.apache.nifi.annotation.behavior.InputRequirement;
 import org.apache.nifi.annotation.behavior.InputRequirement.Requirement;
@@ -95,6 +96,7 @@ import static io.krakens.grok.api.GrokUtils.getNameGroups;
         description = "The first capture group, if any found, will be placed into that attribute name."
                 + "But all capture groups, including the matching string sequence itself will also be "
                 + "provided at that attribute name with an index value provided.")
+@AllowsAutoScheduling(false) // Pre-allocates one byte buffer per concurrent task at schedule time
 public class ExtractText extends AbstractProcessor {
 
     public static final PropertyDescriptor CHARACTER_SET = new PropertyDescriptor.Builder()

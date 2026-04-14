@@ -59,10 +59,12 @@ public interface Triggerable {
 
     /**
      * Determines the number of concurrent tasks that may be running for this
-     * <code>Triggerable</code>.
+     * <code>Triggerable</code>. When the scheduling strategy is set to
+     * {@link org.apache.nifi.scheduling.SchedulingStrategy#AUTO AUTO}, the framework
+     * manages concurrency dynamically and this value is used only as an upper bound.
      *
      * @param taskCount a number of concurrent tasks this processor may have
-     * running
+     * running (must be at least 1)
      * @throws IllegalArgumentException if the given value is less than 1
      */
     void setMaxConcurrentTasks(int taskCount);

@@ -3477,6 +3477,7 @@ public final class DtoFactory {
 
         dto.setDescription(getCapabilityDescription(node.getClass()));
         dto.setSupportsParallelProcessing(!node.isTriggeredSerially());
+        dto.setSupportsAutoScheduling(node.isAutoSchedulingAllowed());
         dto.setSupportsBatching(node.isSessionBatchingSupported());
 
         dto.setConfig(createProcessorConfigDto(node, uiOnly));
@@ -4310,15 +4311,20 @@ public final class DtoFactory {
 
             dto.setAnnotationData(procNode.getAnnotationData());
 
-            // set up the default values for concurrent tasks and scheduling period
             final Map<String, String> defaultConcurrentTasks = new HashMap<>();
             defaultConcurrentTasks.put(SchedulingStrategy.TIMER_DRIVEN.name(), String.valueOf(SchedulingStrategy.TIMER_DRIVEN.getDefaultConcurrentTasks()));
             defaultConcurrentTasks.put(SchedulingStrategy.CRON_DRIVEN.name(), String.valueOf(SchedulingStrategy.CRON_DRIVEN.getDefaultConcurrentTasks()));
+            if (procNode.isAutoSchedulingAllowed()) {
+                defaultConcurrentTasks.put(SchedulingStrategy.AUTO.name(), String.valueOf(SchedulingStrategy.AUTO.getDefaultConcurrentTasks()));
+            }
             dto.setDefaultConcurrentTasks(defaultConcurrentTasks);
 
             final Map<String, String> defaultSchedulingPeriod = new HashMap<>();
             defaultSchedulingPeriod.put(SchedulingStrategy.TIMER_DRIVEN.name(), SchedulingStrategy.TIMER_DRIVEN.getDefaultSchedulingPeriod());
             defaultSchedulingPeriod.put(SchedulingStrategy.CRON_DRIVEN.name(), SchedulingStrategy.CRON_DRIVEN.getDefaultSchedulingPeriod());
+            if (procNode.isAutoSchedulingAllowed()) {
+                defaultSchedulingPeriod.put(SchedulingStrategy.AUTO.name(), SchedulingStrategy.AUTO.getDefaultSchedulingPeriod());
+            }
             dto.setDefaultSchedulingPeriod(defaultSchedulingPeriod);
         }
 
@@ -4542,6 +4548,7 @@ public final class DtoFactory {
         copy.setType(original.getType());
         copy.setBundle(copy(original.getBundle()));
         copy.setSupportsParallelProcessing(original.getSupportsParallelProcessing());
+        copy.setSupportsAutoScheduling(original.getSupportsAutoScheduling());
         copy.setSupportsBatching(original.getSupportsBatching());
         copy.setSupportsSensitiveDynamicProperties(original.getSupportsSensitiveDynamicProperties());
         copy.setPersistsState(original.getPersistsState());

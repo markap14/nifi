@@ -98,6 +98,7 @@ import org.apache.nifi.scheduling.ExecutionNode;
 import org.apache.nifi.scheduling.SchedulingStrategy;
 import org.apache.nifi.util.CharacterFilterUtils;
 import org.apache.nifi.util.FormatUtils;
+import org.apache.nifi.util.NiFiProperties;
 import org.apache.nifi.util.ReflectionUtils;
 import org.apache.nifi.util.ThreadUtils;
 import org.apache.nifi.util.file.classloader.ClassLoaderUtils;
@@ -176,6 +177,8 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
     private final ProcessScheduler processScheduler;
     private final VerifiableComponentFactory verifiableComponentFactory;
     private long runNanos = 0L;
+    private volatile int systemMaxConcurrentTasks = NiFiProperties.DEFAULT_PROCESSOR_MAX_CONCURRENT_TASKS;
+    private boolean hasAnnotationBasedSchedule = false;
     private volatile long yieldNanos;
     private volatile ScheduledState desiredState = ScheduledState.STOPPED;
     private volatile LogLevel bulletinLevel = LogLevel.WARN;
@@ -248,7 +251,8 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
 
         try {
             if (processorDetails.getProcClass().isAnnotationPresent(DefaultSchedule.class)) {
-                DefaultSchedule dsc = processorDetails.getProcClass().getAnnotation(DefaultSchedule.class);
+                hasAnnotationBasedSchedule = true;
+                final DefaultSchedule dsc = processorDetails.getProcClass().getAnnotation(DefaultSchedule.class);
                 setSchedulingStrategy(dsc.strategy());
                 setSchedulingPeriod(dsc.period());
                 setMaxConcurrentTasks(dsc.concurrentTasks());
@@ -393,6 +397,11 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
     @Override
     public boolean isExecutionNodeRestricted() {
         return processorRef.get().isExecutionNodeRestricted();
+    }
+
+    @Override
+    public boolean isAutoSchedulingAllowed() {
+        return processorRef.get().isAutoSchedulingAllowed();
     }
 
     /**
@@ -614,13 +623,13 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
     }
 
     /**
-     * Determines the number of concurrent tasks that may be running for this
-     * processor.
+     * Sets the number of concurrent tasks that may be running for this processor.
+     * The raw value is always stored, including values exceeding the system maximum.
+     * The {@code @TriggerSerially} constraint and AUTO-strategy behavior are applied
+     * only in {@link #getEffectiveMaxConcurrentTasks()}, not here.
      *
-     * @param taskCount
-     *            a number of concurrent tasks this processor may have running
-     * @throws IllegalArgumentException
-     *             if the given value is less than 1
+     * @param taskCount the desired concurrent task count (must be at least 1)
+     * @throws IllegalArgumentException if the given value is less than 1
      */
     @Override
     public synchronized void setMaxConcurrentTasks(final int taskCount) {
@@ -632,9 +641,7 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
             throw new IllegalArgumentException("Cannot set Concurrent Tasks to " + taskCount + " for component " + this);
         }
 
-        if (!isTriggeredSerially()) {
-            concurrentTaskCount.set(taskCount);
-        }
+        concurrentTaskCount.set(taskCount);
     }
 
     @Override
@@ -643,11 +650,43 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
     }
 
     /**
-     * @return the number of tasks that may execute concurrently for this processor
+     * @return the raw stored number of tasks that may execute concurrently for this processor,
+     *         which may exceed the system maximum
      */
     @Override
     public int getMaxConcurrentTasks() {
         return concurrentTaskCount.get();
+    }
+
+    @Override
+    public int getEffectiveMaxConcurrentTasks() {
+        if (isTriggeredSerially()) {
+            return 1;
+        }
+        if (schedulingStrategy == SchedulingStrategy.AUTO) {
+            return systemMaxConcurrentTasks;
+        }
+        return Math.min(concurrentTaskCount.get(), systemMaxConcurrentTasks);
+    }
+
+    public void setSystemMaxConcurrentTasks(final int systemMax) {
+        this.systemMaxConcurrentTasks = systemMax;
+    }
+
+    /**
+     * Applies the system-wide default scheduling strategy from nifi.properties. This is only applied
+     * if the processor does not have a {@link DefaultSchedule} annotation, which takes precedence.
+     *
+     * @param strategy the system default scheduling strategy
+     */
+    public void applySystemDefaultSchedulingStrategy(final SchedulingStrategy strategy) {
+        if (!hasAnnotationBasedSchedule) {
+            if (strategy == SchedulingStrategy.AUTO && !isAutoSchedulingAllowed()) {
+                this.schedulingStrategy = SchedulingStrategy.TIMER_DRIVEN;
+            } else {
+                this.schedulingStrategy = strategy;
+            }
+        }
     }
 
     @Override

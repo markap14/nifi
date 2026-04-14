@@ -192,6 +192,12 @@ export class EditProcessor extends TabbedDialog {
             text: 'CRON driven',
             value: 'CRON_DRIVEN',
             description: 'Processor will be scheduled to run on at specific times based on the specified CRON string.'
+        },
+        {
+            text: 'Automatic (Experimental)',
+            value: 'AUTO',
+            description:
+                'Processor will be scheduled using virtual threads with automatic dynamic scaling of concurrent tasks.'
         }
     ];
 
@@ -219,6 +225,10 @@ export class EditProcessor extends TabbedDialog {
         super();
         const request = this.request;
 
+        if (request.entity.component.supportsAutoScheduling === false) {
+            this.schedulingStrategies = this.schedulingStrategies.filter((s) => s.value !== 'AUTO');
+        }
+
         const processorProperties: any = request.entity.component.config.properties;
         const properties: Property[] = Object.entries(processorProperties).map((entry: any) => {
             const [property, value] = entry;
@@ -232,22 +242,32 @@ export class EditProcessor extends TabbedDialog {
         const defaultConcurrentTasks: any = request.entity.component.config.defaultConcurrentTasks;
         const defaultSchedulingPeriod: any = request.entity.component.config.defaultSchedulingPeriod;
 
+        const rawConcurrentTasks = request.entity.component.config.concurrentlySchedulableTaskCount;
+
         let concurrentTasks: string;
         let schedulingPeriod: string;
 
         this.schedulingStrategy = request.entity.component.config.schedulingStrategy;
         if (this.schedulingStrategy === 'CRON_DRIVEN') {
-            this.cronDrivenConcurrentTasks = request.entity.component.config.concurrentlySchedulableTaskCount;
+            this.cronDrivenConcurrentTasks = rawConcurrentTasks;
             this.cronDrivenSchedulingPeriod = request.entity.component.config.schedulingPeriod;
             this.timerDrivenConcurrentTasks = defaultConcurrentTasks['TIMER_DRIVEN'];
             this.timerDrivenSchedulingPeriod = defaultSchedulingPeriod['TIMER_DRIVEN'];
 
             concurrentTasks = this.cronDrivenConcurrentTasks;
             schedulingPeriod = this.cronDrivenSchedulingPeriod;
+        } else if (this.schedulingStrategy === 'AUTO') {
+            this.cronDrivenConcurrentTasks = defaultConcurrentTasks['CRON_DRIVEN'];
+            this.cronDrivenSchedulingPeriod = defaultSchedulingPeriod['CRON_DRIVEN'];
+            this.timerDrivenConcurrentTasks = defaultConcurrentTasks['TIMER_DRIVEN'];
+            this.timerDrivenSchedulingPeriod = defaultSchedulingPeriod['TIMER_DRIVEN'];
+
+            concurrentTasks = defaultConcurrentTasks['AUTO'] || '1';
+            schedulingPeriod = defaultSchedulingPeriod['AUTO'] || '0 sec';
         } else {
             this.cronDrivenConcurrentTasks = defaultConcurrentTasks['CRON_DRIVEN'];
             this.cronDrivenSchedulingPeriod = defaultSchedulingPeriod['CRON_DRIVEN'];
-            this.timerDrivenConcurrentTasks = request.entity.component.config.concurrentlySchedulableTaskCount;
+            this.timerDrivenConcurrentTasks = rawConcurrentTasks;
             this.timerDrivenSchedulingPeriod = request.entity.component.config.schedulingPeriod;
 
             concurrentTasks = this.timerDrivenConcurrentTasks;
@@ -281,7 +301,7 @@ export class EditProcessor extends TabbedDialog {
             comments: new FormControl(request.entity.component.config.comments)
         });
 
-        if (!this.supportsParallelProcessing()) {
+        if (!this.supportsParallelProcessing() || this.schedulingStrategy === 'AUTO') {
             this.editProcessorForm.get('concurrentTasks')?.disable();
         }
 
@@ -318,7 +338,7 @@ export class EditProcessor extends TabbedDialog {
             }
         }
 
-        if (!this.supportsParallelProcessing()) {
+        if (!this.supportsParallelProcessing() || this.schedulingStrategy === 'AUTO') {
             this.editProcessorForm.get('concurrentTasks')?.disable();
         }
     }
@@ -360,13 +380,6 @@ export class EditProcessor extends TabbedDialog {
         return this.request.entity.component.supportsParallelProcessing === true;
     }
 
-    concurrentTasksTooltip(): string {
-        if (this.supportsParallelProcessing()) {
-            return 'The number of tasks that should be concurrently scheduled for this processor. Must be an integer greater than 0.';
-        }
-        return 'This processor does not support parallel processing.';
-    }
-
     formatType(): string {
         return this.nifiCommon.formatType(this.request.entity.component);
     }
@@ -378,7 +391,7 @@ export class EditProcessor extends TabbedDialog {
     concurrentTasksChanged(): void {
         if (this.schedulingStrategy === 'CRON_DRIVEN') {
             this.cronDrivenConcurrentTasks = this.editProcessorForm.get('concurrentTasks')?.value;
-        } else {
+        } else if (this.schedulingStrategy === 'TIMER_DRIVEN') {
             this.timerDrivenConcurrentTasks = this.editProcessorForm.get('concurrentTasks')?.value;
         }
     }
@@ -396,10 +409,18 @@ export class EditProcessor extends TabbedDialog {
 
         if (value === 'CRON_DRIVEN') {
             this.editProcessorForm.get('concurrentTasks')?.setValue(this.cronDrivenConcurrentTasks);
+            this.editProcessorForm.get('concurrentTasks')?.enable();
             this.editProcessorForm.get('schedulingPeriod')?.setValue(this.cronDrivenSchedulingPeriod);
+        } else if (value === 'AUTO') {
+            this.editProcessorForm.get('concurrentTasks')?.disable();
         } else {
             this.editProcessorForm.get('concurrentTasks')?.setValue(this.timerDrivenConcurrentTasks);
+            this.editProcessorForm.get('concurrentTasks')?.enable();
             this.editProcessorForm.get('schedulingPeriod')?.setValue(this.timerDrivenSchedulingPeriod);
+        }
+
+        if (!this.supportsParallelProcessing()) {
+            this.editProcessorForm.get('concurrentTasks')?.disable();
         }
     }
 
@@ -441,7 +462,7 @@ export class EditProcessor extends TabbedDialog {
             comments: this.editProcessorForm.get('comments')?.value
         };
 
-        if (this.supportsParallelProcessing()) {
+        if (this.supportsParallelProcessing() && this.schedulingStrategy !== 'AUTO') {
             config.concurrentlySchedulableTaskCount = this.editProcessorForm.get('concurrentTasks')?.value;
         }
 
@@ -467,7 +488,7 @@ export class EditProcessor extends TabbedDialog {
                 .map((property) => property.descriptor.name);
         }
 
-        if (this.supportsBatching()) {
+        if (this.supportsBatching() && this.schedulingStrategy !== 'AUTO') {
             payload.component.config.runDurationMillis = this.editProcessorForm.get('runDuration')?.value;
         }
 

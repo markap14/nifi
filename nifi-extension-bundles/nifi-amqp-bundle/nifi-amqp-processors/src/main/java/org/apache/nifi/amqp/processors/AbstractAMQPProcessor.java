@@ -22,6 +22,7 @@ import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.DefaultSaslConfig;
 import com.rabbitmq.client.impl.DefaultExceptionHandler;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
+import org.apache.nifi.annotation.behavior.AllowsAutoScheduling;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.lifecycle.OnStopped;
 import org.apache.nifi.components.PropertyDescriptor;
@@ -54,6 +55,7 @@ import javax.net.ssl.SSLContext;
  * @param <T> the type of {@link AMQPWorker}. Please see {@link AMQPPublisher}
  *            and {@link AMQPConsumer}
  */
+@AllowsAutoScheduling(false) // Creates a bounded AMQP resource pool sized to concurrent tasks at schedule time
 abstract class AbstractAMQPProcessor<T extends AMQPWorker> extends AbstractProcessor {
 
     public static final String AMQP_APPID_ATTRIBUTE = "amqp$appId";

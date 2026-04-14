@@ -130,12 +130,11 @@ import org.apache.nifi.controller.repository.claim.ResourceClaimManager;
 import org.apache.nifi.controller.repository.claim.StandardContentClaim;
 import org.apache.nifi.controller.repository.claim.StandardResourceClaimManager;
 import org.apache.nifi.controller.repository.io.LimitedInputStream;
-import org.apache.nifi.controller.scheduling.CronSchedulingAgent;
 import org.apache.nifi.controller.scheduling.LifecycleStateManager;
 import org.apache.nifi.controller.scheduling.RepositoryContextFactory;
 import org.apache.nifi.controller.scheduling.StandardLifecycleStateManager;
 import org.apache.nifi.controller.scheduling.StandardProcessScheduler;
-import org.apache.nifi.controller.scheduling.TimerDrivenSchedulingAgent;
+import org.apache.nifi.controller.scheduling.VirtualThreadSchedulingAgent;
 import org.apache.nifi.controller.serialization.FlowSerializationException;
 import org.apache.nifi.controller.serialization.FlowSerializer;
 import org.apache.nifi.controller.serialization.FlowSynchronizationException;
@@ -294,6 +293,7 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
 
     private final AtomicInteger maxTimerDrivenThreads;
     private final AtomicReference<FlowEngine> timerDrivenEngineRef;
+    private volatile VirtualThreadSchedulingAgent virtualThreadSchedulingAgent;
 
     private final ContentRepository contentRepository;
     private final FlowFileRepository flowFileRepository;
@@ -672,10 +672,12 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
             flowAnalyzer.initialize(controllerServiceProvider);
         }
 
-        final CronSchedulingAgent cronSchedulingAgent = new CronSchedulingAgent(this, timerDrivenEngineRef.get(), repositoryContextFactory);
-        final TimerDrivenSchedulingAgent timerDrivenAgent = new TimerDrivenSchedulingAgent(this, timerDrivenEngineRef.get(), repositoryContextFactory, this.nifiProperties);
-        processScheduler.setSchedulingAgent(SchedulingStrategy.TIMER_DRIVEN, timerDrivenAgent);
-        processScheduler.setSchedulingAgent(SchedulingStrategy.CRON_DRIVEN, cronSchedulingAgent);
+        final VirtualThreadSchedulingAgent virtualThreadSchedulingAgent = new VirtualThreadSchedulingAgent(
+                this, timerDrivenEngineRef.get(), repositoryContextFactory, this.nifiProperties, maxTimerDrivenThreads.get());
+        this.virtualThreadSchedulingAgent = virtualThreadSchedulingAgent;
+        processScheduler.setSchedulingAgent(SchedulingStrategy.TIMER_DRIVEN, virtualThreadSchedulingAgent);
+        processScheduler.setSchedulingAgent(SchedulingStrategy.CRON_DRIVEN, virtualThreadSchedulingAgent);
+        processScheduler.setSchedulingAgent(SchedulingStrategy.AUTO, virtualThreadSchedulingAgent);
 
         startConnectablesAfterInitialization = new HashSet<>();
         startRemoteGroupPortsAfterInitialization = new HashSet<>();
@@ -2140,6 +2142,9 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
         writeLock.lock();
         try {
             setMaxThreadCount(maxThreadCount, "Timer Driven", this.timerDrivenEngineRef.get(), this.maxTimerDrivenThreads);
+            if (virtualThreadSchedulingAgent != null) {
+                virtualThreadSchedulingAgent.setMaxThreadCount(maxThreadCount);
+            }
         } finally {
             writeLock.unlock("setMaxTimerDrivenThreadCount");
         }

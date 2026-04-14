@@ -436,4 +436,72 @@ public class NiFiPropertiesTest {
         assertTrue(result.contains("war"));
         assertTrue(result.contains("jetty"));
     }
+
+    @Test
+    public void testGetMaxConcurrentTasksReturnsConfiguredValue() {
+        final Map<String, String> props = new HashMap<>();
+        props.put(NiFiProperties.PROCESSOR_MAX_CONCURRENT_TASKS, "24");
+        final NiFiProperties properties = NiFiProperties.createBasicNiFiProperties(null, props);
+        assertEquals(24, properties.getMaxConcurrentTasks());
+    }
+
+    @Test
+    public void testGetMaxConcurrentTasksReturnsDefaultWhenMissing() {
+        final NiFiProperties properties = NiFiProperties.createBasicNiFiProperties(null, new HashMap<>());
+        assertEquals(NiFiProperties.DEFAULT_PROCESSOR_MAX_CONCURRENT_TASKS, properties.getMaxConcurrentTasks());
+    }
+
+    @Test
+    public void testGetMaxConcurrentTasksReturnsDefaultWhenZero() {
+        final Map<String, String> props = new HashMap<>();
+        props.put(NiFiProperties.PROCESSOR_MAX_CONCURRENT_TASKS, "0");
+        final NiFiProperties properties = NiFiProperties.createBasicNiFiProperties(null, props);
+        assertEquals(NiFiProperties.DEFAULT_PROCESSOR_MAX_CONCURRENT_TASKS, properties.getMaxConcurrentTasks());
+    }
+
+    @Test
+    public void testGetMaxConcurrentTasksReturnsDefaultWhenNegative() {
+        final Map<String, String> props = new HashMap<>();
+        props.put(NiFiProperties.PROCESSOR_MAX_CONCURRENT_TASKS, "-5");
+        final NiFiProperties properties = NiFiProperties.createBasicNiFiProperties(null, props);
+        assertEquals(NiFiProperties.DEFAULT_PROCESSOR_MAX_CONCURRENT_TASKS, properties.getMaxConcurrentTasks());
+    }
+
+    @Test
+    public void testGetDefaultSchedulingStrategyReturnsAuto() {
+        final Map<String, String> props = new HashMap<>();
+        props.put(NiFiProperties.PROCESSOR_DEFAULT_SCHEDULING_STRATEGY, "AUTO");
+        final NiFiProperties properties = NiFiProperties.createBasicNiFiProperties(null, props);
+        assertEquals("AUTO", properties.getDefaultSchedulingStrategy());
+    }
+
+    @Test
+    public void testGetDefaultSchedulingStrategyReturnsTimerDriven() {
+        final Map<String, String> props = new HashMap<>();
+        props.put(NiFiProperties.PROCESSOR_DEFAULT_SCHEDULING_STRATEGY, "TIMER_DRIVEN");
+        final NiFiProperties properties = NiFiProperties.createBasicNiFiProperties(null, props);
+        assertEquals("TIMER_DRIVEN", properties.getDefaultSchedulingStrategy());
+    }
+
+    @Test
+    public void testGetDefaultSchedulingStrategyIsCaseInsensitive() {
+        final Map<String, String> props = new HashMap<>();
+        props.put(NiFiProperties.PROCESSOR_DEFAULT_SCHEDULING_STRATEGY, "timer_driven");
+        final NiFiProperties properties = NiFiProperties.createBasicNiFiProperties(null, props);
+        assertEquals("TIMER_DRIVEN", properties.getDefaultSchedulingStrategy());
+    }
+
+    @Test
+    public void testGetDefaultSchedulingStrategyReturnsDefaultWhenMissing() {
+        final NiFiProperties properties = NiFiProperties.createBasicNiFiProperties(null, new HashMap<>());
+        assertEquals("AUTO", properties.getDefaultSchedulingStrategy());
+    }
+
+    @Test
+    public void testGetDefaultSchedulingStrategyReturnsDefaultWhenInvalid() {
+        final Map<String, String> props = new HashMap<>();
+        props.put(NiFiProperties.PROCESSOR_DEFAULT_SCHEDULING_STRATEGY, "INVALID_STRATEGY");
+        final NiFiProperties properties = NiFiProperties.createBasicNiFiProperties(null, props);
+        assertEquals("AUTO", properties.getDefaultSchedulingStrategy());
+    }
 }

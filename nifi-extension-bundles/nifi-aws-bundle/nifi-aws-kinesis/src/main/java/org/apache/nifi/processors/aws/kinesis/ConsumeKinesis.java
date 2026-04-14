@@ -16,6 +16,7 @@
  */
 package org.apache.nifi.processors.aws.kinesis;
 
+import org.apache.nifi.annotation.behavior.AllowsAutoScheduling;
 import org.apache.nifi.annotation.behavior.InputRequirement;
 import org.apache.nifi.annotation.behavior.SystemResource;
 import org.apache.nifi.annotation.behavior.SystemResourceConsideration;
@@ -152,6 +153,7 @@ import static org.apache.nifi.processors.aws.region.RegionUtil.REGION;
         buffer is typically much smaller because fetch threads block when the queue is \
         full and most responses are well below the maximum size.
         """)
+@AllowsAutoScheduling(false) // Creates one Kinesis client per concurrent task at schedule time
 public class ConsumeKinesis extends AbstractProcessor {
 
     static final String ATTR_STREAM_NAME = "aws.kinesis.stream.name";

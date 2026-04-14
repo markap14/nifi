@@ -79,6 +79,8 @@ public abstract class ProcessorNode extends AbstractComponentNode implements Con
 
     public abstract boolean isExecutionNodeRestricted();
 
+    public abstract boolean isAutoSchedulingAllowed();
+
     public abstract Requirement getInputRequirement();
 
     public abstract List<ActiveThreadInfo> getActiveThreads(ThreadDetails threadDetails);
@@ -126,6 +128,16 @@ public abstract class ProcessorNode extends AbstractComponentNode implements Con
     public abstract Map<String, String> getStyle();
 
     public abstract void setStyle(Map<String, String> style);
+
+    /**
+     * Returns the runtime-effective maximum concurrent task count for this processor.
+     * For TIMER_DRIVEN and CRON_DRIVEN strategies, this is {@code min(getMaxConcurrentTasks(), systemMax)}.
+     * For AUTO strategy, this returns {@code 1} since concurrency is managed dynamically by the
+     * scheduling agent. For processors annotated with {@code @TriggerSerially}, this always returns {@code 1}.
+     *
+     * @return the effective maximum concurrent task count for scheduling
+     */
+    public abstract int getEffectiveMaxConcurrentTasks();
 
     /**
      * @return the number of threads (concurrent tasks) currently being used by

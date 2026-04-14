@@ -95,6 +95,38 @@ public interface FlowFileQueue {
      */
     String getBackPressureDataSizeThreshold();
 
+    /**
+     * Returns the backpressure data size threshold in bytes.
+     * Returns 0 if no data size threshold is configured.
+     */
+    default long getBackPressureDataSizeThresholdBytes() {
+        return 0L;
+    }
+
+    /**
+     * Returns the ratio of current queue utilization to the backpressure threshold,
+     * as a value between 0.0 (empty) and 1.0+ (at or exceeding backpressure).
+     * Considers both object count and data size thresholds, returning the higher ratio.
+     * Returns 0.0 if no backpressure thresholds are configured.
+     */
+    default double getBackPressureRatio() {
+        final QueueSize queueSize = size();
+        double countRatio = 0.0;
+        double sizeRatio = 0.0;
+
+        final long objectThreshold = getBackPressureObjectThreshold();
+        if (objectThreshold > 0) {
+            countRatio = (double) queueSize.getObjectCount() / objectThreshold;
+        }
+
+        final long bytesThreshold = getBackPressureDataSizeThresholdBytes();
+        if (bytesThreshold > 0) {
+            sizeRatio = (double) queueSize.getByteCount() / bytesThreshold;
+        }
+
+        return Math.max(countRatio, sizeRatio);
+    }
+
     QueueSize size();
 
     /**

@@ -17,6 +17,7 @@
 package org.apache.nifi.processors.script;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.nifi.annotation.behavior.AllowsAutoScheduling;
 import org.apache.nifi.annotation.behavior.DynamicProperty;
 import org.apache.nifi.annotation.behavior.InputRequirement;
 import org.apache.nifi.annotation.behavior.InputRequirement.Requirement;
@@ -87,6 +88,7 @@ import javax.script.SimpleBindings;
 @Stateful(scopes = {Scope.LOCAL, Scope.CLUSTER},
         description = "Scripts can store and retrieve state using the State Management APIs. Consult the State Manager section of the Developer's Guide for more details.")
 @SeeAlso({InvokeScriptedProcessor.class})
+@AllowsAutoScheduling(false) // Creates one script engine per concurrent task at schedule time
 public class ExecuteScript extends AbstractSessionFactoryProcessor implements Searchable {
 
     // Constants maintained for backwards compatibility

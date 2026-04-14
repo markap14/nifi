@@ -17,6 +17,7 @@
 package org.apache.nifi.processors.standard;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.nifi.annotation.behavior.AllowsAutoScheduling;
 import org.apache.nifi.annotation.behavior.DynamicProperty;
 import org.apache.nifi.annotation.behavior.InputRequirement;
 import org.apache.nifi.annotation.behavior.InputRequirement.Requirement;
@@ -85,6 +86,7 @@ import java.util.concurrent.locks.ReentrantLock;
     @WritesAttribute(attribute = "command.arguments", description = "Arguments of the command"),
     @WritesAttribute(attribute = "mime.type", description = "Sets the MIME type of the output if the 'Output MIME Type' property is set and 'Batch Duration' is not set")
 })
+@AllowsAutoScheduling(false) // Creates a fixed thread pool sized to concurrent tasks at schedule time
 public class ExecuteProcess extends AbstractProcessor {
 
     static final String ATTRIBUTE_COMMAND = "command";

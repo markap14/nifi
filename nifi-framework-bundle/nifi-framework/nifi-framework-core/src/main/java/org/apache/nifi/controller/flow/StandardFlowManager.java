@@ -54,6 +54,7 @@ import org.apache.nifi.controller.ProcessorNode;
 import org.apache.nifi.controller.ReportingTaskNode;
 import org.apache.nifi.controller.StandardFlowSnippet;
 import org.apache.nifi.controller.StandardFunnel;
+import org.apache.nifi.controller.StandardProcessorNode;
 import org.apache.nifi.controller.exception.ComponentLifeCycleException;
 import org.apache.nifi.controller.exception.ProcessorInstantiationException;
 import org.apache.nifi.controller.label.Label;
@@ -103,6 +104,7 @@ import org.apache.nifi.remote.StandardRemoteProcessGroup;
 import org.apache.nifi.remote.TransferDirection;
 import org.apache.nifi.reporting.BulletinRepository;
 import org.apache.nifi.reporting.ReportingTask;
+import org.apache.nifi.scheduling.SchedulingStrategy;
 import org.apache.nifi.util.FormatUtils;
 import org.apache.nifi.util.NiFiProperties;
 import org.apache.nifi.util.ReflectionUtils;
@@ -390,6 +392,12 @@ public class StandardFlowManager extends AbstractFlowManager implements FlowMana
             .classloaderIsolationKey(classloaderIsolationKey)
             .pythonBridge(flowController.getPythonBridge())
             .buildProcessor();
+
+        if (procNode instanceof StandardProcessorNode standardProcessorNode) {
+            standardProcessorNode.setSystemMaxConcurrentTasks(nifiProperties.getMaxConcurrentTasks());
+            standardProcessorNode.applySystemDefaultSchedulingStrategy(
+                    SchedulingStrategy.valueOf(nifiProperties.getDefaultSchedulingStrategy()));
+        }
 
         LogRepositoryFactory.getRepository(procNode.getIdentifier()).setLogger(procNode.getLogger());
         if (registerLogObserver) {

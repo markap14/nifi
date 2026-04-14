@@ -22,6 +22,7 @@ import io.krakens.grok.api.Grok;
 import io.krakens.grok.api.GrokCompiler;
 import io.krakens.grok.api.Match;
 import io.krakens.grok.api.exception.GrokException;
+import org.apache.nifi.annotation.behavior.AllowsAutoScheduling;
 import org.apache.nifi.annotation.behavior.InputRequirement;
 import org.apache.nifi.annotation.behavior.Restricted;
 import org.apache.nifi.annotation.behavior.Restriction;
@@ -85,6 +86,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
                 )
         }
 )
+@AllowsAutoScheduling(false) // Pre-allocates one byte buffer per concurrent task at schedule time
 public class ExtractGrok extends AbstractProcessor {
 
     public static final String FLOWFILE_ATTRIBUTE = "flowfile-attribute";

@@ -71,18 +71,20 @@ class RuntimeManifestIT {
 
         final SchedulingDefaults schedulingDefaults = runtimeManifest.getSchedulingDefaults();
         assertNotNull(schedulingDefaults);
-        assertEquals(SchedulingStrategy.TIMER_DRIVEN, schedulingDefaults.getDefaultSchedulingStrategy());
+        assertEquals(SchedulingStrategy.AUTO, schedulingDefaults.getDefaultSchedulingStrategy());
 
         final Map<String, Integer> defaultConcurrentTasks = schedulingDefaults.getDefaultConcurrentTasksBySchedulingStrategy();
         assertNotNull(defaultConcurrentTasks);
-        assertEquals(2, defaultConcurrentTasks.size());
+        assertEquals(3, defaultConcurrentTasks.size());
         assertEquals(SchedulingStrategy.TIMER_DRIVEN.getDefaultConcurrentTasks(), defaultConcurrentTasks.get(SchedulingStrategy.TIMER_DRIVEN.name()).intValue());
         assertEquals(SchedulingStrategy.CRON_DRIVEN.getDefaultConcurrentTasks(), defaultConcurrentTasks.get(SchedulingStrategy.CRON_DRIVEN.name()).intValue());
+        assertEquals(SchedulingStrategy.AUTO.getDefaultConcurrentTasks(), defaultConcurrentTasks.get(SchedulingStrategy.AUTO.name()).intValue());
 
         final Map<String, String> defaultSchedulingPeriods = schedulingDefaults.getDefaultSchedulingPeriodsBySchedulingStrategy();
-        assertEquals(2, defaultSchedulingPeriods.size());
+        assertEquals(3, defaultSchedulingPeriods.size());
         assertEquals(SchedulingStrategy.TIMER_DRIVEN.getDefaultSchedulingPeriod(), defaultSchedulingPeriods.get(SchedulingStrategy.TIMER_DRIVEN.name()));
         assertEquals(SchedulingStrategy.CRON_DRIVEN.getDefaultSchedulingPeriod(), defaultSchedulingPeriods.get(SchedulingStrategy.CRON_DRIVEN.name()));
+        assertEquals(SchedulingStrategy.AUTO.getDefaultSchedulingPeriod(), defaultSchedulingPeriods.get(SchedulingStrategy.AUTO.name()));
 
         final List<Bundle> bundles = runtimeManifest.getBundles();
         assertNotNull(bundles);
@@ -109,25 +111,28 @@ class RuntimeManifestIT {
 
         final ProcessorDefinition joltTransformDef = getProcessorDefinition(bundles, "nifi-jolt-nar",
                 "org.apache.nifi.processors.jolt.JoltTransformRecord");
-        assertEquals(SchedulingStrategy.TIMER_DRIVEN.name(), joltTransformDef.getDefaultSchedulingStrategy());
+        assertEquals(SchedulingStrategy.AUTO.name(), joltTransformDef.getDefaultSchedulingStrategy());
 
         final List<String> joltTransformSchedulingStrategies = joltTransformDef.getSupportedSchedulingStrategies();
         assertNotNull(joltTransformSchedulingStrategies);
-        assertEquals(2, joltTransformSchedulingStrategies.size());
+        assertEquals(3, joltTransformSchedulingStrategies.size());
         assertTrue(joltTransformSchedulingStrategies.contains(SchedulingStrategy.TIMER_DRIVEN.name()));
         assertTrue(joltTransformSchedulingStrategies.contains(SchedulingStrategy.CRON_DRIVEN.name()));
+        assertTrue(joltTransformSchedulingStrategies.contains(SchedulingStrategy.AUTO.name()));
 
         final Map<String, Integer> joltTransformDefaultConcurrentTasks = joltTransformDef.getDefaultConcurrentTasksBySchedulingStrategy();
         assertNotNull(joltTransformDefaultConcurrentTasks);
-        assertEquals(2, joltTransformDefaultConcurrentTasks.size());
+        assertEquals(3, joltTransformDefaultConcurrentTasks.size());
         assertEquals(SchedulingStrategy.TIMER_DRIVEN.getDefaultConcurrentTasks(), joltTransformDefaultConcurrentTasks.get(SchedulingStrategy.TIMER_DRIVEN.name()).intValue());
         assertEquals(SchedulingStrategy.CRON_DRIVEN.getDefaultConcurrentTasks(), joltTransformDefaultConcurrentTasks.get(SchedulingStrategy.CRON_DRIVEN.name()).intValue());
+        assertEquals(SchedulingStrategy.AUTO.getDefaultConcurrentTasks(), joltTransformDefaultConcurrentTasks.get(SchedulingStrategy.AUTO.name()).intValue());
 
         final Map<String, String> joltTransformDefaultSchedulingPeriods = joltTransformDef.getDefaultSchedulingPeriodBySchedulingStrategy();
         assertNotNull(joltTransformDefaultSchedulingPeriods);
-        assertEquals(2, joltTransformDefaultSchedulingPeriods.size());
+        assertEquals(3, joltTransformDefaultSchedulingPeriods.size());
         assertEquals("0 sec", joltTransformDefaultSchedulingPeriods.get(SchedulingStrategy.TIMER_DRIVEN.name()));
         assertEquals(SchedulingStrategy.CRON_DRIVEN.getDefaultSchedulingPeriod(), joltTransformDefaultSchedulingPeriods.get(SchedulingStrategy.CRON_DRIVEN.name()));
+        assertEquals(SchedulingStrategy.AUTO.getDefaultSchedulingPeriod(), joltTransformDefaultSchedulingPeriods.get(SchedulingStrategy.AUTO.name()));
 
         // Verify ExecuteSQL has readsAttributes
         final ProcessorDefinition executeSqlDef = getProcessorDefinition(bundles, "nifi-standard-nar",
@@ -197,25 +202,28 @@ class RuntimeManifestIT {
         assertEquals("1 sec", definition.getDefaultYieldDuration());
         assertEquals("WARN", definition.getDefaultBulletinLevel());
 
-        assertEquals(SchedulingStrategy.TIMER_DRIVEN.name(), definition.getDefaultSchedulingStrategy());
+        assertEquals(SchedulingStrategy.AUTO.name(), definition.getDefaultSchedulingStrategy());
 
         final List<String> schedulingStrategies = definition.getSupportedSchedulingStrategies();
         assertNotNull(schedulingStrategies);
-        assertEquals(2, schedulingStrategies.size());
+        assertEquals(3, schedulingStrategies.size());
         assertTrue(schedulingStrategies.contains(SchedulingStrategy.TIMER_DRIVEN.name()));
         assertTrue(schedulingStrategies.contains(SchedulingStrategy.CRON_DRIVEN.name()));
+        assertTrue(schedulingStrategies.contains(SchedulingStrategy.AUTO.name()));
 
         final Map<String, Integer> defaultConcurrentTasks = definition.getDefaultConcurrentTasksBySchedulingStrategy();
         assertNotNull(defaultConcurrentTasks);
-        assertEquals(2, defaultConcurrentTasks.size());
+        assertEquals(3, defaultConcurrentTasks.size());
         assertEquals(SchedulingStrategy.TIMER_DRIVEN.getDefaultConcurrentTasks(), defaultConcurrentTasks.get(SchedulingStrategy.TIMER_DRIVEN.name()).intValue());
         assertEquals(SchedulingStrategy.CRON_DRIVEN.getDefaultConcurrentTasks(), defaultConcurrentTasks.get(SchedulingStrategy.CRON_DRIVEN.name()).intValue());
+        assertEquals(SchedulingStrategy.AUTO.getDefaultConcurrentTasks(), defaultConcurrentTasks.get(SchedulingStrategy.AUTO.name()).intValue());
 
         final Map<String, String> defaultSchedulingPeriods = definition.getDefaultSchedulingPeriodBySchedulingStrategy();
         assertNotNull(defaultSchedulingPeriods);
-        assertEquals(2, defaultSchedulingPeriods.size());
+        assertEquals(3, defaultSchedulingPeriods.size());
         assertEquals("1 min", defaultSchedulingPeriods.get(SchedulingStrategy.TIMER_DRIVEN.name()));
         assertEquals(SchedulingStrategy.CRON_DRIVEN.getDefaultSchedulingPeriod(), defaultSchedulingPeriods.get(SchedulingStrategy.CRON_DRIVEN.name()));
+        assertEquals(SchedulingStrategy.AUTO.getDefaultSchedulingPeriod(), defaultSchedulingPeriods.get(SchedulingStrategy.AUTO.name()));
 
         final List<Relationship> relationships = definition.getSupportedRelationships();
         assertNotNull(relationships);

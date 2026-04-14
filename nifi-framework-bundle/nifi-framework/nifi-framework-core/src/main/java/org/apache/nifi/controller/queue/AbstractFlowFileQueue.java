@@ -140,6 +140,11 @@ public abstract class AbstractFlowFileQueue implements FlowFileQueue {
         return getMaxQueueSize().getMaxSize();
     }
 
+    @Override
+    public long getBackPressureDataSizeThresholdBytes() {
+        return getMaxQueueSize().getMaxBytes();
+    }
+
     private MaxQueueSize getMaxQueueSize() {
         return maxQueueSize.get();
     }

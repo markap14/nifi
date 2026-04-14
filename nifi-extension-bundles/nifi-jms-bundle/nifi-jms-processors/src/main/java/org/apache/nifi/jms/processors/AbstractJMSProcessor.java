@@ -18,6 +18,7 @@ package org.apache.nifi.jms.processors;
 
 import jakarta.jms.ConnectionFactory;
 import jakarta.jms.Message;
+import org.apache.nifi.annotation.behavior.AllowsAutoScheduling;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.lifecycle.OnStopped;
 import org.apache.nifi.annotation.lifecycle.OnUnscheduled;
@@ -69,6 +70,7 @@ import java.util.stream.Collectors;
  * @see ConsumeJMS
  * @see JMSConnectionFactoryProviderDefinition
  */
+@AllowsAutoScheduling(false) // Creates a bounded JMS worker pool sized to concurrent tasks at schedule time
 public abstract class AbstractJMSProcessor<T extends JMSWorker> extends AbstractProcessor {
 
     static final String QUEUE = "QUEUE";

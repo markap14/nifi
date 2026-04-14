@@ -142,6 +142,9 @@ public class StatelessFlowTask {
 
     private boolean isRunAsFastAsPossible(final ProcessorNode procNode) {
         final SchedulingStrategy schedulingStrategy = procNode.getSchedulingStrategy();
+        if (schedulingStrategy == SchedulingStrategy.AUTO) {
+            return true;
+        }
         if (schedulingStrategy != SchedulingStrategy.TIMER_DRIVEN) {
             return false;
         }

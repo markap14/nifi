@@ -283,11 +283,12 @@ public class StandardProcessorDAO extends ComponentDAO implements ProcessorDAO {
         // get the current scheduling strategy
         SchedulingStrategy schedulingStrategy = processorNode.getSchedulingStrategy();
 
-        // validate the new scheduling strategy if appropriate
         if (isNotNull(config.getSchedulingStrategy())) {
             try {
-                // this will be the new scheduling strategy so use it
                 schedulingStrategy = SchedulingStrategy.valueOf(config.getSchedulingStrategy());
+                if (schedulingStrategy == SchedulingStrategy.AUTO && !processorNode.isAutoSchedulingAllowed()) {
+                    validationErrors.add("This processor does not support the Auto scheduling strategy.");
+                }
             } catch (IllegalArgumentException iae) {
                 validationErrors.add(String.format("Scheduling strategy: Value must be one of [%s]", StringUtils.join(SchedulingStrategy.values(), ", ")));
             }
@@ -295,9 +296,9 @@ public class StandardProcessorDAO extends ComponentDAO implements ProcessorDAO {
 
         // validate the concurrent tasks based on the scheduling strategy
         if (isNotNull(config.getConcurrentlySchedulableTaskCount())) {
-            if (schedulingStrategy == SchedulingStrategy.TIMER_DRIVEN) {
-                if (config.getConcurrentlySchedulableTaskCount() <= 0) {
-                    validationErrors.add("Concurrent tasks must be greater than 0.");
+            if (schedulingStrategy == SchedulingStrategy.TIMER_DRIVEN || schedulingStrategy == SchedulingStrategy.CRON_DRIVEN) {
+                if (config.getConcurrentlySchedulableTaskCount() < 1) {
+                    validationErrors.add("Concurrent tasks must be at least 1.");
                 }
             }
         }
@@ -320,6 +321,8 @@ public class StandardProcessorDAO extends ComponentDAO implements ProcessorDAO {
                     } catch (final Exception e) {
                         throw new IllegalArgumentException(String.format("Scheduling Period '%s' is not a valid cron expression: %s", schedulingPeriod, e.getMessage()));
                     }
+                    break;
+                case AUTO:
                     break;
             }
         }

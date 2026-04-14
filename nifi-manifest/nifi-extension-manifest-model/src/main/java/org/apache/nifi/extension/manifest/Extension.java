@@ -98,6 +98,7 @@ public class Extension {
     private boolean supportsBatching;
     private boolean primaryNodeOnly;
     private boolean sideEffectFree;
+    private boolean allowsAutoScheduling = true;
 
     @XmlElementWrapper
     @XmlElement(name = "useCase")
@@ -339,6 +340,15 @@ public class Extension {
     @Schema(description = "Indicates that a processor is side effect free")
     public boolean getSideEffectFree() {
         return sideEffectFree;
+    }
+
+    @Schema(description = "Indicates whether a processor supports the Auto scheduling strategy")
+    public boolean getAllowsAutoScheduling() {
+        return allowsAutoScheduling;
+    }
+
+    public void setAllowsAutoScheduling(final boolean allowsAutoScheduling) {
+        this.allowsAutoScheduling = allowsAutoScheduling;
     }
 
     public void setSideEffectFree(boolean sideEffectFree) {

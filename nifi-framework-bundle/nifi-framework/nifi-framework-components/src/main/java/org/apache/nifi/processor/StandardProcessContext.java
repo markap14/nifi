@@ -219,7 +219,7 @@ public class StandardProcessContext implements ProcessContext, ControllerService
     @Override
     public int getMaxConcurrentTasks() {
         verifyTaskActive();
-        return procNode.getMaxConcurrentTasks();
+        return procNode.getEffectiveMaxConcurrentTasks();
     }
 
     @Override

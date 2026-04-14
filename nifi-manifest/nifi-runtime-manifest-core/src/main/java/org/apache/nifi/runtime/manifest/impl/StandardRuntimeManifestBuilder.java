@@ -268,24 +268,33 @@ public class StandardRuntimeManifestBuilder implements RuntimeManifestBuilder {
         processorDefinition.setDefaultYieldDuration(defaultSettings == null ? DEFAULT_YIELD_PERIOD : defaultSettings.getYieldDuration());
         processorDefinition.setDefaultBulletinLevel(defaultSettings == null ? DEFAULT_BULLETIN_LEVEL : defaultSettings.getBulletinLevel());
 
+        final boolean autoSchedulingAllowed = extension.getAllowsAutoScheduling();
+
         final List<String> schedulingStrategies = new ArrayList<>();
         schedulingStrategies.add(SchedulingStrategy.TIMER_DRIVEN.name());
         schedulingStrategies.add(SchedulingStrategy.CRON_DRIVEN.name());
+        if (autoSchedulingAllowed) {
+            schedulingStrategies.add(SchedulingStrategy.AUTO.name());
+        }
 
-        // If a default schedule is provided then use that, otherwise default to TIMER_DRIVEN
         final DefaultSchedule defaultSchedule = extension.getDefaultSchedule();
         final String defaultSchedulingStrategy = defaultSchedule == null
-                ? SchedulingStrategy.TIMER_DRIVEN.name() : extension.getDefaultSchedule().getStrategy();
+                ? SchedulingStrategy.TIMER_DRIVEN.name() : defaultSchedule.getStrategy();
 
-        final Map<String, Integer> defaultConcurrentTasks = new LinkedHashMap<>(3);
+        final Map<String, Integer> defaultConcurrentTasks = new LinkedHashMap<>();
         defaultConcurrentTasks.put(SchedulingStrategy.TIMER_DRIVEN.name(), SchedulingStrategy.TIMER_DRIVEN.getDefaultConcurrentTasks());
         defaultConcurrentTasks.put(SchedulingStrategy.CRON_DRIVEN.name(), SchedulingStrategy.CRON_DRIVEN.getDefaultConcurrentTasks());
+        if (autoSchedulingAllowed) {
+            defaultConcurrentTasks.put(SchedulingStrategy.AUTO.name(), SchedulingStrategy.AUTO.getDefaultConcurrentTasks());
+        }
 
-        final Map<String, String> defaultSchedulingPeriods = new LinkedHashMap<>(2);
+        final Map<String, String> defaultSchedulingPeriods = new LinkedHashMap<>();
         defaultSchedulingPeriods.put(SchedulingStrategy.TIMER_DRIVEN.name(), SchedulingStrategy.TIMER_DRIVEN.getDefaultSchedulingPeriod());
         defaultSchedulingPeriods.put(SchedulingStrategy.CRON_DRIVEN.name(), SchedulingStrategy.CRON_DRIVEN.getDefaultSchedulingPeriod());
+        if (autoSchedulingAllowed) {
+            defaultSchedulingPeriods.put(SchedulingStrategy.AUTO.name(), SchedulingStrategy.AUTO.getDefaultSchedulingPeriod());
+        }
 
-        // If a default schedule is provided then replace the default values for the default strategy
         if (defaultSchedule != null) {
             defaultSchedulingPeriods.put(defaultSchedule.getStrategy(), defaultSchedule.getPeriod());
             defaultConcurrentTasks.put(defaultSchedule.getStrategy(), Integer.valueOf(defaultSchedule.getConcurrentTasks()));

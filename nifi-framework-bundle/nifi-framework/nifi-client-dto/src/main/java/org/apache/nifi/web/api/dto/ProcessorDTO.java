@@ -40,6 +40,7 @@ public class ProcessorDTO extends ComponentDTO {
     private List<RelationshipDTO> relationships;
     private String description;
     private Boolean supportsParallelProcessing;
+    private Boolean supportsAutoScheduling;
     private Boolean supportsBatching;
     private Boolean supportsSensitiveDynamicProperties;
     private Boolean persistsState;
@@ -139,6 +140,15 @@ public class ProcessorDTO extends ComponentDTO {
 
     public void setSupportsParallelProcessing(Boolean supportsParallelProcessing) {
         this.supportsParallelProcessing = supportsParallelProcessing;
+    }
+
+    @Schema(description = "Whether the processor supports the Auto scheduling strategy.")
+    public Boolean getSupportsAutoScheduling() {
+        return supportsAutoScheduling;
+    }
+
+    public void setSupportsAutoScheduling(final Boolean supportsAutoScheduling) {
+        this.supportsAutoScheduling = supportsAutoScheduling;
     }
 
     /**

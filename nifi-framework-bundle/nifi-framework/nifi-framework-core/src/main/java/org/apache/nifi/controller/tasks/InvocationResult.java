@@ -14,37 +14,67 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.nifi.controller.tasks;
 
-public interface InvocationResult {
-    boolean isYield();
+public class InvocationResult {
 
-    String getYieldExplanation();
+    public enum YieldReason {
+        NONE,
+        NO_WORK,
+        BACKPRESSURE,
+        NOT_PRIMARY_NODE,
+        TERMINATED,
+        YIELDED
+    }
 
-    InvocationResult DO_NOT_YIELD = new InvocationResult() {
-        @Override
-        public boolean isYield() {
-            return false;
-        }
+    private static final InvocationResult DO_NOT_YIELD_INSTANCE = new InvocationResult(YieldReason.NONE, null);
+    private static final InvocationResult TERMINATED_INSTANCE = new InvocationResult(YieldReason.TERMINATED, null);
+    private static final InvocationResult YIELDED_INSTANCE = new InvocationResult(YieldReason.YIELDED, null);
+    private static final InvocationResult NO_WORK_INSTANCE = new InvocationResult(YieldReason.NO_WORK, "No work to do");
+    private static final InvocationResult BACKPRESSURE_INSTANCE = new InvocationResult(YieldReason.BACKPRESSURE, "Backpressure Applied");
+    private static final InvocationResult NOT_PRIMARY_NODE_INSTANCE = new InvocationResult(YieldReason.NOT_PRIMARY_NODE, "This node is not the primary node");
 
-        @Override
-        public String getYieldExplanation() {
-            return null;
-        }
-    };
+    private final YieldReason yieldReason;
+    private final String yieldExplanation;
 
-    static InvocationResult yield(final String explanation) {
-        return new InvocationResult() {
-            @Override
-            public boolean isYield() {
-                return true;
-            }
+    private InvocationResult(final YieldReason yieldReason, final String yieldExplanation) {
+        this.yieldReason = yieldReason;
+        this.yieldExplanation = yieldExplanation;
+    }
 
-            @Override
-            public String getYieldExplanation() {
-                return explanation;
-            }
-        };
+    public boolean isYield() {
+        return yieldReason != YieldReason.NONE && yieldReason != YieldReason.TERMINATED && yieldReason != YieldReason.YIELDED;
+    }
+
+    public String getYieldExplanation() {
+        return yieldExplanation;
+    }
+
+    public YieldReason getYieldReason() {
+        return yieldReason;
+    }
+
+    public static InvocationResult doNotYield() {
+        return DO_NOT_YIELD_INSTANCE;
+    }
+
+    public static InvocationResult terminated() {
+        return TERMINATED_INSTANCE;
+    }
+
+    public static InvocationResult yielded() {
+        return YIELDED_INSTANCE;
+    }
+
+    public static InvocationResult noWork() {
+        return NO_WORK_INSTANCE;
+    }
+
+    public static InvocationResult backpressure() {
+        return BACKPRESSURE_INSTANCE;
+    }
+
+    public static InvocationResult notPrimaryNode() {
+        return NOT_PRIMARY_NODE_INSTANCE;
     }
 }
