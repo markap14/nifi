@@ -199,7 +199,7 @@
         <jakarta.activation-api.version>2.1.4</jakarta.activation-api.version>
         <jaxb.runtime.version>4.0.9</jaxb.runtime.version>
         <jersey.bom.version>4.0.2</jersey.bom.version>
-        <jetty.version>12.1.10</jetty.version>
+        <jetty.version>12.1.9</jetty.version>
         <servlet-api.version>6.1.0</servlet-api.version>
         <spring.security.version>7.0.5</spring.security.version>
         <spring.version>7.0.8</spring.version>
