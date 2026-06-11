@@ -217,11 +217,6 @@ public class SpawnedStandaloneNiFiInstanceFactory implements NiFiInstanceFactory
             overrides.put(NiFiProperties.SECURITY_KEYSTORE_PASSWD, NiFiSystemKeyStoreProvider.getProtectionParameter());
             overrides.put(NiFiProperties.SECURITY_KEY_PASSWD, NiFiSystemKeyStoreProvider.getProtectionParameter());
             overrides.put(NiFiProperties.SECURITY_TRUSTSTORE_PASSWD, NiFiSystemKeyStoreProvider.getProtectionParameter());
-            // Force HTTP/1.1 for cluster node-to-node traffic in system tests. The JDK HttpClient combined with
-            // the Jetty 12.1.10 HTTP/2 stream reset rewrite (#15087) surfaces intermittent
-            // "RST_STREAM received Stream cancelled" failures under the heavy disconnect/offload/restart patterns
-            // that system tests exercise. Production traffic defaults to HTTP_2.
-            overrides.put(NiFiProperties.CLUSTER_NODE_PROTOCOL_HTTP_VERSION, "HTTP_1_1");
 
             final Map<String, String> nifiPropertiesOverrides = instanceConfiguration.getNifiPropertiesOverrides();
             if (nifiPropertiesOverrides != null) {
