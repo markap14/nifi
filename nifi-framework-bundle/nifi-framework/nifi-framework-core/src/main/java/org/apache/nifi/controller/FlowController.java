@@ -2135,7 +2135,11 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
     }
 
     public int getActiveTimerDrivenThreadCount() {
-        return timerDrivenEngineRef.get().getActiveCount();
+        int count = timerDrivenEngineRef.get().getActiveCount();
+        if (virtualThreadSchedulingAgent != null) {
+            count += virtualThreadSchedulingAgent.getActiveThreadCount();
+        }
+        return count;
     }
 
     public void setMaxTimerDrivenThreadCount(final int maxThreadCount) {
@@ -2810,7 +2814,7 @@ public class FlowController implements ReportingTaskProvider, FlowAnalysisRulePr
     }
 
     public int getActiveThreadCount() {
-        return timerDrivenEngineRef.get().getActiveCount();
+        return getActiveTimerDrivenThreadCount();
     }
 
     //

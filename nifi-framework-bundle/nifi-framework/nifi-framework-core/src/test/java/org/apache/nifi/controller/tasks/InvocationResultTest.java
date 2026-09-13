@@ -45,7 +45,7 @@ class InvocationResultTest {
     @Test
     void testYielded() {
         final InvocationResult result = InvocationResult.yielded();
-        assertFalse(result.isYield());
+        assertTrue(result.isYield());
         assertEquals(YieldReason.YIELDED, result.getYieldReason());
     }
 

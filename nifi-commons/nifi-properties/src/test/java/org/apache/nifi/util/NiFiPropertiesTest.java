@@ -494,7 +494,7 @@ public class NiFiPropertiesTest {
     @Test
     public void testGetDefaultSchedulingStrategyReturnsDefaultWhenMissing() {
         final NiFiProperties properties = NiFiProperties.createBasicNiFiProperties(null, new HashMap<>());
-        assertEquals("AUTO", properties.getDefaultSchedulingStrategy());
+        assertEquals("TIMER_DRIVEN", properties.getDefaultSchedulingStrategy());
     }
 
     @Test
@@ -502,6 +502,6 @@ public class NiFiPropertiesTest {
         final Map<String, String> props = new HashMap<>();
         props.put(NiFiProperties.PROCESSOR_DEFAULT_SCHEDULING_STRATEGY, "INVALID_STRATEGY");
         final NiFiProperties properties = NiFiProperties.createBasicNiFiProperties(null, props);
-        assertEquals("AUTO", properties.getDefaultSchedulingStrategy());
+        assertEquals("TIMER_DRIVEN", properties.getDefaultSchedulingStrategy());
     }
 }

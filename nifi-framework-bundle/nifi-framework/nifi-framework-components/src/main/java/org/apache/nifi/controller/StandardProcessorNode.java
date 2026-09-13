@@ -624,9 +624,11 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
 
     /**
      * Sets the number of concurrent tasks that may be running for this processor.
-     * The raw value is always stored, including values exceeding the system maximum.
-     * The {@code @TriggerSerially} constraint and AUTO-strategy behavior are applied
-     * only in {@link #getEffectiveMaxConcurrentTasks()}, not here.
+     * The raw value is stored, including values exceeding the system maximum; capping to the
+     * system maximum is applied only when determining runtime concurrency via
+     * {@link #getEffectiveMaxConcurrentTasks()}. For processors annotated with
+     * {@code @TriggerSerially}, any requested count greater than 1 is ignored (with a warning
+     * log), since the processor is hard-coded to only allow a single concurrent task.
      *
      * @param taskCount the desired concurrent task count (must be at least 1)
      * @throws IllegalArgumentException if the given value is less than 1
@@ -639,6 +641,11 @@ public class StandardProcessorNode extends ProcessorNode implements Connectable 
 
         if (taskCount < 1) {
             throw new IllegalArgumentException("Cannot set Concurrent Tasks to " + taskCount + " for component " + this);
+        }
+
+        if (isTriggeredSerially() && taskCount > 1) {
+            LOG.warn("Cannot set Concurrent Tasks above 1 for {} because the Processor is annotated with @TriggerSerially; ignoring the requested value of {}", this, taskCount);
+            return;
         }
 
         concurrentTaskCount.set(taskCount);

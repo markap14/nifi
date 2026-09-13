@@ -31,8 +31,7 @@ import java.util.concurrent.Future;
  * {@link LifecycleState#setScheduled(boolean)} with value 'true' will be
  * invoked.
  *
- * @see TimerDrivenSchedulingAgent
- * @see CronSchedulingAgent
+ * @see VirtualThreadSchedulingAgent
  */
 abstract class AbstractSchedulingAgent implements SchedulingAgent {
 

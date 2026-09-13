@@ -17,27 +17,35 @@
 package org.apache.nifi.controller.scheduling;
 
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Maintains per-processor state for auto-scaling decisions. A fresh instance (with
  * targetConcurrency = 1) is created each time a processor is scheduled, so that
  * scaling always starts from 1 after a stop/start cycle.
+ * <p>
+ * State that is mutated during scaling evaluation (cooldown, idle-hold, rate snapshots,
+ * pending-validation, pre-scale-up rate) is expected to be accessed only while holding
+ * the instance monitor. Evaluation callers must synchronize on this instance before
+ * reading or writing those fields. Fields that are updated outside of evaluation
+ * (targetConcurrency, invocationCounter) use atomic types so that every invocation
+ * thread can update them without locking.
  */
 class ScalingState {
     private static final long EVALUATION_INTERVAL_MILLIS = 1000L;
     private static final long COOLDOWN_DURATION_MILLIS = 10_000L;
 
     private final AtomicInteger targetConcurrency = new AtomicInteger(1);
+    private final AtomicLong invocationCounter = new AtomicLong(0);
     private final int maxConcurrency;
 
-    private volatile long lastEvaluationTime = 0;
-    private volatile long previousFlowFilesOut = 0;
-    private volatile long previousBytesOut = 0;
-    private volatile long preScaleUpFlowFilesRate = 0;
-    private volatile long preScaleUpBytesRate = 0;
-    private volatile boolean pendingValidation = false;
-    private volatile long cooldownExpiration = 0;
-    private volatile long idleHoldSince = 0;
+    private long lastEvaluationTime = 0;
+    private long previousInvocationSnapshot = 0;
+    private long previousInvocationSnapshotNanos = 0;
+    private double preScaleUpInvocationsPerSecond = 0.0;
+    private boolean pendingValidation = false;
+    private long cooldownExpiration = 0;
+    private long idleHoldSince = 0;
 
     ScalingState(final int maxConcurrency) {
         this.maxConcurrency = maxConcurrency;
@@ -51,79 +59,92 @@ class ScalingState {
         return maxConcurrency;
     }
 
-    long getLastEvaluationTime() {
+    /**
+     * Increments the invocation counter. Called by every scheduling thread after each
+     * successful invocation of the connectable. The counter is used by the scaler to
+     * compute an actual per-second invocation rate from the delta between consecutive
+     * evaluations.
+     */
+    void recordInvocation() {
+        invocationCounter.incrementAndGet();
+    }
+
+    long getInvocationCount() {
+        return invocationCounter.get();
+    }
+
+    synchronized long getLastEvaluationTime() {
         return lastEvaluationTime;
     }
 
-    void setLastEvaluationTime(final long lastEvaluationTime) {
+    synchronized void setLastEvaluationTime(final long lastEvaluationTime) {
         this.lastEvaluationTime = lastEvaluationTime;
     }
 
-    long getPreviousFlowFilesOut() {
-        return previousFlowFilesOut;
+    synchronized long getPreviousInvocationSnapshot() {
+        return previousInvocationSnapshot;
     }
 
-    void setPreviousFlowFilesOut(final long previousFlowFilesOut) {
-        this.previousFlowFilesOut = previousFlowFilesOut;
+    synchronized long getPreviousInvocationSnapshotNanos() {
+        return previousInvocationSnapshotNanos;
     }
 
-    long getPreviousBytesOut() {
-        return previousBytesOut;
+    synchronized void updateInvocationSnapshot(final long invocationCount, final long nanoTime) {
+        this.previousInvocationSnapshot = invocationCount;
+        this.previousInvocationSnapshotNanos = nanoTime;
     }
 
-    void setPreviousBytesOut(final long previousBytesOut) {
-        this.previousBytesOut = previousBytesOut;
+    synchronized double getPreScaleUpInvocationsPerSecond() {
+        return preScaleUpInvocationsPerSecond;
     }
 
-    long getPreScaleUpFlowFilesRate() {
-        return preScaleUpFlowFilesRate;
+    synchronized void setPreScaleUpInvocationsPerSecond(final double preScaleUpInvocationsPerSecond) {
+        this.preScaleUpInvocationsPerSecond = preScaleUpInvocationsPerSecond;
     }
 
-    void setPreScaleUpFlowFilesRate(final long preScaleUpFlowFilesRate) {
-        this.preScaleUpFlowFilesRate = preScaleUpFlowFilesRate;
-    }
-
-    long getPreScaleUpBytesRate() {
-        return preScaleUpBytesRate;
-    }
-
-    void setPreScaleUpBytesRate(final long preScaleUpBytesRate) {
-        this.preScaleUpBytesRate = preScaleUpBytesRate;
-    }
-
-    boolean isPendingValidation() {
+    synchronized boolean isPendingValidation() {
         return pendingValidation;
     }
 
-    void setPendingValidation(final boolean pendingValidation) {
+    synchronized void setPendingValidation(final boolean pendingValidation) {
         this.pendingValidation = pendingValidation;
     }
 
-    long getCooldownExpiration() {
+    synchronized long getCooldownExpiration() {
         return cooldownExpiration;
     }
 
-    void setCooldownExpiration(final long cooldownExpiration) {
+    synchronized void setCooldownExpiration(final long cooldownExpiration) {
         this.cooldownExpiration = cooldownExpiration;
     }
 
-    long getIdleHoldSince() {
+    synchronized long getIdleHoldSince() {
         return idleHoldSince;
     }
 
-    void setIdleHoldSince(final long idleHoldSince) {
+    synchronized void setIdleHoldSince(final long idleHoldSince) {
         this.idleHoldSince = idleHoldSince;
     }
 
-    boolean isEvaluationDue() {
-        return System.currentTimeMillis() - lastEvaluationTime >= EVALUATION_INTERVAL_MILLIS;
+    /**
+     * Atomically claims the current evaluation window if the configured interval has
+     * elapsed since the last successful claim. Returns true only for the single caller
+     * that wins the race.
+     */
+    synchronized boolean tryClaimEvaluation() {
+        final long now = System.currentTimeMillis();
+        if (now - lastEvaluationTime < EVALUATION_INTERVAL_MILLIS) {
+            return false;
+        }
+        lastEvaluationTime = now;
+        return true;
     }
 
-    boolean isInCooldown() {
+    synchronized boolean isInCooldown() {
         return System.currentTimeMillis() < cooldownExpiration;
     }
 
-    void enterCooldown() {
+    synchronized void enterCooldown() {
         this.cooldownExpiration = System.currentTimeMillis() + COOLDOWN_DURATION_MILLIS;
     }
 }

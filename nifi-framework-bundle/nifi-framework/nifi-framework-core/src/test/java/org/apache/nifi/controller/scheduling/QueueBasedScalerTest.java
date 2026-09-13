@@ -20,7 +20,6 @@ import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.connectable.Connection;
 import org.apache.nifi.controller.queue.FlowFileQueue;
 import org.apache.nifi.controller.queue.QueueSize;
-import org.apache.nifi.controller.repository.FlowFileEventRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -40,7 +39,7 @@ class QueueBasedScalerTest {
 
     @BeforeEach
     void setUp() {
-        scaler = new QueueBasedScaler(mock(FlowFileEventRepository.class));
+        scaler = new QueueBasedScaler();
         validationConnectable = mock(Connectable.class);
         when(validationConnectable.getName()).thenReturn("TestProcessor");
     }
@@ -129,11 +128,24 @@ class QueueBasedScalerTest {
     void testValidateScaleUpRollsBackWhenThroughputDidNotImprove() {
         final ScalingState state = new ScalingState(12);
         state.getTargetConcurrency().set(3);
-        state.setPreScaleUpFlowFilesRate(100);
-        state.setPreScaleUpBytesRate(5000);
+        state.setPreScaleUpInvocationsPerSecond(100.0);
         state.setPendingValidation(true);
 
-        scaler.validateScaleUp(validationConnectable, state, 90, 4000);
+        scaler.validateScaleUp(validationConnectable, state, 90.0);
+
+        assertEquals(2, state.getTargetConcurrency().get());
+        assertFalse(state.isPendingValidation());
+        assertTrue(state.isInCooldown());
+    }
+
+    @Test
+    void testValidateScaleUpRollsBackWhenThroughputUnchanged() {
+        final ScalingState state = new ScalingState(12);
+        state.getTargetConcurrency().set(3);
+        state.setPreScaleUpInvocationsPerSecond(100.0);
+        state.setPendingValidation(true);
+
+        scaler.validateScaleUp(validationConnectable, state, 100.0);
 
         assertEquals(2, state.getTargetConcurrency().get());
         assertFalse(state.isPendingValidation());
@@ -144,11 +156,10 @@ class QueueBasedScalerTest {
     void testValidateScaleUpNeverDecrementsBelow1() {
         final ScalingState state = new ScalingState(12);
         state.getTargetConcurrency().set(1);
-        state.setPreScaleUpFlowFilesRate(100);
-        state.setPreScaleUpBytesRate(5000);
+        state.setPreScaleUpInvocationsPerSecond(100.0);
         state.setPendingValidation(true);
 
-        scaler.validateScaleUp(validationConnectable, state, 50, 2000);
+        scaler.validateScaleUp(validationConnectable, state, 50.0);
 
         assertEquals(1, state.getTargetConcurrency().get());
         assertFalse(state.isPendingValidation());
@@ -156,29 +167,13 @@ class QueueBasedScalerTest {
     }
 
     @Test
-    void testValidateScaleUpKeepsTargetWhenFlowFilesImproved() {
+    void testValidateScaleUpKeepsTargetWhenInvocationRateImproved() {
         final ScalingState state = new ScalingState(12);
         state.getTargetConcurrency().set(3);
-        state.setPreScaleUpFlowFilesRate(100);
-        state.setPreScaleUpBytesRate(5000);
+        state.setPreScaleUpInvocationsPerSecond(100.0);
         state.setPendingValidation(true);
 
-        scaler.validateScaleUp(validationConnectable, state, 150, 4000);
-
-        assertEquals(3, state.getTargetConcurrency().get());
-        assertFalse(state.isPendingValidation());
-        assertFalse(state.isInCooldown());
-    }
-
-    @Test
-    void testValidateScaleUpKeepsTargetWhenBytesImproved() {
-        final ScalingState state = new ScalingState(12);
-        state.getTargetConcurrency().set(3);
-        state.setPreScaleUpFlowFilesRate(100);
-        state.setPreScaleUpBytesRate(5000);
-        state.setPendingValidation(true);
-
-        scaler.validateScaleUp(validationConnectable, state, 90, 6000);
+        scaler.validateScaleUp(validationConnectable, state, 150.0);
 
         assertEquals(3, state.getTargetConcurrency().get());
         assertFalse(state.isPendingValidation());

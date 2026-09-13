@@ -42,8 +42,16 @@ public class InvocationResult {
         this.yieldExplanation = yieldExplanation;
     }
 
+    /**
+     * Indicates that the invocation did not perform useful work and the scheduling loop should
+     * pause before invoking the connectable again. This returns true for every yield reason that
+     * represents a temporary pause, including explicit yields by the component (YIELDED),
+     * backpressure, no-work conditions, and non-primary-node state on clustered components.
+     * TERMINATED is not treated as a yield because the scheduling loop must exit immediately on
+     * termination rather than sleep and retry.
+     */
     public boolean isYield() {
-        return yieldReason != YieldReason.NONE && yieldReason != YieldReason.TERMINATED && yieldReason != YieldReason.YIELDED;
+        return yieldReason != YieldReason.NONE && yieldReason != YieldReason.TERMINATED;
     }
 
     public String getYieldExplanation() {

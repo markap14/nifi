@@ -169,6 +169,20 @@ public class VirtualThreadSchedulingIT extends NiFiSystemIT {
     }
 
     @Test
+    public void testTriggerSeriallyProcessorCapsConcurrentTasksAtOne() throws NiFiClientException, IOException {
+        final ProcessorEntity merge = getClientUtil().createProcessor("ConcatenateRangeOfFlowFiles");
+
+        final ProcessorConfigDTO timerConfig = new ProcessorConfigDTO();
+        timerConfig.setSchedulingStrategy("TIMER_DRIVEN");
+        timerConfig.setConcurrentlySchedulableTaskCount(8);
+        getClientUtil().updateProcessorConfig(merge, timerConfig);
+
+        final ProcessorEntity updated = getNifiClient().getProcessorClient().getProcessor(merge.getId());
+        assertEquals(1, updated.getComponent().getConfig().getConcurrentlySchedulableTaskCount().intValue(),
+                "@TriggerSerially processor must not store concurrent task counts above 1");
+    }
+
+    @Test
     @Timeout(value = 5, unit = TimeUnit.MINUTES)
     public void testAutoModeProcessesOneMillionFlowFiles() throws NiFiClientException, IOException, InterruptedException {
         final int targetFlowFileCount = 1_000_000;

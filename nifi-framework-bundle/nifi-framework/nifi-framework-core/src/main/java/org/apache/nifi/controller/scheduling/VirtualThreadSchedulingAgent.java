@@ -18,12 +18,12 @@ package org.apache.nifi.controller.scheduling;
 
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.controller.FlowController;
+import org.apache.nifi.controller.ProcessorNode;
 import org.apache.nifi.controller.ReportingTaskNode;
 import org.apache.nifi.controller.tasks.ConnectableTask;
 import org.apache.nifi.controller.tasks.InvocationResult;
 import org.apache.nifi.controller.tasks.ReportingTaskWrapper;
 import org.apache.nifi.engine.FlowEngine;
-import org.apache.nifi.groups.ProcessGroup;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.scheduling.SchedulingStrategy;
 import org.apache.nifi.util.FormatUtils;
@@ -51,6 +51,7 @@ import java.util.concurrent.TimeUnit;
 public class VirtualThreadSchedulingAgent extends AbstractSchedulingAgent {
     private static final Logger logger = LoggerFactory.getLogger(VirtualThreadSchedulingAgent.class);
     private static final long POLL_INTERVAL_MILLIS = 25L;
+    private static final long MINIMUM_SLEEP_NANOS = TimeUnit.MILLISECONDS.toNanos(1L);
 
     private final FlowController flowController;
     private final RepositoryContextFactory contextFactory;
@@ -64,22 +65,7 @@ public class VirtualThreadSchedulingAgent extends AbstractSchedulingAgent {
     public VirtualThreadSchedulingAgent(final FlowController flowController, final FlowEngine flowEngine,
                                         final RepositoryContextFactory contextFactory, final NiFiProperties nifiProperties,
                                         final int maxThreadCount) {
-        super(flowEngine);
-        this.flowController = flowController;
-        this.contextFactory = contextFactory;
-        this.globalSemaphore = new DynamicSemaphore(maxThreadCount);
-        this.systemMaxConcurrentTasks = nifiProperties.getMaxConcurrentTasks();
-
-        final String boredYieldDuration = nifiProperties.getBoredYieldDuration();
-        try {
-            noWorkYieldNanos = FormatUtils.getTimeDuration(boredYieldDuration, TimeUnit.NANOSECONDS);
-        } catch (final IllegalArgumentException e) {
-            throw new RuntimeException("Failed to create VirtualThreadSchedulingAgent because the "
-                    + NiFiProperties.BORED_YIELD_DURATION + " property is set to an invalid time duration: " + boredYieldDuration);
-        }
-
-        final QueueBasedScaler queueBasedScaler = new QueueBasedScaler(flowController.getFlowFileEventRepository());
-        this.scaler = new CpuLoadScaler(queueBasedScaler);
+        this(flowController, flowEngine, contextFactory, nifiProperties, maxThreadCount, new CpuLoadScaler(new QueueBasedScaler()));
     }
 
     VirtualThreadSchedulingAgent(final FlowController flowController, final FlowEngine flowEngine,
@@ -110,21 +96,20 @@ public class VirtualThreadSchedulingAgent extends AbstractSchedulingAgent {
     protected void doSchedule(final Connectable connectable, final LifecycleState scheduleState) {
         final ConnectableTask connectableTask = new ConnectableTask(this, connectable, flowController, contextFactory, scheduleState);
         final boolean autoMode = connectable.getSchedulingStrategy() == SchedulingStrategy.AUTO;
+        final int effectiveMaxConcurrentTasks = getEffectiveMaxConcurrentTasks(connectable);
 
         if (autoMode) {
-            final ScalingState scalingState = new ScalingState(systemMaxConcurrentTasks);
+            final ScalingState scalingState = new ScalingState(effectiveMaxConcurrentTasks);
             scalingStates.put(connectable, scalingState);
 
             final String threadName = buildThreadName(connectable, 0);
             Thread.ofVirtual().name(threadName).start(
                     () -> runAutoSchedulingLoop(connectable, connectableTask, scheduleState, scalingState, 0));
-            logger.info("Scheduled {} in auto mode with 1 initial virtual thread (max {})", connectable, systemMaxConcurrentTasks);
+            logger.info("Scheduled {} in auto mode with 1 initial virtual thread (max {})", connectable, effectiveMaxConcurrentTasks);
         } else {
-            final int configuredTasks = connectable.getMaxConcurrentTasks();
-            final int taskCount = Math.min(configuredTasks, systemMaxConcurrentTasks);
+            final int taskCount = Math.min(effectiveMaxConcurrentTasks, systemMaxConcurrentTasks);
             for (int i = 0; i < taskCount; i++) {
-                final int taskIndex = i;
-                final String threadName = buildThreadName(connectable, taskIndex);
+                final String threadName = buildThreadName(connectable, i);
                 Thread.ofVirtual().name(threadName).start(
                         () -> runFixedSchedulingLoop(connectable, connectableTask, scheduleState));
             }
@@ -177,7 +162,17 @@ public class VirtualThreadSchedulingAgent extends AbstractSchedulingAgent {
 
         Thread.ofVirtual().name(threadName).start(() -> {
             while (scheduleState.isScheduled()) {
-                reportingTaskWrapper.run();
+                try {
+                    globalSemaphore.acquire();
+                    try {
+                        reportingTaskWrapper.run();
+                    } finally {
+                        globalSemaphore.release();
+                    }
+                } catch (final InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
                 sleepWithPolling(schedulingNanos, scheduleState);
             }
         });
@@ -225,12 +220,29 @@ public class VirtualThreadSchedulingAgent extends AbstractSchedulingAgent {
     }
 
     /**
+     * Returns the number of virtual threads that are currently executing a processor or
+     * reporting-task invocation. A thread counts as active when it holds a permit on the
+     * global semaphore, which mirrors the old {@code FlowEngine.getActiveCount()} semantics
+     * and feeds the cluster heartbeat and UI active-thread counter.
+     */
+    public int getActiveThreadCount() {
+        return globalSemaphore.getMaxPermits() - globalSemaphore.availablePermits();
+    }
+
+    /**
      * Returns the current target concurrent tasks for an auto-mode processor,
      * or -1 if the processor is not in auto mode.
      */
     public int getTargetConcurrentTasks(final Connectable connectable) {
         final ScalingState scalingState = scalingStates.get(connectable);
         return scalingState != null ? scalingState.getTargetConcurrency().get() : -1;
+    }
+
+    private int getEffectiveMaxConcurrentTasks(final Connectable connectable) {
+        if (connectable instanceof ProcessorNode processorNode) {
+            return processorNode.getEffectiveMaxConcurrentTasks();
+        }
+        return Math.min(connectable.getMaxConcurrentTasks(), systemMaxConcurrentTasks);
     }
 
     private void runFixedSchedulingLoop(final Connectable connectable, final ConnectableTask connectableTask,
@@ -293,7 +305,11 @@ public class VirtualThreadSchedulingAgent extends AbstractSchedulingAgent {
             final InvocationResult.YieldReason yieldReason = invocationResult.getYieldReason();
             if (yieldReason == InvocationResult.YieldReason.TERMINATED) {
                 return;
-            } else if (invocationResult.isYield() || yieldReason == InvocationResult.YieldReason.YIELDED) {
+            }
+
+            scalingState.recordInvocation();
+
+            if (invocationResult.isYield()) {
                 sleepForYieldOrNoWork(connectable, lifecycleState);
             } else {
                 evaluateScalingIfDue(connectable, scalingState, connectableTask, lifecycleState);
@@ -312,17 +328,14 @@ public class VirtualThreadSchedulingAgent extends AbstractSchedulingAgent {
         sleepWithPolling(TimeUnit.MILLISECONDS.toNanos(sleepMillis), lifecycleState);
     }
 
-    // Multiple virtual threads for the same processor may concurrently observe isEvaluationDue() == true
-    // because the check-then-set on lastEvaluationTime is not atomic. This is benign: targetConcurrency
-    // is an AtomicInteger, so concurrent increments/decrements are safe. In the worst case, two threads
-    // may both evaluate and produce a slightly more aggressive scaling adjustment than a single evaluation
-    // would, which self-corrects on the next evaluation cycle.
     private void evaluateScalingIfDue(final Connectable connectable, final ScalingState scalingState,
                                       final ConnectableTask connectableTask, final LifecycleState lifecycleState) {
-        if (!scalingState.isEvaluationDue()) {
+        // tryClaimEvaluation atomically checks the elapsed interval and advances the last-evaluation
+        // timestamp, so only one thread per processor performs an evaluation per interval even when
+        // many virtual threads arrive simultaneously.
+        if (!scalingState.tryClaimEvaluation()) {
             return;
         }
-        scalingState.setLastEvaluationTime(System.currentTimeMillis());
 
         final ScalingRecommendation recommendation = scaler.evaluate(connectable, scalingState);
         switch (recommendation) {
@@ -333,9 +346,14 @@ public class VirtualThreadSchedulingAgent extends AbstractSchedulingAgent {
                 }
                 break;
             case SCALE_UP:
+                final int maxConcurrency = scalingState.getMaxConcurrency();
+                final int previousUp = scalingState.getTargetConcurrency().getAndUpdate(c -> c < maxConcurrency ? c + 1 : c);
+                if (previousUp >= maxConcurrency) {
+                    break;
+                }
+                final int newTarget = previousUp + 1;
                 scalingState.setPendingValidation(true);
-                final int newTarget = scalingState.getTargetConcurrency().incrementAndGet();
-                logger.debug("Increasing {}'s effective threads from {} to {}", connectable.getName(), newTarget - 1, newTarget);
+                logger.debug("Increasing {}'s effective threads from {} to {}", connectable.getName(), previousUp, newTarget);
                 final String threadName = buildThreadName(connectable, newTarget - 1);
                 Thread.ofVirtual().name(threadName).start(
                         () -> runAutoSchedulingLoop(connectable, connectableTask, lifecycleState, scalingState, newTarget - 1));
@@ -362,7 +380,10 @@ public class VirtualThreadSchedulingAgent extends AbstractSchedulingAgent {
     }
 
     private void sleepWithPolling(final long sleepNanos, final LifecycleState lifecycleState) {
-        final long sleepExpiration = System.nanoTime() + sleepNanos;
+        // Always sleep at least a small amount so that callers passing a zero or sub-millisecond value
+        // do not busy-loop when the connectable is still scheduled.
+        final long effectiveSleepNanos = Math.max(sleepNanos, MINIMUM_SLEEP_NANOS);
+        final long sleepExpiration = System.nanoTime() + effectiveSleepNanos;
         while (System.nanoTime() < sleepExpiration && lifecycleState.isScheduled()) {
             try {
                 Thread.sleep(POLL_INTERVAL_MILLIS);
@@ -374,7 +395,7 @@ public class VirtualThreadSchedulingAgent extends AbstractSchedulingAgent {
     }
 
     private static String buildThreadName(final Connectable connectable, final int taskIndex) {
-        return connectable.getName() + " [id=" + connectable.getIdentifier() + ", group=" + connectable.getProcessGroup().getName() + "] " + taskIndex;
+        return connectable.getName() + "[type=" + connectable.getComponentType() + ", id=" + connectable.getIdentifier() + ", group=" + connectable.getProcessGroup().getName() + "] task " + taskIndex;
     }
 
     private static OffsetDateTime getNextCronSchedule(final OffsetDateTime currentSchedule, final CronExpression cronExpression) {

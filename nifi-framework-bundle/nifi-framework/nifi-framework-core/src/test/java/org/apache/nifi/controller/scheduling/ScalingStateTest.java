@@ -31,26 +31,27 @@ class ScalingStateTest {
         assertEquals(12, state.getMaxConcurrency());
         assertFalse(state.isPendingValidation());
         assertFalse(state.isInCooldown());
+        assertEquals(0L, state.getInvocationCount());
     }
 
     @Test
-    void testEvaluationDueInitially() {
+    void testTryClaimEvaluationInitiallySucceeds() {
         final ScalingState state = new ScalingState(12);
-        assertTrue(state.isEvaluationDue());
+        assertTrue(state.tryClaimEvaluation());
     }
 
     @Test
-    void testEvaluationNotDueAfterRecent() {
+    void testTryClaimEvaluationBlockedWhenWithinInterval() {
         final ScalingState state = new ScalingState(12);
-        state.setLastEvaluationTime(System.currentTimeMillis());
-        assertFalse(state.isEvaluationDue());
+        assertTrue(state.tryClaimEvaluation());
+        assertFalse(state.tryClaimEvaluation());
     }
 
     @Test
-    void testEvaluationDueAfterInterval() throws InterruptedException {
+    void testTryClaimEvaluationAllowsAfterInterval() {
         final ScalingState state = new ScalingState(12);
         state.setLastEvaluationTime(System.currentTimeMillis() - 1100);
-        assertTrue(state.isEvaluationDue());
+        assertTrue(state.tryClaimEvaluation());
     }
 
     @Test
@@ -94,20 +95,29 @@ class ScalingStateTest {
     }
 
     @Test
-    void testThroughputBaselineTracking() {
+    void testPreScaleUpInvocationRateTracking() {
         final ScalingState state = new ScalingState(12);
-        state.setPreScaleUpFlowFilesRate(100);
-        state.setPreScaleUpBytesRate(5000);
-        assertEquals(100, state.getPreScaleUpFlowFilesRate());
-        assertEquals(5000, state.getPreScaleUpBytesRate());
+        assertEquals(0.0, state.getPreScaleUpInvocationsPerSecond());
+        state.setPreScaleUpInvocationsPerSecond(42.5);
+        assertEquals(42.5, state.getPreScaleUpInvocationsPerSecond());
     }
 
     @Test
-    void testEventRepositoryTracking() {
+    void testRecordInvocationIncrementsCounter() {
         final ScalingState state = new ScalingState(12);
-        state.setPreviousFlowFilesOut(1000);
-        state.setPreviousBytesOut(50000);
-        assertEquals(1000, state.getPreviousFlowFilesOut());
-        assertEquals(50000, state.getPreviousBytesOut());
+        state.recordInvocation();
+        state.recordInvocation();
+        state.recordInvocation();
+        assertEquals(3L, state.getInvocationCount());
+    }
+
+    @Test
+    void testInvocationSnapshotUpdates() {
+        final ScalingState state = new ScalingState(12);
+        assertEquals(0L, state.getPreviousInvocationSnapshot());
+        assertEquals(0L, state.getPreviousInvocationSnapshotNanos());
+        state.updateInvocationSnapshot(100L, 2_000_000_000L);
+        assertEquals(100L, state.getPreviousInvocationSnapshot());
+        assertEquals(2_000_000_000L, state.getPreviousInvocationSnapshotNanos());
     }
 }

@@ -18,15 +18,19 @@ package org.apache.nifi.controller.scheduling;
 
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.connectable.Connection;
-import org.apache.nifi.controller.repository.FlowFileEvent;
-import org.apache.nifi.controller.repository.FlowFileEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Scaling strategy based on inbound queue depth, outbound backpressure ratio, and throughput
- * validation. After each scale-up, the next evaluation verifies that throughput actually improved;
- * if not, the scale-up is rolled back and a cooldown period prevents further scale-ups for a time.
+ * Scaling strategy based on inbound queue depth, outbound backpressure ratio, and invocation
+ * throughput. After each scale-up, the next evaluation verifies that the per-second invocation
+ * rate actually improved; if not, the scale-up is rolled back and a cooldown period prevents
+ * further scale-ups for a time.
+ * <p>
+ * The invocation rate is derived from a local counter on {@link ScalingState} that each
+ * scheduling thread increments after every successful invocation. Using a locally maintained
+ * counter yields a true per-second rate between consecutive evaluations, independent of the
+ * rolling-window semantics of the framework's FlowFile event repository.
  */
 class QueueBasedScaler implements VirtualThreadScaler {
     private static final Logger logger = LoggerFactory.getLogger(QueueBasedScaler.class);
@@ -35,32 +39,31 @@ class QueueBasedScaler implements VirtualThreadScaler {
     private static final double IDLE_INBOUND_PRESSURE_THRESHOLD = 0.4;
     private static final long IDLE_HOLD_BACKOFF_MILLIS = 3000L;
 
-    private final FlowFileEventRepository eventRepository;
-
-    QueueBasedScaler(final FlowFileEventRepository eventRepository) {
-        this.eventRepository = eventRepository;
-    }
-
     @Override
     public ScalingRecommendation evaluate(final Connectable connectable, final ScalingState scalingState) {
-        final long currentFlowFilesOut;
-        final long currentBytesOut;
-        final FlowFileEvent event = eventRepository.reportTransferEvents(connectable.getIdentifier(), System.currentTimeMillis());
-        if (event != null) {
-            currentFlowFilesOut = event.getFlowFilesOut();
-            currentBytesOut = event.getContentSizeOut();
+        synchronized (scalingState) {
+            return evaluateInternal(connectable, scalingState);
+        }
+    }
+
+    private ScalingRecommendation evaluateInternal(final Connectable connectable, final ScalingState scalingState) {
+        final long currentInvocationCount = scalingState.getInvocationCount();
+        final long nowNanos = System.nanoTime();
+        final long previousInvocationCount = scalingState.getPreviousInvocationSnapshot();
+        final long previousNanos = scalingState.getPreviousInvocationSnapshotNanos();
+        scalingState.updateInvocationSnapshot(currentInvocationCount, nowNanos);
+
+        final double invocationsPerSecond;
+        if (previousNanos == 0 || nowNanos <= previousNanos) {
+            invocationsPerSecond = 0.0;
         } else {
-            currentFlowFilesOut = 0;
-            currentBytesOut = 0;
+            final long deltaInvocations = currentInvocationCount - previousInvocationCount;
+            final long elapsedNanos = nowNanos - previousNanos;
+            invocationsPerSecond = deltaInvocations * 1_000_000_000.0 / elapsedNanos;
         }
 
-        final long flowFilesRate = currentFlowFilesOut - scalingState.getPreviousFlowFilesOut();
-        final long bytesRate = currentBytesOut - scalingState.getPreviousBytesOut();
-        scalingState.setPreviousFlowFilesOut(currentFlowFilesOut);
-        scalingState.setPreviousBytesOut(currentBytesOut);
-
         if (scalingState.isPendingValidation()) {
-            validateScaleUp(connectable, scalingState, flowFilesRate, bytesRate);
+            validateScaleUp(connectable, scalingState, invocationsPerSecond);
         }
 
         long currentInboundSize = 0;
@@ -82,8 +85,7 @@ class QueueBasedScaler implements VirtualThreadScaler {
         }
 
         if (shouldScaleUp(currentTarget, scalingState, effectiveOutboundPressure, currentInboundSize, hasInbound)) {
-            scalingState.setPreScaleUpFlowFilesRate(flowFilesRate);
-            scalingState.setPreScaleUpBytesRate(bytesRate);
+            scalingState.setPreScaleUpInvocationsPerSecond(invocationsPerSecond);
             scalingState.setIdleHoldSince(0);
             return ScalingRecommendation.SCALE_UP;
         }
@@ -105,17 +107,18 @@ class QueueBasedScaler implements VirtualThreadScaler {
         return ScalingRecommendation.HOLD;
     }
 
-    void validateScaleUp(final Connectable connectable, final ScalingState scalingState, final long flowFilesRate, final long bytesRate) {
+    void validateScaleUp(final Connectable connectable, final ScalingState scalingState, final double invocationsPerSecond) {
         scalingState.setPendingValidation(false);
-        final boolean throughputImproved = flowFilesRate > scalingState.getPreScaleUpFlowFilesRate() || bytesRate > scalingState.getPreScaleUpBytesRate();
+        final double preScaleUpRate = scalingState.getPreScaleUpInvocationsPerSecond();
+        final boolean throughputImproved = invocationsPerSecond > preScaleUpRate;
 
         if (!throughputImproved) {
             final int previous = scalingState.getTargetConcurrency().getAndUpdate(concurrency -> concurrency > 1 ? concurrency - 1 : concurrency);
             scalingState.enterCooldown();
-            logger.debug("Scale-up validation failed for {}: throughput did not improve (flowFiles: {} -> {}, bytes: {} -> {}); "
+            logger.debug("Scale-up validation failed for {}: invocation rate did not improve ({} -> {} invocations/sec); "
                             + "rolling back from {} to {} and entering cooldown",
-                    connectable.getName(), scalingState.getPreScaleUpFlowFilesRate(), flowFilesRate,
-                    scalingState.getPreScaleUpBytesRate(), bytesRate, previous, scalingState.getTargetConcurrency().get());
+                    connectable.getName(), preScaleUpRate, invocationsPerSecond,
+                    previous, scalingState.getTargetConcurrency().get());
         }
     }
 

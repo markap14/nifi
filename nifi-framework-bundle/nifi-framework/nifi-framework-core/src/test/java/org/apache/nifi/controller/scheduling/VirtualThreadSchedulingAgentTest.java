@@ -21,6 +21,7 @@ import org.apache.nifi.components.state.StateManagerProvider;
 import org.apache.nifi.connectable.Connectable;
 import org.apache.nifi.controller.FlowController;
 import org.apache.nifi.controller.GarbageCollectionLog;
+import org.apache.nifi.controller.ProcessorNode;
 import org.apache.nifi.controller.ScheduledState;
 import org.apache.nifi.controller.repository.FlowFileEventRepository;
 import org.apache.nifi.controller.repository.RepositoryContext;
@@ -223,6 +224,53 @@ class VirtualThreadSchedulingAgentTest {
     }
 
     @Test
+    void testTriggerSeriallyProcessorInAutoModeCapsAtOneConcurrentTask() throws InterruptedException {
+        final ProcessorNode processorNode = createMockedProcessorNode(SchedulingStrategy.AUTO, 1, 12);
+        final LifecycleState lifecycleState = new LifecycleState(COMPONENT_ID);
+
+        // SCALE_UP requests must be capped because the effective max is 1 regardless of systemMax.
+        final VirtualThreadScaler scaleUpScaler = (connectable, scalingState) -> ScalingRecommendation.SCALE_UP;
+        final VirtualThreadSchedulingAgent triggerSeriallyAgent = new VirtualThreadSchedulingAgent(flowController, flowEngine,
+                contextFactory, nifiProperties, MAX_THREADS, scaleUpScaler);
+
+        try {
+            triggerSeriallyAgent.schedule(processorNode, lifecycleState);
+            Thread.sleep(100);
+            assertEquals(1, triggerSeriallyAgent.getTargetConcurrentTasks(processorNode));
+        } finally {
+            lifecycleState.setScheduled(false);
+            Thread.sleep(100);
+            triggerSeriallyAgent.shutdown();
+        }
+    }
+
+    @Test
+    void testActiveThreadCountReflectsSemaphoreUsage() throws InterruptedException {
+        agent.setMaxThreadCount(4);
+        assertEquals(0, agent.getActiveThreadCount());
+
+        final CountDownLatch acquired = new CountDownLatch(2);
+        final CountDownLatch release = new CountDownLatch(1);
+        for (int i = 0; i < 2; i++) {
+            Thread.ofVirtual().start(() -> {
+                try {
+                    agent.getGlobalSemaphore().acquire();
+                    acquired.countDown();
+                    release.await();
+                } catch (final InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    agent.getGlobalSemaphore().release();
+                }
+            });
+        }
+
+        assertTrue(acquired.await(5, TimeUnit.SECONDS));
+        assertEquals(2, agent.getActiveThreadCount());
+        release.countDown();
+    }
+
+    @Test
     void testUnscheduleRemovesScalingState() throws InterruptedException {
         final Connectable connectable = createFullyMockedConnectable(1, new AtomicInteger(), new CountDownLatch(0));
         when(connectable.getSchedulingStrategy()).thenReturn(SchedulingStrategy.AUTO);
@@ -276,6 +324,48 @@ class VirtualThreadSchedulingAgentTest {
                 "No additional invocations should occur after termination");
 
         lifecycleState.setScheduled(false);
+    }
+
+    private ProcessorNode createMockedProcessorNode(final SchedulingStrategy schedulingStrategy,
+                                                     final int effectiveMaxConcurrentTasks,
+                                                     final int systemMaxConcurrentTasks) {
+        final ProcessorNode processorNode = mock(ProcessorNode.class);
+        when(processorNode.getIdentifier()).thenReturn(COMPONENT_ID);
+        when(processorNode.getName()).thenReturn("SerialProcessor");
+        when(processorNode.getSchedulingStrategy()).thenReturn(schedulingStrategy);
+        when(processorNode.getEffectiveMaxConcurrentTasks()).thenReturn(effectiveMaxConcurrentTasks);
+        when(processorNode.getMaxConcurrentTasks()).thenReturn(systemMaxConcurrentTasks);
+        when(processorNode.getIncomingConnections()).thenReturn(Collections.emptyList());
+        when(processorNode.getRelationships()).thenReturn(Collections.emptySet());
+        when(processorNode.getSchedulingPeriod(TimeUnit.MILLISECONDS)).thenReturn(100L);
+        when(processorNode.getSchedulingPeriod(TimeUnit.NANOSECONDS)).thenReturn(TimeUnit.MILLISECONDS.toNanos(100L));
+        when(processorNode.getYieldExpiration()).thenReturn(0L);
+        when(processorNode.isTriggerWhenEmpty()).thenReturn(true);
+        when(processorNode.isIsolated()).thenReturn(false);
+        when(processorNode.getRunDuration(TimeUnit.NANOSECONDS)).thenReturn(0L);
+        when(processorNode.isSessionBatchingSupported()).thenReturn(false);
+        when(processorNode.getScheduledState()).thenReturn(ScheduledState.RUNNING);
+        final Processor runnableComponent = mock(Processor.class);
+        when(processorNode.getRunnableComponent()).thenReturn(runnableComponent);
+
+        final ProcessGroup processGroup = mock(ProcessGroup.class);
+        when(processGroup.getName()).thenReturn("RootGroup");
+        when(processGroup.getParent()).thenReturn(null);
+        when(processorNode.getProcessGroup()).thenReturn(processGroup);
+
+        when(flowController.getStateManagerProvider()).thenReturn(stateManagerProvider);
+        when(stateManagerProvider.getStateManager(eq(COMPONENT_ID))).thenReturn(stateManager);
+        when(flowController.getGarbageCollectionLog()).thenReturn(garbageCollectionLog);
+        when(flowController.getPerformanceTrackingPercentage()).thenReturn(0);
+        when(flowController.getExtensionManager()).thenReturn(extensionManager);
+
+        final RepositoryContext repositoryContext = mock(RepositoryContext.class);
+        when(repositoryContext.isRelationshipAvailabilitySatisfied(0)).thenReturn(true);
+        final FlowFileEventRepository flowFileEventRepository = mock(FlowFileEventRepository.class);
+        when(repositoryContext.getFlowFileEventRepository()).thenReturn(flowFileEventRepository);
+        when(contextFactory.newProcessContext(eq(processorNode), any(AtomicLong.class))).thenReturn(repositoryContext);
+
+        return processorNode;
     }
 
     private Connectable createFullyMockedConnectable(final int maxConcurrentTasks,

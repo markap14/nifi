@@ -36,7 +36,7 @@ public class SchedulingDefaultsFactory {
         defaultSchedulingPeriods.put(SchedulingStrategy.AUTO.name(), SchedulingStrategy.AUTO.getDefaultSchedulingPeriod());
 
         final SchedulingDefaults schedulingDefaults = new SchedulingDefaults();
-        schedulingDefaults.setDefaultSchedulingStrategy(SchedulingStrategy.AUTO);
+        schedulingDefaults.setDefaultSchedulingStrategy(SchedulingStrategy.TIMER_DRIVEN);
         schedulingDefaults.setDefaultSchedulingPeriodMillis(0);
         schedulingDefaults.setPenalizationPeriodMillis(30000);
         schedulingDefaults.setYieldDurationMillis(1000);

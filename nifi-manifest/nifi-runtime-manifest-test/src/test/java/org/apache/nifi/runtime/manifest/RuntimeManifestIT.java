@@ -71,7 +71,7 @@ class RuntimeManifestIT {
 
         final SchedulingDefaults schedulingDefaults = runtimeManifest.getSchedulingDefaults();
         assertNotNull(schedulingDefaults);
-        assertEquals(SchedulingStrategy.AUTO, schedulingDefaults.getDefaultSchedulingStrategy());
+        assertEquals(SchedulingStrategy.TIMER_DRIVEN, schedulingDefaults.getDefaultSchedulingStrategy());
 
         final Map<String, Integer> defaultConcurrentTasks = schedulingDefaults.getDefaultConcurrentTasksBySchedulingStrategy();
         assertNotNull(defaultConcurrentTasks);
@@ -111,7 +111,7 @@ class RuntimeManifestIT {
 
         final ProcessorDefinition joltTransformDef = getProcessorDefinition(bundles, "nifi-jolt-nar",
                 "org.apache.nifi.processors.jolt.JoltTransformRecord");
-        assertEquals(SchedulingStrategy.AUTO.name(), joltTransformDef.getDefaultSchedulingStrategy());
+        assertEquals(SchedulingStrategy.TIMER_DRIVEN.name(), joltTransformDef.getDefaultSchedulingStrategy());
 
         final List<String> joltTransformSchedulingStrategies = joltTransformDef.getSupportedSchedulingStrategies();
         assertNotNull(joltTransformSchedulingStrategies);
@@ -202,7 +202,7 @@ class RuntimeManifestIT {
         assertEquals("1 sec", definition.getDefaultYieldDuration());
         assertEquals("WARN", definition.getDefaultBulletinLevel());
 
-        assertEquals(SchedulingStrategy.AUTO.name(), definition.getDefaultSchedulingStrategy());
+        assertEquals(SchedulingStrategy.TIMER_DRIVEN.name(), definition.getDefaultSchedulingStrategy());
 
         final List<String> schedulingStrategies = definition.getSupportedSchedulingStrategies();
         assertNotNull(schedulingStrategies);

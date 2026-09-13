@@ -106,6 +106,15 @@ class StandardProcessorNodeTest {
     }
 
     @Test
+    void testSetMaxConcurrentTasksIgnoredForTriggerSeriallyProcessor() {
+        final StandardProcessorNode node = createProcessorNode(new SerialProcessor());
+        node.setMaxConcurrentTasks(8);
+        assertEquals(1, node.getMaxConcurrentTasks());
+        node.setMaxConcurrentTasks(1);
+        assertEquals(1, node.getMaxConcurrentTasks());
+    }
+
+    @Test
     void testGetEffectiveMaxConcurrentTasksReturnsSystemMaxForAutoStrategy() {
         final StandardProcessorNode node = createProcessorNode(new SimpleProcessor());
         node.setSchedulingStrategy(SchedulingStrategy.AUTO);

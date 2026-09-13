@@ -29,11 +29,16 @@ public class ThreadDumpTask implements DiagnosticTask {
     public DiagnosticsDumpElement captureDump(final boolean verbose) {
         final StringBuilder sb = new StringBuilder();
 
+        Path tempDirectory = null;
         try {
             final HotSpotDiagnosticMXBean diagnosticMXBean = ManagementFactory.getPlatformMXBean(HotSpotDiagnosticMXBean.class);
-            final Path tempFile = Files.createTempFile("nifi-thread-dump-", ".txt");
+            // dumpThreads requires that the destination file does not already exist. Creating a private
+            // temporary directory and writing to a fresh filename inside it avoids a time-of-check to
+            // time-of-use race that would exist if we created a temp file and then deleted it before the
+            // JNI call.
+            tempDirectory = Files.createTempDirectory("nifi-thread-dump-");
+            final Path tempFile = tempDirectory.resolve("thread-dump.txt");
             try {
-                Files.deleteIfExists(tempFile);
                 diagnosticMXBean.dumpThreads(tempFile.toString(), HotSpotDiagnosticMXBean.ThreadDumpFormat.TEXT_PLAIN);
                 sb.append(Files.readString(tempFile));
             } finally {
@@ -41,6 +46,13 @@ public class ThreadDumpTask implements DiagnosticTask {
             }
         } catch (final IOException e) {
             sb.append("Failed to capture thread dump: ").append(e.getMessage());
+        } finally {
+            if (tempDirectory != null) {
+                try {
+                    Files.deleteIfExists(tempDirectory);
+                } catch (final IOException ignored) {
+                }
+            }
         }
 
         return new StandardDiagnosticsDumpElement("Thread Dump", Collections.singletonList(sb.toString()));
