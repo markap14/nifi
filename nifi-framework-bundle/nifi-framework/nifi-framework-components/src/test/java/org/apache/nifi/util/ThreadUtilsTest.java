@@ -25,6 +25,7 @@ import java.lang.management.LockInfo;
 import java.lang.management.MonitorInfo;
 import java.lang.management.ThreadInfo;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
@@ -68,6 +69,11 @@ public class ThreadUtilsTest {
 
         final String stackTrace = ThreadUtils.createStackTrace(threadInfo, null, null);
         assertThreadInfoFound(stackTrace, threadState);
+    }
+
+    @Test
+    public void testCreateStackTraceMissingThreadInfo() {
+        assertEquals("", ThreadUtils.createStackTrace(null, null, null));
     }
 
     private void setThreadInfo(final Thread.State threadState, final StackTraceElement lockedStackFrame) {

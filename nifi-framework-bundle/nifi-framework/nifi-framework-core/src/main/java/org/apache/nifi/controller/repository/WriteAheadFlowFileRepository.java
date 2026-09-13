@@ -38,6 +38,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -56,6 +57,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.LongSupplier;
 import java.util.stream.Collectors;
 
 /**
@@ -103,6 +105,8 @@ public class WriteAheadFlowFileRepository implements FlowFileRepository, SyncLis
     private final long truncationThreshold;
     private final boolean truncationEnabled;
     private final Long maximumJournalBytes;
+    private final LongSupplier nanoTimeSupplier;
+    private volatile ContentCleanupState contentCleanupState = new ContentCleanupState(0L, 0L, 0L, 0L, 0L, 0L);
 
     private volatile Collection<SerializedRepositoryRecord> recoveredRecords = null;
     private final Set<ResourceClaim> orphanedResourceClaims = Collections.synchronizedSet(new HashSet<>());
@@ -152,9 +156,15 @@ public class WriteAheadFlowFileRepository implements FlowFileRepository, SyncLis
         truncationThreshold = Long.MAX_VALUE;
         truncationEnabled = false;
         maximumJournalBytes = null;
+        nanoTimeSupplier = System::nanoTime;
     }
 
     public WriteAheadFlowFileRepository(final NiFiProperties nifiProperties) {
+        this(nifiProperties, System::nanoTime);
+    }
+
+    WriteAheadFlowFileRepository(final NiFiProperties nifiProperties, final LongSupplier nanoTimeSupplier) {
+        this.nanoTimeSupplier = nanoTimeSupplier;
         alwaysSync = Boolean.parseBoolean(nifiProperties.getProperty(NiFiProperties.FLOWFILE_REPOSITORY_ALWAYS_SYNC, "false"));
         this.nifiProperties = nifiProperties;
 
@@ -704,27 +714,69 @@ public class WriteAheadFlowFileRepository implements FlowFileRepository, SyncLis
 
     @Override
     public void onGlobalSync() {
-        for (final BlockingQueue<ResourceClaim> claimQueue : claimsAwaitingDestruction.values()) {
-            final Set<ResourceClaim> claimsToDestroy = new HashSet<>();
-            claimQueue.drainTo(claimsToDestroy);
+        final ContentCleanupState previous = contentCleanupState;
+        final long startedNanos = nanoTimeSupplier.getAsLong();
+        contentCleanupState = new ContentCleanupState(startedNanos, previous.totalNanos(), previous.lastNanos(), previous.lastCompletedMillis(),
+                previous.lastSlowNanos(), previous.lastSlowCompletedMillis());
+        try {
+            for (final BlockingQueue<ResourceClaim> claimQueue : claimsAwaitingDestruction.values()) {
+                final Set<ResourceClaim> claimsToDestroy = new HashSet<>();
+                claimQueue.drainTo(claimsToDestroy);
 
-            for (final ResourceClaim claim : claimsToDestroy) {
-                markDestructable(claim);
-            }
-        }
-
-        for (final BlockingQueue<ContentClaim> claimQueue : claimsAwaitingTruncation.values()) {
-            final Set<ContentClaim> claimsToTruncate = new HashSet<>();
-            claimQueue.drainTo(claimsToTruncate);
-
-            for (final ContentClaim claim : claimsToTruncate) {
-                if (isTruncationAllowed(claim)) {
-                    claimManager.markTruncatable(claim);
-                } else {
-                    logger.debug("Skipping markTruncatable for {} during onGlobalSync because truncation is no longer allowed", claim);
+                for (final ResourceClaim claim : claimsToDestroy) {
+                    markDestructable(claim);
                 }
             }
+
+            for (final BlockingQueue<ContentClaim> claimQueue : claimsAwaitingTruncation.values()) {
+                final Set<ContentClaim> claimsToTruncate = new HashSet<>();
+                claimQueue.drainTo(claimsToTruncate);
+
+                for (final ContentClaim claim : claimsToTruncate) {
+                    if (isTruncationAllowed(claim)) {
+                        claimManager.markTruncatable(claim);
+                    } else {
+                        logger.debug("Skipping markTruncatable for {} during onGlobalSync because truncation is no longer allowed", claim);
+                    }
+                }
+            }
+        } finally {
+            final long elapsedNanos = nanoTimeSupplier.getAsLong() - startedNanos;
+            final long completedMillis = System.currentTimeMillis();
+            final boolean slow = elapsedNanos >= TimeUnit.SECONDS.toNanos(1);
+            contentCleanupState = new ContentCleanupState(0L, previous.totalNanos() + elapsedNanos, elapsedNanos, completedMillis,
+                    slow ? elapsedNanos : previous.lastSlowNanos(), slow ? completedMillis : previous.lastSlowCompletedMillis());
+            if (slow) {
+                logger.warn("FlowFile Repository synchronization spent {} ms handing content claims to cleanup. Repository updates can wait during this phase. "
+                                + "Additional Processor tasks cannot bypass this wait. Review Content Repository cleanup and nifi.content.claim.max.appendable.size (currently {}).",
+                        TimeUnit.NANOSECONDS.toMillis(elapsedNanos), nifiProperties.getMaxAppendableClaimSize());
+            }
         }
+    }
+
+    @Override
+    public Map<String, String> getDiagnosticDetails() {
+        if (nifiProperties == null) {
+            return Map.of();
+        }
+
+        final ContentCleanupState state = contentCleanupState;
+        final long activeNanos = state.startedNanos() == 0L ? 0L : nanoTimeSupplier.getAsLong() - state.startedNanos();
+        // Publish the active handoff as well as the last slow one: a fast subsequent checkpoint must not erase evidence of a cleanup stall.
+        return Map.of(
+                "Content Cleanup Handoff In Progress", Boolean.toString(state.startedNanos() != 0L),
+                "Current Content Cleanup Handoff Milliseconds", Long.toString(TimeUnit.NANOSECONDS.toMillis(activeNanos)),
+                "Last Content Cleanup Handoff Milliseconds", Long.toString(TimeUnit.NANOSECONDS.toMillis(state.lastNanos())),
+                "Last Content Cleanup Handoff Completed", state.lastCompletedMillis() == 0L ? "Never" : Instant.ofEpochMilli(state.lastCompletedMillis()).toString(),
+                "Last Slow Content Cleanup Handoff Milliseconds", Long.toString(TimeUnit.NANOSECONDS.toMillis(state.lastSlowNanos())),
+                "Last Slow Content Cleanup Handoff Completed", state.lastSlowCompletedMillis() == 0L ? "Never" : Instant.ofEpochMilli(state.lastSlowCompletedMillis()).toString(),
+                "Total Content Cleanup Handoff Milliseconds", Long.toString(TimeUnit.NANOSECONDS.toMillis(state.totalNanos() + activeNanos)),
+                "nifi.content.claim.max.appendable.size", nifiProperties.getMaxAppendableClaimSize(),
+                "Content Cleanup Impact", "Synchronization hands retired content claims to bounded cleanup queues. This can block repository updates even with spare CPU. "
+                        + "More Processor tasks cannot bypass the wait; larger appendable claims can reduce cleanup work.");
+    }
+
+    private record ContentCleanupState(long startedNanos, long totalNanos, long lastNanos, long lastCompletedMillis, long lastSlowNanos, long lastSlowCompletedMillis) {
     }
 
     /**

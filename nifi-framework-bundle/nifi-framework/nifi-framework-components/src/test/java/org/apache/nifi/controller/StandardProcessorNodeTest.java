@@ -16,18 +16,21 @@
  */
 package org.apache.nifi.controller;
 
+import org.apache.nifi.annotation.behavior.AllowsAutoScheduling;
 import org.apache.nifi.bundle.BundleCoordinate;
 import org.apache.nifi.components.validation.ValidationTrigger;
 import org.apache.nifi.components.validation.VerifiableComponentFactory;
 import org.apache.nifi.controller.service.ControllerServiceProvider;
 import org.apache.nifi.nar.ExtensionManager;
 import org.apache.nifi.processor.Processor;
+import org.apache.nifi.scheduling.SchedulingStrategy;
 import org.apache.nifi.util.NoOpProcessor;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
@@ -37,10 +40,7 @@ class StandardProcessorNodeTest {
     void testYieldExpiration() {
         final ProcessScheduler processScheduler = mock(ProcessScheduler.class);
         final Processor processor = new NoOpProcessor();
-        final LoggableComponent<Processor> loggableProcessor = new LoggableComponent<>(processor, BundleCoordinate.UNKNOWN_COORDINATE, null);
-        final StandardProcessorNode processorNode = new StandardProcessorNode(loggableProcessor, "processor",
-                mock(ValidationContextFactory.class), processScheduler, mock(ControllerServiceProvider.class), mock(ReloadComponent.class),
-                mock(VerifiableComponentFactory.class), mock(ExtensionManager.class), mock(ValidationTrigger.class));
+        final StandardProcessorNode processorNode = createProcessorNode(processor, processScheduler);
 
         processorNode.yield(0L, TimeUnit.MILLISECONDS);
         assertEquals(0L, processorNode.getYieldExpiration());
@@ -51,5 +51,63 @@ class StandardProcessorNodeTest {
 
         processorNode.yield(1L, TimeUnit.SECONDS);
         assertEquals(expiration, processorNode.getYieldExpiration());
+    }
+
+    @Test
+    void testAutoSchedulingCapability() {
+        final ProcessScheduler processScheduler = mock(ProcessScheduler.class);
+
+        assertTrue(createProcessorNode(new NoOpProcessor(), processScheduler).isAutoSchedulingSupported());
+        assertFalse(createProcessorNode(new AutoSchedulingDisabledProcessor(), processScheduler).isAutoSchedulingSupported());
+        assertFalse(createProcessorNode(new InheritedAutoSchedulingDisabledProcessor(), processScheduler).isAutoSchedulingSupported());
+        assertTrue(createProcessorNode(new AutoSchedulingEnabledProcessor(), processScheduler).isAutoSchedulingSupported());
+    }
+
+    @Test
+    void testAutoSchedulingConfigurationIsCanonical() {
+        final StandardProcessorNode processorNode = createProcessorNode(new NoOpProcessor(), mock(ProcessScheduler.class));
+        processorNode.setMaxConcurrentTasks(4);
+        processorNode.setSchedulingPeriod("10 sec");
+        processorNode.setRunDuration(10L, TimeUnit.MILLISECONDS);
+
+        processorNode.setSchedulingStrategy(SchedulingStrategy.AUTO);
+        assertEquals(1, processorNode.getMaxConcurrentTasks());
+        assertEquals("0 sec", processorNode.getSchedulingPeriod());
+        assertEquals(1L, processorNode.getSchedulingPeriod(TimeUnit.NANOSECONDS));
+        assertEquals(0L, processorNode.getRunDuration(TimeUnit.MILLISECONDS));
+
+        processorNode.setMaxConcurrentTasks(8);
+        processorNode.setSchedulingPeriod("20 sec");
+        processorNode.setRunDuration(20L, TimeUnit.MILLISECONDS);
+        assertEquals(1, processorNode.getMaxConcurrentTasks());
+        assertEquals("0 sec", processorNode.getSchedulingPeriod());
+        assertEquals(1L, processorNode.getSchedulingPeriod(TimeUnit.NANOSECONDS));
+        assertEquals(0L, processorNode.getRunDuration(TimeUnit.MILLISECONDS));
+
+        processorNode.setSchedulingStrategy(SchedulingStrategy.TIMER_DRIVEN);
+        processorNode.setMaxConcurrentTasks(8);
+        processorNode.setSchedulingPeriod("20 sec");
+        processorNode.setRunDuration(20L, TimeUnit.MILLISECONDS);
+        assertEquals(8, processorNode.getMaxConcurrentTasks());
+        assertEquals("20 sec", processorNode.getSchedulingPeriod());
+        assertEquals(20L, processorNode.getRunDuration(TimeUnit.MILLISECONDS));
+    }
+
+    private StandardProcessorNode createProcessorNode(final Processor processor, final ProcessScheduler processScheduler) {
+        final LoggableComponent<Processor> loggableProcessor = new LoggableComponent<>(processor, BundleCoordinate.UNKNOWN_COORDINATE, null);
+        return new StandardProcessorNode(loggableProcessor, "processor", mock(ValidationContextFactory.class), processScheduler,
+                mock(ControllerServiceProvider.class), mock(ReloadComponent.class), mock(VerifiableComponentFactory.class),
+                mock(ExtensionManager.class), mock(ValidationTrigger.class));
+    }
+
+    @AllowsAutoScheduling(false)
+    private static class AutoSchedulingDisabledProcessor extends NoOpProcessor {
+    }
+
+    private static class InheritedAutoSchedulingDisabledProcessor extends AutoSchedulingDisabledProcessor {
+    }
+
+    @AllowsAutoScheduling
+    private static class AutoSchedulingEnabledProcessor extends AutoSchedulingDisabledProcessor {
     }
 }

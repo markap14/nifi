@@ -510,6 +510,11 @@ public class SwappablePriorityQueue {
         return FlowFileAvailability.FLOWFILE_AVAILABLE;
     }
 
+    public long getNextFlowFileAvailabilityTimeMillis() {
+        final long expiration = topPenaltyExpiration;
+        return expiration > System.currentTimeMillis() ? expiration : 0L;
+    }
+
     public void acknowledge(final FlowFileRecord flowFile) {
         logger.trace("{} Acknowledging {}", this, flowFile);
         directlyIncrementUnacknowledgedQueueSize(-1, -flowFile.getSize());

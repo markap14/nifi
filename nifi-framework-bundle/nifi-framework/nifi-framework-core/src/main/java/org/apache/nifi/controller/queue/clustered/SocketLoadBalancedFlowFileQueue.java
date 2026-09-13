@@ -93,7 +93,6 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -120,7 +119,7 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
     private final ContentRepository contentRepo;
     private final Set<NodeIdentifier> nodeIdentifiers;
 
-    private final ReadWriteLock partitionLock = new ReentrantReadWriteLock();
+    private final ReentrantReadWriteLock partitionLock = new ReentrantReadWriteLock();
     private final Lock partitionReadLock = partitionLock.readLock();
     private final Lock partitionWriteLock = partitionLock.writeLock();
     private QueuePartition[] queuePartitions;
@@ -200,6 +199,8 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
             return;
         }
 
+        notifySchedulingListeners();
+
         if (clusterCoordinator == null) {
             // Not clustered so nothing to worry about.
             return;
@@ -269,6 +270,7 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
         } finally {
             partitionWriteLock.unlock();
         }
+        notifySchedulingListeners();
     }
 
     private Map<QueuePartition, QueueSize> getPartitionSizes() {
@@ -302,6 +304,7 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
             setFlowFilePartitioner(partitioner);
             logger.debug("Queue {} is no longer offloaded, restored load balance strategy to {} and partitioning attribute to \"{}\"",
                     this, getLoadBalanceStrategy(), getPartitioningAttribute());
+            notifySchedulingListeners();
         }
     }
 
@@ -427,6 +430,8 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
         } finally {
             partitionReadLock.unlock();
         }
+
+        notifySchedulingListeners();
     }
 
     @Override
@@ -546,6 +551,11 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
         return totalSize.get();
     }
 
+    @Override
+    public QueueSize getLocalQueueSize() {
+        return localPartition.getQueueDiagnostics().getActiveQueueSize();
+    }
+
     /**
      * Returns an atomic, point-in-time snapshot of this queue by freezing every partition on this node for the
      * duration of the call. The {@code partitionReadLock} prevents cluster-topology changes from replacing the
@@ -619,6 +629,11 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
     }
 
     @Override
+    public long getNextFlowFileAvailabilityTimeMillis() {
+        return localPartition.getNextFlowFileAvailabilityTimeMillis();
+    }
+
+    @Override
     public boolean isActiveQueueEmpty() {
         return localPartition.isActiveQueueEmpty();
     }
@@ -682,6 +697,9 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
     @Override
     public void onTransfer(final Collection<FlowFileRecord> flowFiles) {
         adjustSize(-flowFiles.size(), -flowFiles.stream().mapToLong(FlowFileRecord::getSize).sum());
+        if (!flowFiles.isEmpty()) {
+            notifySchedulingListeners();
+        }
     }
 
     @Override
@@ -691,6 +709,7 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
         }
 
         adjustSize(-flowFiles.size(), -flowFiles.stream().mapToLong(FlowFileRecord::getSize).sum());
+        notifySchedulingListeners();
     }
 
     @Override
@@ -831,6 +850,16 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
         } finally {
             partitionWriteLock.unlock();
         }
+
+        if (!partitionLock.isWriteLockedByCurrentThread()) {
+            notifySchedulingListeners();
+        }
+    }
+
+    private void notifySchedulingListenersWhenPartitionUnlocked() {
+        if (!partitionLock.isWriteLockedByCurrentThread()) {
+            notifySchedulingListeners();
+        }
     }
 
     protected void rebalance(final QueuePartition partition) {
@@ -842,6 +871,7 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
     @Override
     public void put(final FlowFileRecord flowFile) {
         putAndGetPartition(flowFile);
+        notifySchedulingListeners();
     }
 
     protected QueuePartition putAndGetPartition(final FlowFileRecord flowFile) {
@@ -873,7 +903,7 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
 
             if (partitioner.isRebalanceOnClusterResize()) {
                 logger.debug("Received the following FlowFiles from Peer: {}. Will re-partition FlowFiles to ensure proper balancing across the cluster.", flowFiles);
-                putAll(flowFiles);
+                putAllAndGetPartitions(flowFiles);
             } else {
                 logger.debug("Received the following FlowFiles from Peer: {}. Will accept FlowFiles to the local partition", flowFiles);
 
@@ -900,11 +930,18 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
         } finally {
             partitionReadLock.unlock();
         }
+
+        if (!flowFiles.isEmpty()) {
+            notifySchedulingListeners();
+        }
     }
 
     @Override
     public void putAll(final Collection<FlowFileRecord> flowFiles) {
         putAllAndGetPartitions(flowFiles);
+        if (!flowFiles.isEmpty()) {
+            notifySchedulingListeners();
+        }
     }
 
     protected Map<QueuePartition, List<FlowFileRecord>> putAllAndGetPartitions(final Collection<FlowFileRecord> flowFiles) {
@@ -990,6 +1027,10 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
     public FlowFileRecord poll(final Set<FlowFileRecord> expiredRecords, final PollStrategy pollStrategy) {
         final FlowFileRecord flowFile = localPartition.poll(expiredRecords, pollStrategy);
         onAbort(expiredRecords);
+        if (flowFile != null) {
+            notifySchedulingListeners();
+        }
+
         return flowFile;
     }
 
@@ -997,6 +1038,10 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
     public List<FlowFileRecord> poll(int maxResults, Set<FlowFileRecord> expiredRecords, final PollStrategy pollStrategy) {
         final List<FlowFileRecord> flowFiles = localPartition.poll(maxResults, expiredRecords, pollStrategy);
         onAbort(expiredRecords);
+        if (!flowFiles.isEmpty()) {
+            notifySchedulingListeners();
+        }
+
         return flowFiles;
     }
 
@@ -1004,6 +1049,10 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
     public List<FlowFileRecord> poll(FlowFileFilter filter, Set<FlowFileRecord> expiredRecords, final PollStrategy pollStrategy) {
         final List<FlowFileRecord> flowFiles = localPartition.poll(filter, expiredRecords, pollStrategy);
         onAbort(expiredRecords);
+        if (!flowFiles.isEmpty()) {
+            notifySchedulingListeners();
+        }
+
         return flowFiles;
     }
 
@@ -1012,6 +1061,7 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
         localPartition.acknowledge(flowFile);
 
         adjustSize(-1, -flowFile.getSize());
+        notifySchedulingListeners();
     }
 
     @Override
@@ -1021,6 +1071,7 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
         if (!flowFiles.isEmpty()) {
             final long bytes = flowFiles.stream().mapToLong(FlowFileRecord::getSize).sum();
             adjustSize(-flowFiles.size(), -bytes);
+            notifySchedulingListeners();
         }
     }
 
@@ -1142,6 +1193,7 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
         } finally {
             partitionReadLock.unlock();
         }
+        notifySchedulingListeners();
     }
 
     @Override
@@ -1202,6 +1254,7 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
             return new DropFlowFileSummary(totalDroppedCount, totalDroppedBytes);
         } finally {
             unlock();
+            notifySchedulingListeners();
         }
     }
 
@@ -1247,6 +1300,8 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
             } finally {
                 partitionWriteLock.unlock();
             }
+
+            notifySchedulingListenersWhenPartitionUnlocked();
         }
 
         @Override
@@ -1264,6 +1319,8 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
             } finally {
                 partitionWriteLock.unlock();
             }
+
+            notifySchedulingListenersWhenPartitionUnlocked();
         }
 
         @Override
@@ -1312,6 +1369,8 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
             } finally {
                 partitionWriteLock.unlock();
             }
+
+            notifySchedulingListenersWhenPartitionUnlocked();
         }
 
         @Override
@@ -1346,6 +1405,8 @@ public class SocketLoadBalancedFlowFileQueue extends AbstractFlowFileQueue imple
             } finally {
                 partitionWriteLock.unlock();
             }
+
+            notifySchedulingListenersWhenPartitionUnlocked();
         }
     }
 

@@ -21,6 +21,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.xml.bind.annotation.XmlType;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -35,6 +36,7 @@ public class JVMSystemDiagnosticsSnapshotDTO implements Cloneable {
 
     private Integer cpuCores;
     private Double cpuLoadAverage;
+    private Map<String, String> flowFileRepositoryDiagnosticDetails;
     private Long physicalMemoryBytes;
     private String physicalMemory;
 
@@ -151,12 +153,22 @@ public class JVMSystemDiagnosticsSnapshotDTO implements Cloneable {
         this.garbageCollectionDiagnostics = garbageCollectionDiagnostics;
     }
 
+    @Schema(description = "Node-specific FlowFile Repository diagnostics, including content cleanup delays when supported; omitted from cluster aggregates")
+    public Map<String, String> getFlowFileRepositoryDiagnosticDetails() {
+        return flowFileRepositoryDiagnosticDetails;
+    }
+
+    public void setFlowFileRepositoryDiagnosticDetails(final Map<String, String> details) {
+        flowFileRepositoryDiagnosticDetails = details;
+    }
+
     @Override
     public JVMSystemDiagnosticsSnapshotDTO clone() {
         final JVMSystemDiagnosticsSnapshotDTO clone = new JVMSystemDiagnosticsSnapshotDTO();
         clone.contentRepositoryStorageUsage = cloneRepoUsage(contentRepositoryStorageUsage);
         clone.cpuCores = cpuCores;
         clone.cpuLoadAverage = cpuLoadAverage;
+        clone.flowFileRepositoryDiagnosticDetails = flowFileRepositoryDiagnosticDetails == null ? null : Map.copyOf(flowFileRepositoryDiagnosticDetails);
         clone.flowFileRepositoryStorageUsage = flowFileRepositoryStorageUsage == null ? null : flowFileRepositoryStorageUsage.clone();
         clone.maxHeap = maxHeap;
         clone.maxHeapBytes = maxHeapBytes;

@@ -53,6 +53,13 @@ public interface FlowFileRepository extends Closeable {
     long getStorageCapacity() throws IOException;
 
     /**
+     * @return implementation-specific diagnostic details, or an empty map when unavailable
+     */
+    default Map<String, String> getDiagnosticDetails() {
+        return Collections.emptyMap();
+    }
+
+    /**
      * @return the number of bytes currently available for use by the underlying
      * storage mechanism
      *

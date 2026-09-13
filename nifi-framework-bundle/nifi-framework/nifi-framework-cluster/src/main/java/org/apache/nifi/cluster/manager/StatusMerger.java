@@ -780,6 +780,9 @@ public class StatusMerger {
             return;
         }
 
+        // Repository timings and configuration belong to individual nodes; retain them in node snapshots instead of presenting one node as the aggregate.
+        target.setFlowFileRepositoryDiagnosticDetails(null);
+
         target.setCpuCores(add(target.getCpuCores(), toMerge.getCpuCores()));
         target.setCpuLoadAverage(add(target.getCpuLoadAverage(), toMerge.getCpuLoadAverage()));
         target.setOpenFileDescriptors(add(target.getOpenFileDescriptors(), toMerge.getOpenFileDescriptors()));

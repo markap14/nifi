@@ -88,6 +88,11 @@ public class SwappablePriorityQueueLocalPartition implements LocalQueuePartition
     }
 
     @Override
+    public long getNextFlowFileAvailabilityTimeMillis() {
+        return priorityQueue.getNextFlowFileAvailabilityTimeMillis();
+    }
+
+    @Override
     public Optional<NodeIdentifier> getNodeIdentifier() {
         return Optional.empty();
     }

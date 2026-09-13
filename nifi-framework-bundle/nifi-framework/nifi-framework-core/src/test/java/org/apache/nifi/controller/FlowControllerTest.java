@@ -16,12 +16,17 @@
  */
 package org.apache.nifi.controller;
 
+import org.apache.nifi.scheduling.SchedulingStrategy;
 import org.apache.nifi.util.NiFiProperties;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class FlowControllerTest {
 
@@ -32,5 +37,15 @@ class FlowControllerTest {
         assertFalse(FlowController.isVirtualThreadSchedulingEnabled(NiFiProperties.STANDARD_SCHEDULING_STRATEGY, 25));
         assertTrue(FlowController.isVirtualThreadSchedulingEnabled(NiFiProperties.VIRTUAL_SCHEDULING_STRATEGY, 21));
         assertThrows(IllegalArgumentException.class, () -> FlowController.isVirtualThreadSchedulingEnabled("INVALID", 25));
+    }
+
+    @Test
+    void testPlatformAutomaticDiagnosticsUseProcessorActiveCount() {
+        final FlowController flowController = mock(FlowController.class, CALLS_REAL_METHODS);
+        final ProcessorNode processorNode = mock(ProcessorNode.class);
+        when(processorNode.getSchedulingStrategy()).thenReturn(SchedulingStrategy.AUTO);
+        when(processorNode.getActiveThreadCount()).thenReturn(7);
+
+        assertEquals(7, flowController.getAutoSchedulingDiagnostics(processorNode).activeInvocations());
     }
 }

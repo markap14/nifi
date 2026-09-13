@@ -30,6 +30,7 @@ import org.apache.nifi.util.FormatUtils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class RepositoryDiagnosticTask implements DiagnosticTask {
     private final FlowController flowController;
@@ -74,6 +75,9 @@ public class RepositoryDiagnosticTask implements DiagnosticTask {
         details.add("FlowFile Repository File Store: " + repository.getFileStoreName());
         details.add("FlowFile Repository Storage Capacity: " + FormatUtils.formatDataSize(repository.getStorageCapacity()));
         details.add("FlowFile Repository Usable Space: " + FormatUtils.formatDataSize(repository.getUsableStorageSpace()));
+        for (final Map.Entry<String, String> entry : repository.getDiagnosticDetails().entrySet()) {
+            details.add(entry.getKey() + ": " + entry.getValue());
+        }
     }
 
     private void captureDiagnostics(final ContentRepository repository, final ProcessGroupStatus status, final List<String> details) throws IOException {

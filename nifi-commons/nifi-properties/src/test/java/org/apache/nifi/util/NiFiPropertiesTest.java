@@ -40,6 +40,29 @@ import static org.mockito.Mockito.when;
 public class NiFiPropertiesTest {
 
     @Test
+    public void testProcessorAutoMaxConcurrentTasks() {
+        final NiFiProperties defaultProperties = loadNiFiProperties("/NiFiProperties/conf/nifi.blank.properties", null);
+        assertEquals(Math.min(12, 4 * Runtime.getRuntime().availableProcessors()), defaultProperties.getProcessorAutoMaxConcurrentTasks());
+
+        final Map<String, String> configuredProperties = new HashMap<>();
+        configuredProperties.put(NiFiProperties.PROCESSOR_AUTO_MAX_CONCURRENT_TASKS, "3");
+        final NiFiProperties overriddenProperties = loadNiFiProperties("/NiFiProperties/conf/nifi.blank.properties", configuredProperties);
+        assertEquals(3, overriddenProperties.getProcessorAutoMaxConcurrentTasks());
+
+        configuredProperties.put(NiFiProperties.PROCESSOR_AUTO_MAX_CONCURRENT_TASKS, Integer.toString(Integer.MAX_VALUE));
+        final NiFiProperties cpuLimitedProperties = loadNiFiProperties("/NiFiProperties/conf/nifi.blank.properties", configuredProperties);
+        assertEquals(4 * Runtime.getRuntime().availableProcessors(), cpuLimitedProperties.getProcessorAutoMaxConcurrentTasks());
+
+        configuredProperties.put(NiFiProperties.PROCESSOR_AUTO_MAX_CONCURRENT_TASKS, "0");
+        final NiFiProperties zeroProperties = loadNiFiProperties("/NiFiProperties/conf/nifi.blank.properties", configuredProperties);
+        assertThrows(IllegalArgumentException.class, zeroProperties::getProcessorAutoMaxConcurrentTasks);
+
+        configuredProperties.put(NiFiProperties.PROCESSOR_AUTO_MAX_CONCURRENT_TASKS, "invalid");
+        final NiFiProperties invalidProperties = loadNiFiProperties("/NiFiProperties/conf/nifi.blank.properties", configuredProperties);
+        assertThrows(IllegalArgumentException.class, invalidProperties::getProcessorAutoMaxConcurrentTasks);
+    }
+
+    @Test
     public void testProperties() {
 
         NiFiProperties properties = loadNiFiProperties("/NiFiProperties/conf/nifi.properties", null);

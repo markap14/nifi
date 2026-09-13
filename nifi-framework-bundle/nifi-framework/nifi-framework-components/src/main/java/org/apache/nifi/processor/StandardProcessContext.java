@@ -60,6 +60,7 @@ public class StandardProcessContext implements ProcessContext, ControllerService
     private final NodeTypeProvider nodeTypeProvider;
     private final Map<PropertyDescriptor, String> properties;
     private final String annotationData;
+    private final int maxConcurrentTasks;
 
     public StandardProcessContext(
             final ProcessorNode processorNode,
@@ -68,7 +69,17 @@ public class StandardProcessContext implements ProcessContext, ControllerService
             final TaskTermination taskTermination,
             final NodeTypeProvider nodeTypeProvider
     ) {
+        this(processorNode, controllerServiceProvider, stateManager, taskTermination, nodeTypeProvider, processorNode.getMaxConcurrentTasks());
+    }
 
+    public StandardProcessContext(
+            final ProcessorNode processorNode,
+            final ControllerServiceProvider controllerServiceProvider,
+            final StateManager stateManager,
+            final TaskTermination taskTermination,
+            final NodeTypeProvider nodeTypeProvider,
+            final int maxConcurrentTasks
+    ) {
         this(
                 processorNode,
                 controllerServiceProvider,
@@ -76,7 +87,8 @@ public class StandardProcessContext implements ProcessContext, ControllerService
                 taskTermination,
                 nodeTypeProvider,
                 processorNode.getEffectivePropertyValues(),
-                processorNode.getAnnotationData()
+                processorNode.getAnnotationData(),
+                maxConcurrentTasks
         );
     }
 
@@ -110,12 +122,26 @@ public class StandardProcessContext implements ProcessContext, ControllerService
             final Map<PropertyDescriptor, String> propertyValues,
             final String annotationData
     ) {
+        this(processorNode, controllerServiceProvider, stateManager, taskTermination, nodeTypeProvider, propertyValues, annotationData, processorNode.getMaxConcurrentTasks());
+    }
+
+    public StandardProcessContext(
+            final ProcessorNode processorNode,
+            final ControllerServiceProvider controllerServiceProvider,
+            final StateManager stateManager,
+            final TaskTermination taskTermination,
+            final NodeTypeProvider nodeTypeProvider,
+            final Map<PropertyDescriptor, String> propertyValues,
+            final String annotationData,
+            final int maxConcurrentTasks
+    ) {
         this.procNode = processorNode;
         this.controllerServiceProvider = controllerServiceProvider;
         this.stateManager = stateManager;
         this.taskTermination = taskTermination;
         this.nodeTypeProvider = nodeTypeProvider;
         this.annotationData = annotationData;
+        this.maxConcurrentTasks = maxConcurrentTasks;
 
         properties = Collections.unmodifiableMap(propertyValues);
 
@@ -219,7 +245,7 @@ public class StandardProcessContext implements ProcessContext, ControllerService
     @Override
     public int getMaxConcurrentTasks() {
         verifyTaskActive();
-        return procNode.getMaxConcurrentTasks();
+        return maxConcurrentTasks;
     }
 
     @Override

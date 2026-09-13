@@ -30,11 +30,14 @@ import org.apache.nifi.controller.queue.QueueSize;
 import org.apache.nifi.controller.repository.claim.ContentClaim;
 import org.apache.nifi.controller.repository.claim.ContentClaimWriteCache;
 import org.apache.nifi.controller.repository.metrics.PerformanceTracker;
+import org.apache.nifi.controller.scheduling.CommittedSchedulingWork;
+import org.apache.nifi.controller.scheduling.SessionSchedulingObserver;
 import org.apache.nifi.controller.status.FlowFileAvailability;
 import org.apache.nifi.controller.status.LoadBalanceStatus;
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.Relationship;
+import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.metrics.CommitTiming;
 import org.apache.nifi.provenance.InternalProvenanceReporter;
 import org.apache.nifi.provenance.ProvenanceRepository;
@@ -59,13 +62,17 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -154,6 +161,9 @@ class StandardProcessSessionTest {
     @Captor
     ArgumentCaptor<ConnectionStatusEvent> connectionStatusEventCaptor;
 
+    @Captor
+    ArgumentCaptor<CommittedSchedulingWork> committedSchedulingWorkCaptor;
+
     StandardProcessSession session;
 
     @BeforeEach
@@ -188,6 +198,60 @@ class StandardProcessSessionTest {
         session.commit();
 
         verify(repositoryContext, never()).recordConnectionStatusEvent(connectionStatusEventCaptor.capture());
+    }
+
+    @Test
+    void testSchedulingObserverExcludesNamedSelfLoopReturnFromCommittedInputWork() throws IOException {
+        final SessionSchedulingObserver observer = mock(SessionSchedulingObserver.class);
+        session = new StandardProcessSession(repositoryContext, taskTermination, performanceTracker, observer);
+        setRepositoryContext();
+        when(repositoryContext.getContentRepository()).thenReturn(contentRepository);
+        when(repositoryContext.isRecordConnectionStatusEventEnabled()).thenReturn(false);
+
+        final Connection connection = mock(Connection.class);
+        final FlowFileRecord flowFileRecord = mock(FlowFileRecord.class);
+        final FlowFileQueue flowFileQueue = mock(FlowFileQueue.class);
+        when(repositoryContext.getPollableConnections()).thenReturn(List.of(connection));
+        when(connection.poll(anySet())).thenReturn(flowFileRecord);
+        when(connection.getFlowFileQueue()).thenReturn(flowFileQueue);
+        when(connection.getIdentifier()).thenReturn(INPUT_CONNECTION_ID);
+        when(flowFileRecord.getSize()).thenReturn(EXPECTED_BYTES);
+        final Relationship selfLoopRelationship = new Relationship.Builder().name("retry").build();
+        when(repositoryContext.getConnections(selfLoopRelationship)).thenReturn(List.of(connection));
+
+        final FlowFile flowFile = session.get();
+        session.transfer(flowFile, selfLoopRelationship);
+        session.commit();
+
+        verify(observer, atLeastOnce()).onActivity();
+        verify(observer).onCommit(committedSchedulingWorkCaptor.capture());
+        final CommittedSchedulingWork committedWork = committedSchedulingWorkCaptor.getValue();
+        assertEquals(0L, committedWork.inputFlowFiles());
+        assertEquals(0L, committedWork.producedFlowFiles());
+
+        clearInvocations(observer);
+        final FlowFile consumedFlowFile = session.get();
+        session.remove(consumedFlowFile);
+        session.commit();
+
+        verify(observer).onCommit(committedSchedulingWorkCaptor.capture());
+        final CommittedSchedulingWork consumedWork = committedSchedulingWorkCaptor.getValue();
+        assertEquals(1L, consumedWork.inputFlowFiles());
+
+        clearInvocations(observer);
+        doThrow(new AssertionError("Simulated observer failure")).when(observer).onCommit(any(CommittedSchedulingWork.class));
+        final FlowFile inputWithFailingObserver = session.get();
+        session.remove(inputWithFailingObserver);
+        session.commit();
+        verify(observer).onCommit(any(CommittedSchedulingWork.class));
+
+        clearInvocations(observer);
+        doThrow(new IOException("Simulated repository failure")).doNothing().when(flowFileRepository).updateRepository(any(), any());
+        final FlowFile inputWithFailedCommit = session.get();
+        session.remove(inputWithFailedCommit);
+        assertThrows(ProcessException.class, session::commit);
+        verify(observer).onCommitFailure();
+        verify(observer, never()).onCommit(any(CommittedSchedulingWork.class));
     }
 
     @Test

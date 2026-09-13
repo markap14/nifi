@@ -25,6 +25,10 @@ import java.util.Objects;
 public class ThreadUtils {
 
     public static String createStackTrace(final ThreadInfo threadInfo, final long[] deadlockedThreadIds, final long[] monitorDeadlockThreadIds) {
+        if (threadInfo == null) {
+            return "";
+        }
+
         final StringBuilder sb = new StringBuilder();
         sb.append("\"").append(threadInfo.getThreadName()).append("\" Id=");
         sb.append(threadInfo.getThreadId()).append(" ");

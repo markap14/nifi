@@ -795,6 +795,7 @@ public final class StandardProcessGroup implements ProcessGroup {
         } finally {
             writeLock.unlock();
         }
+
     }
 
     @Override
@@ -834,6 +835,7 @@ public final class StandardProcessGroup implements ProcessGroup {
         } finally {
             writeLock.unlock();
         }
+
     }
 
     @Override
@@ -1496,6 +1498,11 @@ public final class StandardProcessGroup implements ProcessGroup {
         } finally {
             writeLock.unlock();
         }
+
+        scheduler.notifySchedulingEvent(connection.getSource());
+        if (connection.getSource() != connection.getDestination()) {
+            scheduler.notifySchedulingEvent(connection.getDestination());
+        }
     }
 
     @Override
@@ -1559,6 +1566,11 @@ public final class StandardProcessGroup implements ProcessGroup {
             flowManager.onConnectionRemoved(connection);
         } finally {
             writeLock.unlock();
+        }
+
+        scheduler.notifySchedulingEvent(connectionToRemove.getSource());
+        if (connectionToRemove.getSource() != connectionToRemove.getDestination()) {
+            scheduler.notifySchedulingEvent(connectionToRemove.getDestination());
         }
     }
 

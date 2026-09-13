@@ -34,6 +34,25 @@ import java.util.function.Predicate;
 public interface FlowFileQueue {
 
     /**
+     * Registers a listener for queue changes that can affect component readiness.
+     *
+     * @param listener listener to register
+     * @return registration used to remove the listener
+     */
+    default QueueSchedulingRegistration addSchedulingListener(final QueueSchedulingListener listener) {
+        return QueueSchedulingRegistration.NO_OP;
+    }
+
+    /**
+     * Returns the next time at which the head FlowFile can become available without another queue mutation.
+     *
+     * @return epoch time in milliseconds, or zero when no deadline is known
+     */
+    default long getNextFlowFileAvailabilityTimeMillis() {
+        return 0L;
+    }
+
+    /**
      * @return the unique identifier for this FlowFileQueue
      */
     String getIdentifier();
@@ -96,6 +115,15 @@ public interface FlowFileQueue {
     String getBackPressureDataSizeThreshold();
 
     QueueSize size();
+
+    /**
+     * Returns work held in the local partition and available to this node.
+     *
+     * @return local queue size
+     */
+    default QueueSize getLocalQueueSize() {
+        return getQueueDiagnostics().getLocalQueuePartitionDiagnostics().getActiveQueueSize();
+    }
 
     /**
      * Returns an atomic, point-in-time view of this queue's total {@link QueueSize} and the

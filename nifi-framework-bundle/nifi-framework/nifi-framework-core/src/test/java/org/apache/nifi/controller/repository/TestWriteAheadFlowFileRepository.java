@@ -73,6 +73,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -84,6 +85,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 public class TestWriteAheadFlowFileRepository {
@@ -1159,6 +1161,41 @@ public class TestWriteAheadFlowFileRepository {
         final List<ContentClaim> truncated = new ArrayList<>();
         context.claimManager().drainTruncatableClaims(truncated, 100);
         assertTrue(truncated.contains(contentClaim));
+    }
+
+    @Test
+    public void testContentCleanupDiagnosticsIncludeActiveAndPreviousSlowHandoffs() throws IOException {
+        final RuntimeRepoContext context = createRuntimeRepoContext();
+        final StandardResourceClaimManager claimManager = spy(context.claimManager());
+        final ResourceClaim resourceClaim = claimManager.newResourceClaim("container", "section", "cleanup", false, false);
+        claimManager.incrementClaimantCount(resourceClaim);
+        final StandardContentClaim contentClaim = createClaim(resourceClaim, 1024L, TRUNCATION_CANDIDATE_LENGTH, true);
+        final AtomicLong clock = new AtomicLong(1L);
+
+        try (final WriteAheadFlowFileRepository repository = new WriteAheadFlowFileRepository(niFiProperties, clock::get)) {
+            repository.initialize(claimManager);
+            repository.loadFlowFiles(context.queueProvider());
+            createAndDeleteFlowFile(repository, context.queue(), contentClaim);
+            doAnswer(invocation -> {
+                assertEquals("true", repository.getDiagnosticDetails().get("Content Cleanup Handoff In Progress"));
+                clock.addAndGet(TimeUnit.SECONDS.toNanos(2));
+                assertEquals("2000", repository.getDiagnosticDetails().get("Current Content Cleanup Handoff Milliseconds"));
+                return invocation.callRealMethod();
+            }).when(claimManager).markDestructable(resourceClaim);
+
+            repository.checkpoint();
+            final Map<String, String> details = repository.getDiagnosticDetails();
+            assertEquals("false", details.get("Content Cleanup Handoff In Progress"));
+            assertEquals("2000", details.get("Last Content Cleanup Handoff Milliseconds"));
+            assertEquals("2000", details.get("Last Slow Content Cleanup Handoff Milliseconds"));
+            assertNotEquals("Never", details.get("Last Slow Content Cleanup Handoff Completed"));
+
+            repository.checkpoint();
+            final Map<String, String> subsequentDetails = repository.getDiagnosticDetails();
+            assertEquals("0", subsequentDetails.get("Last Content Cleanup Handoff Milliseconds"));
+            assertEquals("2000", subsequentDetails.get("Last Slow Content Cleanup Handoff Milliseconds"));
+            assertEquals("2000", subsequentDetails.get("Total Content Cleanup Handoff Milliseconds"));
+        }
     }
 
     @Test

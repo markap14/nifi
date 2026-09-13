@@ -50,6 +50,8 @@ public interface LocalQueuePartition extends QueuePartition {
      */
     boolean isUnacknowledgedFlowFile();
 
+    long getNextFlowFileAvailabilityTimeMillis();
+
     /**
      * Returns a single FlowFile with the highest priority that is available in the partition, or <code>null</code> if no FlowFile is available
      *

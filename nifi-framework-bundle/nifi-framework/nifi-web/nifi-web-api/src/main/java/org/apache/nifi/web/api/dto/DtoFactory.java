@@ -119,6 +119,7 @@ import org.apache.nifi.controller.queue.RemoteQueuePartitionDiagnostics;
 import org.apache.nifi.controller.repository.FlowFileRecord;
 import org.apache.nifi.controller.repository.claim.ContentClaim;
 import org.apache.nifi.controller.repository.claim.ResourceClaim;
+import org.apache.nifi.controller.scheduling.auto.AutoSchedulingDiagnostics;
 import org.apache.nifi.controller.service.ControllerServiceNode;
 import org.apache.nifi.controller.service.ControllerServiceProvider;
 import org.apache.nifi.controller.state.SortedStateUtils;
@@ -211,6 +212,7 @@ import org.apache.nifi.web.api.dto.action.details.ConfigureDetailsDTO;
 import org.apache.nifi.web.api.dto.action.details.ConnectDetailsDTO;
 import org.apache.nifi.web.api.dto.action.details.MoveDetailsDTO;
 import org.apache.nifi.web.api.dto.action.details.PurgeDetailsDTO;
+import org.apache.nifi.web.api.dto.diagnostics.AutoSchedulingDiagnosticsDTO;
 import org.apache.nifi.web.api.dto.diagnostics.ClassLoaderDiagnosticsDTO;
 import org.apache.nifi.web.api.dto.diagnostics.ConnectionDiagnosticsDTO;
 import org.apache.nifi.web.api.dto.diagnostics.ConnectionDiagnosticsSnapshotDTO;
@@ -3609,6 +3611,7 @@ public final class DtoFactory {
         dto.setDescription(getCapabilityDescription(node.getClass()));
         dto.setSupportsParallelProcessing(!node.isTriggeredSerially());
         dto.setSupportsBatching(node.isSessionBatchingSupported());
+        dto.setSupportsAutoScheduling(node.isAutoSchedulingSupported());
 
         dto.setConfig(createProcessorConfigDto(node, uiOnly));
 
@@ -4060,6 +4063,23 @@ public final class DtoFactory {
         procDiagnostics.setProcessor(createProcessorDto(procNode));
         procDiagnostics.setProcessorStatus(createProcessorStatusDto(procStatus));
         procDiagnostics.setThreadDumps(createThreadDumpDtos(procNode));
+        final AutoSchedulingDiagnostics autoSchedulingDiagnostics = flowController.getAutoSchedulingDiagnostics(procNode);
+        if (autoSchedulingDiagnostics != null) {
+            final AutoSchedulingDiagnosticsDTO autoSchedulingDiagnosticsDto = new AutoSchedulingDiagnosticsDTO();
+            autoSchedulingDiagnosticsDto.setExecutionMode(autoSchedulingDiagnostics.executionMode());
+            autoSchedulingDiagnosticsDto.setContextCeiling(autoSchedulingDiagnostics.contextCeiling());
+            autoSchedulingDiagnosticsDto.setSelectedConcurrency(autoSchedulingDiagnostics.selectedConcurrency());
+            autoSchedulingDiagnosticsDto.setActiveInvocations(autoSchedulingDiagnostics.activeInvocations());
+            autoSchedulingDiagnosticsDto.setSelectedRunDurationMillis(autoSchedulingDiagnostics.selectedRunDurationMillis());
+            autoSchedulingDiagnosticsDto.setControllerPhase(autoSchedulingDiagnostics.controllerPhase());
+            autoSchedulingDiagnosticsDto.setLimitingReason(autoSchedulingDiagnostics.limitingReason());
+            autoSchedulingDiagnosticsDto.setMeasuredThroughput(autoSchedulingDiagnostics.measuredThroughput());
+            autoSchedulingDiagnosticsDto.setObservationDurationMillis(autoSchedulingDiagnostics.observationDurationMillis());
+            autoSchedulingDiagnosticsDto.setLastDecision(autoSchedulingDiagnostics.lastDecision());
+            autoSchedulingDiagnosticsDto.setInsufficientEvidence(autoSchedulingDiagnostics.insufficientEvidence());
+            autoSchedulingDiagnosticsDto.setMeasurementsSupported(autoSchedulingDiagnostics.measurementsSupported());
+            procDiagnostics.setAutoSchedulingDiagnostics(autoSchedulingDiagnosticsDto);
+        }
 
         final Set<ControllerServiceDiagnosticsDTO> referencedServiceDiagnostics = createReferencedServiceDiagnostics(procNode.getEffectivePropertyValues(),
             flowController.getControllerServiceProvider(), serviceEntityFactory);
@@ -4340,6 +4360,7 @@ public final class DtoFactory {
         systemDiagnosticsDto.setCpuCores(systemDiagnostics.getAvailableProcessors());
         systemDiagnosticsDto.setCpuLoadAverage(systemDiagnostics.getProcessorLoadAverage());
         systemDiagnosticsDto.setFlowFileRepositoryStorageUsage(flowFileRepoUsage);
+        systemDiagnosticsDto.setFlowFileRepositoryDiagnosticDetails(flowController.getRepositoryContextFactory().getFlowFileRepository().getDiagnosticDetails());
         systemDiagnosticsDto.setMaxHeapBytes(systemDiagnostics.getMaxHeap());
         systemDiagnosticsDto.setMaxHeap(FormatUtils.formatDataSize(systemDiagnostics.getMaxHeap()));
         systemDiagnosticsDto.setProvenanceRepositoryStorageUsage(provRepoUsage);
@@ -4445,11 +4466,17 @@ public final class DtoFactory {
             final Map<String, String> defaultConcurrentTasks = new HashMap<>();
             defaultConcurrentTasks.put(SchedulingStrategy.TIMER_DRIVEN.name(), String.valueOf(SchedulingStrategy.TIMER_DRIVEN.getDefaultConcurrentTasks()));
             defaultConcurrentTasks.put(SchedulingStrategy.CRON_DRIVEN.name(), String.valueOf(SchedulingStrategy.CRON_DRIVEN.getDefaultConcurrentTasks()));
+            if (procNode.isAutoSchedulingSupported()) {
+                defaultConcurrentTasks.put(SchedulingStrategy.AUTO.name(), String.valueOf(SchedulingStrategy.AUTO.getDefaultConcurrentTasks()));
+            }
             dto.setDefaultConcurrentTasks(defaultConcurrentTasks);
 
             final Map<String, String> defaultSchedulingPeriod = new HashMap<>();
             defaultSchedulingPeriod.put(SchedulingStrategy.TIMER_DRIVEN.name(), SchedulingStrategy.TIMER_DRIVEN.getDefaultSchedulingPeriod());
             defaultSchedulingPeriod.put(SchedulingStrategy.CRON_DRIVEN.name(), SchedulingStrategy.CRON_DRIVEN.getDefaultSchedulingPeriod());
+            if (procNode.isAutoSchedulingSupported()) {
+                defaultSchedulingPeriod.put(SchedulingStrategy.AUTO.name(), SchedulingStrategy.AUTO.getDefaultSchedulingPeriod());
+            }
             dto.setDefaultSchedulingPeriod(defaultSchedulingPeriod);
         }
 
@@ -4674,6 +4701,7 @@ public final class DtoFactory {
         copy.setBundle(copy(original.getBundle()));
         copy.setSupportsParallelProcessing(original.getSupportsParallelProcessing());
         copy.setSupportsBatching(original.getSupportsBatching());
+        copy.setSupportsAutoScheduling(original.getSupportsAutoScheduling());
         copy.setSupportsSensitiveDynamicProperties(original.getSupportsSensitiveDynamicProperties());
         copy.setSupportsBacklogReporting(original.getSupportsBacklogReporting());
         copy.setPersistsState(original.getPersistsState());

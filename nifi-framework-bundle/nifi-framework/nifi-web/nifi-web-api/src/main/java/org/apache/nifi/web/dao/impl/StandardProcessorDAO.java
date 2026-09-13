@@ -197,6 +197,7 @@ public class StandardProcessorDAO extends ComponentDAO implements ProcessorDAO {
                     processor.setSchedulingStrategy(SchedulingStrategy.valueOf(schedulingStrategy));
                 }
 
+                final boolean automaticScheduling = processor.getSchedulingStrategy() == SchedulingStrategy.AUTO;
                 if (isNotNull(executionNode)) {
                     processor.setExecutionNode(ExecutionNode.valueOf(executionNode));
                 }
@@ -206,10 +207,15 @@ public class StandardProcessorDAO extends ComponentDAO implements ProcessorDAO {
                 if (isNotNull(annotationData)) {
                     processor.setAnnotationData(annotationData);
                 }
-                if (isNotNull(maxTasks)) {
+                if (automaticScheduling) {
+                    processor.setMaxConcurrentTasks(1);
+                } else if (isNotNull(maxTasks)) {
                     processor.setMaxConcurrentTasks(maxTasks);
                 }
-                if (isNotNull(schedulingPeriod)) {
+
+                if (automaticScheduling) {
+                    processor.setSchedulingPeriod("0 sec");
+                } else if (isNotNull(schedulingPeriod)) {
                     processor.setSchedulingPeriod(schedulingPeriod);
                 }
                 if (isNotNull(penaltyDuration)) {
@@ -218,7 +224,9 @@ public class StandardProcessorDAO extends ComponentDAO implements ProcessorDAO {
                 if (isNotNull(yieldDuration)) {
                     processor.setYieldPeriod(yieldDuration);
                 }
-                if (isNotNull(runDurationMillis)) {
+                if (automaticScheduling) {
+                    processor.setRunDuration(0L, TimeUnit.MILLISECONDS);
+                } else if (isNotNull(runDurationMillis)) {
                     processor.setRunDuration(runDurationMillis, TimeUnit.MILLISECONDS);
                 }
                 if (isNotNull(bulletinLevel)) {
@@ -319,6 +327,10 @@ public class StandardProcessorDAO extends ComponentDAO implements ProcessorDAO {
             }
         }
 
+        if (schedulingStrategy == SchedulingStrategy.AUTO && !processorNode.isAutoSchedulingSupported()) {
+            validationErrors.add("Scheduling strategy AUTO is not supported by Processor " + processorNode.getName() + " [" + processorNode.getIdentifier() + "]");
+        }
+
         // validate the concurrent tasks based on the scheduling strategy
         if (isNotNull(config.getConcurrentlySchedulableTaskCount())) {
             if (schedulingStrategy == SchedulingStrategy.TIMER_DRIVEN) {
@@ -346,6 +358,8 @@ public class StandardProcessorDAO extends ComponentDAO implements ProcessorDAO {
                     } catch (final Exception e) {
                         throw new IllegalArgumentException(String.format("Scheduling Period '%s' is not a valid cron expression: %s", schedulingPeriod, e.getMessage()));
                     }
+                    break;
+                case AUTO:
                     break;
             }
         }
@@ -564,6 +578,7 @@ public class StandardProcessorDAO extends ComponentDAO implements ProcessorDAO {
         // configure the processor
         configureProcessor(processor, processorDTO);
         parentGroup.onComponentModified();
+        flowController.getProcessScheduler().notifySchedulingEvent(processor);
 
         // attempt to change the underlying processor if an updated bundle is specified
         // updating the bundle must happen after configuring so that any additional classpath resources are set first

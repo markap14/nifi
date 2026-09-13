@@ -238,6 +238,14 @@ public final class StandardProcessScheduler implements ProcessScheduler {
         return strategyAgentMap.get(strategy);
     }
 
+    @Override
+    public void notifySchedulingEvent(final Connectable connectable) {
+        final SchedulingAgent schedulingAgent = getSchedulingAgent(connectable);
+        if (schedulingAgent != null) {
+            schedulingAgent.onEvent(connectable);
+        }
+    }
+
     private SchedulingAgent getSchedulingAgent(final Connectable connectable) {
         return getSchedulingAgent(connectable.getSchedulingStrategy());
     }
@@ -409,9 +417,11 @@ public final class StandardProcessScheduler implements ProcessScheduler {
     @Override
     public synchronized CompletableFuture<Void> startProcessor(final ProcessorNode procNode, final boolean failIfStopping) {
         final LifecycleState lifecycleState = getLifecycleState(requireNonNull(procNode), true, false);
+        final SchedulingAgent schedulingAgent = getSchedulingAgent(procNode);
+        final int processContextConcurrencyLimit = schedulingAgent.getProcessContextConcurrencyLimit(procNode);
 
         final Supplier<ProcessContext> processContextFactory = () -> new StandardProcessContext(procNode, getControllerServiceProvider(),
-            getStateManager(procNode), lifecycleState::isTerminated, nodeTypeProvider);
+            getStateManager(procNode), lifecycleState::isTerminated, nodeTypeProvider, processContextConcurrencyLimit);
 
         final boolean scheduleActions = procNode.getProcessGroup().resolveExecutionEngine() != ExecutionEngine.STATELESS;
 
@@ -423,7 +433,7 @@ public final class StandardProcessScheduler implements ProcessScheduler {
 
                 // If using stateless engine, no need to schedule the component to run within the standard NiFi scheduler.
                 if (scheduleActions) {
-                    getSchedulingAgent(procNode).schedule(procNode, lifecycleState);
+                    schedulingAgent.schedule(procNode, lifecycleState);
                 }
 
                 processorStartFutures.remove(procNode.getIdentifier(), future);
@@ -555,7 +565,7 @@ public final class StandardProcessScheduler implements ProcessScheduler {
         final LifecycleState lifecycleState = getLifecycleState(requireNonNull(procNode), true, false);
 
         final Supplier<ProcessContext> processContextFactory = () -> new StandardProcessContext(procNode, getControllerServiceProvider(),
-            getStateManager(procNode), lifecycleState::isTerminated, nodeTypeProvider);
+            getStateManager(procNode), lifecycleState::isTerminated, nodeTypeProvider, 1);
 
         final CompletableFuture<Void> future = new CompletableFuture<>();
         final SchedulingAgentCallback callback = new SchedulingAgentCallback() {
@@ -594,12 +604,14 @@ public final class StandardProcessScheduler implements ProcessScheduler {
     @Override
     public synchronized CompletableFuture<Void> stopProcessor(final ProcessorNode procNode, final ProcessorStopLifecycleMethods lifecycleMethods) {
         final LifecycleState lifecycleState = getLifecycleState(procNode, false, false);
+        final SchedulingAgent schedulingAgent = getSchedulingAgent(procNode);
+        final int processContextConcurrencyLimit = schedulingAgent.getProcessContextConcurrencyLimit(procNode);
 
         final StandardProcessContext processContext = new StandardProcessContext(procNode, getControllerServiceProvider(),
-            getStateManager(procNode), lifecycleState::isTerminated, nodeTypeProvider);
+            getStateManager(procNode), lifecycleState::isTerminated, nodeTypeProvider, processContextConcurrencyLimit);
 
         LOG.info("Stopping {}", procNode);
-        final CompletableFuture<Void> stopFuture = procNode.stop(this, this.componentLifeCycleThreadPool, processContext, getSchedulingAgent(procNode), lifecycleState, lifecycleMethods);
+        final CompletableFuture<Void> stopFuture = procNode.stop(this, this.componentLifeCycleThreadPool, processContext, schedulingAgent, lifecycleState, lifecycleMethods);
         final CompletableFuture<Void> startFuture = processorStartFutures.remove(procNode.getIdentifier());
         if (startFuture != null) {
             startFuture.completeExceptionally(new CancellationException("Processor start cancelled by stop request"));
