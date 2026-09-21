@@ -155,14 +155,6 @@ jobs:
           distribution: 'corretto'
           java-version: '21'
           cache: 'maven'
-      - name: Checkout NiFi API Snapshot
-        uses: actions/checkout@v6
-        with:
-          repository: apache/nifi-api
-          ref: main
-          path: nifi-api
-      - name: Install NiFi API Snapshot
-        run: ./nifi-api/mvnw --no-transfer-progress --threads 1C -f nifi-api/pom.xml -DskipTests install
       - name: Set up Python 3.12
         uses: actions/setup-python@v6
         with:
@@ -174,15 +166,6 @@ jobs:
           filters: |
             frontend:
               - 'nifi-frontend/**'
-      - name: Run NIP-47 Reproduction Test
-        run: >
-          ${{ env.MAVEN_COMMAND }}
-          --no-transfer-progress
-          -pl nifi-framework-bundle/nifi-framework/nifi-framework-components
-          -am
-          -Dtest=StandardProcessGroupTest#testSetStatelessContentMaxHeapWhileRunningAllowsSameByteCount
-          -Dsurefire.failIfNoSpecifiedTests=false
-          test
       - name: Maven Compile
         env:
           MAVEN_OPTS: >-
