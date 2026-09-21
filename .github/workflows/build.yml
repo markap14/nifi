@@ -182,6 +182,13 @@ jobs:
         run: >
           ${{ env.MAVEN_COMMAND }}
           ${{ env.MAVEN_COMPILE_COMMAND }}
+      - name: Run NIP-47 Reproduction Test
+        run: >
+          ${{ env.MAVEN_COMMAND }}
+          --no-transfer-progress
+          -pl nifi-framework-bundle/nifi-framework/nifi-framework-components
+          -Dtest=StandardProcessGroupTest
+          test
       - name: Maven Verify
         env:
           MAVEN_OPTS: >-
