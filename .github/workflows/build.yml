@@ -187,7 +187,7 @@ jobs:
           ${{ env.MAVEN_COMMAND }}
           --no-transfer-progress
           -pl nifi-framework-bundle/nifi-framework/nifi-framework-components
-          -Dtest=StandardProcessGroupTest
+          -Dtest=StandardProcessGroupTest#testSetStatelessContentMaxHeapWhileRunningAllowsSameByteCount
           test
       - name: Maven Verify
         env:
