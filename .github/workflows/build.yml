@@ -159,7 +159,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: apache/nifi-api
-          ref: main
+          ref: 308e20f
           path: nifi-api
       - name: Install NiFi API Snapshot
         run: ./nifi-api/mvnw --no-transfer-progress --threads 1C -f nifi-api/pom.xml -DskipTests install
