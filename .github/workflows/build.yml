@@ -174,6 +174,15 @@ jobs:
           filters: |
             frontend:
               - 'nifi-frontend/**'
+      - name: Run NIP-47 Reproduction Test
+        run: >
+          ${{ env.MAVEN_COMMAND }}
+          --no-transfer-progress
+          -pl nifi-framework-bundle/nifi-framework/nifi-framework-components
+          -am
+          -Dtest=StandardProcessGroupTest#testSetStatelessContentMaxHeapWhileRunningAllowsSameByteCount
+          -Dsurefire.failIfNoSpecifiedTests=false
+          test
       - name: Maven Compile
         env:
           MAVEN_OPTS: >-
@@ -182,13 +191,6 @@ jobs:
         run: >
           ${{ env.MAVEN_COMMAND }}
           ${{ env.MAVEN_COMPILE_COMMAND }}
-      - name: Run NIP-47 Reproduction Test
-        run: >
-          ${{ env.MAVEN_COMMAND }}
-          --no-transfer-progress
-          -pl nifi-framework-bundle/nifi-framework/nifi-framework-components
-          -Dtest=StandardProcessGroupTest#testSetStatelessContentMaxHeapWhileRunningAllowsSameByteCount
-          test
       - name: Maven Verify
         env:
           MAVEN_OPTS: >-
