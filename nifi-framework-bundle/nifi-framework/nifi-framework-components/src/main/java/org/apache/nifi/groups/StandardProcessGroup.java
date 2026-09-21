@@ -4841,8 +4841,7 @@ public final class StandardProcessGroup implements ProcessGroup {
     private void verifyCanSetStatelessContentMaxHeap(final long proposedMaxSizeBytes) {
         // The Content Repository is selected when the Stateless flow starts, so the setting cannot change while the flow is running.
         final ProcessGroup statelessGroup = getStatelessGroup(this);
-        if (statelessGroup != null && statelessGroup.getStatelessScheduledState() != StatelessGroupScheduledState.STOPPED
-            && proposedMaxSizeBytes != resolveStatelessContentMaxHeap()) {
+        if (statelessGroup != null && statelessGroup.isStatelessActive() && proposedMaxSizeBytes != resolveStatelessContentMaxHeap()) {
             throw new IllegalStateException("Cannot change the maximum in-memory FlowFile content for " + this
                 + " while the Stateless flow is running. Stop the Process Group before changing this setting.");
         }
