@@ -527,6 +527,10 @@ class StandardProcessGroupTest {
         assertEquals("1024 KB", runningGroup.getStatelessContentMaxHeap());
         assertThrows(IllegalStateException.class, () -> runningGroup.setStatelessContentMaxHeap("2 MB"));
         assertThrows(IllegalStateException.class, () -> runningGroup.setStatelessContentMaxHeapPercentage(0));
+
+        when(statelessGroupNode.getCurrentState()).thenReturn(ScheduledState.STOPPED);
+        when(processScheduler.getActiveThreadCount(statelessGroupNode)).thenReturn(1);
+        assertThrows(IllegalStateException.class, () -> runningGroup.setStatelessContentMaxHeap("2 MB"));
     }
 
     @Test
