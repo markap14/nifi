@@ -102,14 +102,6 @@ jobs:
           distribution: 'zulu'
           java-version: ${{ matrix.version }}
           cache: 'maven'
-      - name: Checkout NiFi API Snapshot
-        uses: actions/checkout@v6
-        with:
-          repository: apache/nifi-api
-          ref: main
-          path: nifi-api
-      - name: Install NiFi API Snapshot
-        run: ./nifi-api/mvnw --no-transfer-progress --threads 1C -f nifi-api/pom.xml -DskipTests install
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v6
