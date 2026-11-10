@@ -34,6 +34,7 @@ import org.apache.nifi.flowfile.attributes.CoreAttributes;
 import org.apache.nifi.flowfile.attributes.StandardFlowFileMediaType;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.util.bin.BinFiles;
+import org.apache.nifi.processor.util.bin.EvictionReason;
 import org.apache.nifi.processor.util.bin.InsertionLocation;
 import org.apache.nifi.processors.standard.merge.AttributeStrategyUtil;
 import org.apache.nifi.util.MockFlowFile;
@@ -1110,15 +1111,19 @@ public class TestMergeContent {
     }
 
     @Test
-    public void testDefragmentMultipleOnTriggers() throws IOException {
+    public void testDefragmentMultipleOnTriggers() throws IOException, InterruptedException {
         runner.setProperty(MergeContent.MERGE_STRATEGY, MergeContent.MergeStrategy.DEFRAGMENT);
+
+        // A Defragment bin is not completed early while the Process Group is being drained, because a timed-out Defragment bin is routed to failure
+        runner.initiateDrain();
 
         final Map<String, String> attributes = new HashMap<>();
         attributes.put(MergeContent.FRAGMENT_ID_ATTRIBUTE, "1");
         attributes.put(MergeContent.FRAGMENT_COUNT_ATTRIBUTE, "4");
         attributes.put(MergeContent.FRAGMENT_INDEX_ATTRIBUTE, "1");
         runner.enqueue("A Man ".getBytes(StandardCharsets.UTF_8), attributes);
-        runner.run();
+        runner.run(1, false);
+        Thread.sleep(1_100L);
 
         attributes.put(MergeContent.FRAGMENT_INDEX_ATTRIBUTE, "2");
         runner.enqueue("A Plan ".getBytes(StandardCharsets.UTF_8), attributes);
@@ -1227,6 +1232,52 @@ public class TestMergeContent {
                 }
             }
         }
+    }
+
+    @Test
+    public void testMaxBinAgeWhileDraining() throws InterruptedException {
+        runner.setProperty(MergeContent.MERGE_STRATEGY, MergeContent.MergeStrategy.BIN_PACK);
+        runner.setProperty(MergeContent.MIN_ENTRIES, "10");
+
+        // A drain that is initiated before the Processor is scheduled completes a bin once it is older than 1 second, even though no Max Bin Age is configured
+        runner.initiateDrain();
+        runner.enqueue(new byte[0]);
+        runner.run(1, false);
+        runner.assertTransferCount(MergeContent.REL_MERGED, 0);
+        Thread.sleep(1_100L);
+        runner.run(1, false, false);
+        assertMergedOnTimeout();
+
+        // Once the drain completes, bins have no maximum age again
+        runner.completeDrain();
+        runner.enqueue(new byte[0]);
+        runner.run(1, false, false);
+        Thread.sleep(1_100L);
+        runner.run(1, false, false);
+        runner.assertTransferCount(MergeContent.REL_MERGED, 0);
+
+        // A drain that is initiated while a bin is older than 1 second completes the bin
+        runner.initiateDrain();
+        runner.run(1, true, false);
+        assertMergedOnTimeout();
+
+        // A bin that is created while draining is completed at the configured Max Bin Age once the drain completes
+        runner.setProperty(MergeContent.MAX_BIN_AGE, "2 sec");
+        runner.enqueue(new byte[0]);
+        runner.run(1, false);
+        runner.completeDrain();
+        Thread.sleep(1_100L);
+        runner.run(1, false, false);
+        runner.assertTransferCount(MergeContent.REL_MERGED, 0);
+        Thread.sleep(1_000L);
+        runner.run(1, true, false);
+        assertMergedOnTimeout();
+    }
+
+    private void assertMergedOnTimeout() {
+        runner.assertTransferCount(MergeContent.REL_MERGED, 1);
+        runner.getFlowFilesForRelationship(MergeContent.REL_MERGED).getFirst().assertAttributeEquals(MergeContent.REASON_FOR_MERGING, EvictionReason.TIMEOUT.name());
+        runner.clearTransferState();
     }
 
     @Test

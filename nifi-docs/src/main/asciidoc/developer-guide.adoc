@@ -639,6 +639,52 @@ while methods using this annotation can be used to clean up resources,
 for instance, they should not be
 relied upon for critical business logic.
 
+[[on-drain-initiated]]
+==== @OnDrainInitiated
+
+A user can drain a Process Group. A drain keeps the components that bring new data into the group
+stopped and starts everything else, so that the data already in the group can flow out of it. Some
+Processors hold on to data while they wait for more to arrive. For example, `MergeContent` keeps a
+partial bin until it has enough FlowFiles or the bin reaches its Max Bin Age. During a drain, no more
+data will arrive, so such a Processor may want to change how it behaves.
+
+Methods with the `@OnDrainInitiated` annotation are called when a drain begins, after the framework has
+stopped the components that bring data into the group and started the other components. The methods are
+called on every Processor in the group, including Processors in child groups but not Processors inside a
+Stateless child group. They are also called on every Controller Service that those Processors reference,
+either directly or through another Controller Service.
+
+The framework makes no promise about the lifecycle of the component when the method is called. The
+component may be stopped, running, starting, stopping, enabled, disabled, or invalid. For this reason, it is
+recommended that the method only take note that a drain has started rather than perform any significant logic.
+For example, it might set a `volatile` flag that the `onTrigger` method reads, or pass a new setting to an object
+that the component uses. The method may be called while other threads
+are running the `onTrigger` method, so it must be thread-safe. If the method throws an Exception, the
+Exception is logged and the drain continues.
+
+Methods with this annotation are permitted to take either 0 or 1 argument. If an argument is used, it must
+be of type `ProcessContext` if the component is a Processor or of type `ConfigurationContext` if the
+component is a Controller Service.
+
+==== @OnDrainCompleted
+
+Methods with the `@OnDrainCompleted` annotation are called when a drain ends. A drain ends once the framework
+finds that no data is left in the group, when a user starts or stops a component that the drain controls after
+no data is left in the group, or when the user cancels the drain, which may happen while data is still queued.
+They are called on the same components
+that received <<on-drain-initiated,`@OnDrainInitiated`>>. A component should use this method to undo
+whatever note it took when the drain began, for example by clearing the flag that `onTrigger` reads or by
+restoring the setting that it changed.
+
+The method is not called if the drain was never started, for example because the framework failed to stop
+or start the components in the group. It is also not called on a node that restarts while a drain is in
+progress, because the node does not remember the drain after it restarts.
+
+The same rules apply as for `@OnDrainInitiated`: the component may be in any state when the method is
+called, it is recommended that the method only take note that the drain has ended, it must be thread-safe, and an Exception
+thrown by the method is logged and does not prevent the drain from ending. The method may take the same
+arguments as a method annotated with `@OnDrainInitiated`.
+
 === Component Notification
 
 The NiFi API provides notification support through use of Java
@@ -2291,6 +2337,13 @@ If it is useful to test behavior that occurs with multiple threads, this can als
 to remember that the `run` call of `TestRunner` specifies how many times the Processor should be triggered, not
 the number of times that the Processor should be triggered per thread. So, if the thread count is set to 2 but
 `run(1)` is called, only a single thread will be used.
+
+If the Processor changes its behavior while its Process Group is being drained, the `initiateDrain` and `completeDrain`
+methods of `TestRunner` can be used to test this. The `initiateDrain` method invokes any method annotated with
+`@OnDrainInitiated` on every enabled Controller Service and then on the Processor. The `completeDrain` method does the
+same for methods annotated with `@OnDrainCompleted`. Neither method runs the Processor, so a test will typically call
+`initiateDrain`, then call `run(int, boolean, boolean)` to trigger the Processor without calling its `@OnScheduled`
+methods again, and then validate the output.
 
 
 === Validate Output

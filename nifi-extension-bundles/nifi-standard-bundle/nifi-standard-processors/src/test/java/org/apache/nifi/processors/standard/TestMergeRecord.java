@@ -238,8 +238,11 @@ public class TestMergeRecord {
     }
 
     @Test
-    public void testDefragmentOverMultipleCalls() {
+    public void testDefragmentOverMultipleCalls() throws InterruptedException {
         runner.setProperty(MergeRecord.MERGE_STRATEGY, MergeRecord.MERGE_STRATEGY_DEFRAGMENT);
+
+        // A Defragment bin is not completed early while the Process Group is being drained, because a timed-out Defragment bin is routed to failure
+        runner.initiateDrain();
 
         final Map<String, String> attr1 = new HashMap<>();
         attr1.put(MergeRecord.FRAGMENT_COUNT_ATTRIBUTE, "2");
@@ -247,7 +250,9 @@ public class TestMergeRecord {
         attr1.put(MergeRecord.FRAGMENT_INDEX_ATTRIBUTE, "0");
 
         runner.enqueue("Name, Age\nJohn, 35", attr1);
-        runner.run(2);
+        runner.run(1, false);
+        Thread.sleep(1_100L);
+        runner.run(1, true, false);
 
         assertEquals(1, runner.getQueueSize().getObjectCount(), "Fragment should remain in the incoming connection");
         runner.assertTransferCount(MergeRecord.REL_MERGED, 0);
@@ -474,6 +479,61 @@ public class TestMergeRecord {
 
         runner.assertTransferCount(MergeRecord.REL_MERGED, 1);
         runner.assertTransferCount(MergeRecord.REL_ORIGINAL, 100);
+    }
+
+    @Test
+    public void testMaxBinAgeWhileDraining() throws InterruptedException {
+        runner.setProperty(MergeRecord.MIN_RECORDS, "5");
+
+        // A drain that is initiated before the Processor is triggered completes a bin once it is older than 1 second, even though no Max Bin Age is configured
+        runner.initiateDrain();
+        runner.enqueue("Name, Age\nJohn, 35");
+        runner.run(1, false);
+        runner.assertTransferCount(MergeRecord.REL_MERGED, 0);
+        Thread.sleep(1_100L);
+        runner.run(1, false, false);
+        assertMergedOnTimeout();
+
+        // Once the drain completes, bins have no maximum age again
+        runner.completeDrain();
+        runner.enqueue("Name, Age\nJohn, 35");
+        runner.run(1, false, false);
+        Thread.sleep(1_100L);
+        runner.run(1, false, false);
+        runner.assertTransferCount(MergeRecord.REL_MERGED, 0);
+
+        // A drain that is initiated while a bin is older than 1 second completes the bin
+        runner.initiateDrain();
+        runner.run(1, false, false);
+        assertMergedOnTimeout();
+
+        // A configured Max Bin Age that is shorter than 1 second is kept while draining
+        runner.completeDrain();
+        runner.setProperty(MergeRecord.MAX_BIN_AGE, "200 millis");
+        runner.initiateDrain();
+        runner.enqueue("Name, Age\nJohn, 35");
+        runner.run(1, false, false);
+        Thread.sleep(300L);
+        runner.run(1, true, false);
+        assertMergedOnTimeout();
+
+        // A bin that is created while draining is completed at the configured Max Bin Age once the drain completes
+        runner.setProperty(MergeRecord.MAX_BIN_AGE, "2 sec");
+        runner.enqueue("Name, Age\nJohn, 35");
+        runner.run(1, false);
+        runner.completeDrain();
+        Thread.sleep(1_100L);
+        runner.run(1, false, false);
+        runner.assertTransferCount(MergeRecord.REL_MERGED, 0);
+        Thread.sleep(1_000L);
+        runner.run(1, true, false);
+        assertMergedOnTimeout();
+    }
+
+    private void assertMergedOnTimeout() {
+        runner.assertTransferCount(MergeRecord.REL_MERGED, 1);
+        runner.getFlowFilesForRelationship(MergeRecord.REL_MERGED).getFirst().assertAttributeEquals(MergeRecord.MERGE_COMPLETION_REASON, "Bin has reached Max Bin Age");
+        runner.clearTransferState();
     }
 
     @Test
