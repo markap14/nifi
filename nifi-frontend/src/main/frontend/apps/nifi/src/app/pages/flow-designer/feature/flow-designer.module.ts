@@ -29,6 +29,9 @@ import { ControllerServicesEffects } from '../state/controller-services/controll
 import { ParameterEffects } from '../state/parameter/parameter.effects';
 import { BannerText } from '../../../ui/common/banner-text/banner-text.component';
 import { FlowAnalysisEffects } from '../state/flow-analysis/flow-analysis.effects';
+import { ProcessGroupDrainEffects } from '../state/process-group-drain/process-group-drain.effects';
+import { processGroupDrainFeatureKey } from '../state/process-group-drain';
+import { processGroupDrainReducer } from '../state/process-group-drain/process-group-drain.reducer';
 import { ComponentTypeNamePipe } from '@nifi/shared';
 
 @NgModule({
@@ -38,12 +41,14 @@ import { ComponentTypeNamePipe } from '@nifi/shared';
         CommonModule,
         FlowDesignerRoutingModule,
         StoreModule.forFeature(canvasFeatureKey, reducers),
+        StoreModule.forFeature(processGroupDrainFeatureKey, processGroupDrainReducer),
         EffectsModule.forFeature(
             FlowEffects,
             TransformEffects,
             ControllerServicesEffects,
             ParameterEffects,
-            FlowAnalysisEffects
+            FlowAnalysisEffects,
+            ProcessGroupDrainEffects
         ),
         NgOptimizedImage,
         MatDialogModule,

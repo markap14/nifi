@@ -319,6 +319,7 @@ export interface ProcessGroupFlow {
     flow: Flow;
     lastRefreshed: string;
     resolvedExecutionEngine: ResolvedExecutionEngine;
+    drainRequestId?: string | null;
 }
 
 export interface ProcessGroupFlowEntity {

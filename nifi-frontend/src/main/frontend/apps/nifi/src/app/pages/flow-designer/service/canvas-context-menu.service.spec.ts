@@ -26,6 +26,7 @@ import { CanvasView } from './canvas-view.service';
 import { CanvasActionsService } from './canvas-actions.service';
 import { DraggableBehavior } from './behavior/draggable-behavior.service';
 import * as FlowActions from '../state/flow/flow.actions';
+import * as ProcessGroupDrainActions from '../state/process-group-drain/process-group-drain.actions';
 import type { ResolvedExecutionEngine } from '../state/flow';
 import type { ContextMenuItemDefinition } from '../../../ui/common/context-menu/context-menu.component';
 
@@ -48,7 +49,9 @@ async function setup(options: SetupOptions = {}) {
     const canvasUtils = {
         getProcessGroupId: vi.fn().mockReturnValue(currentProcessGroupId),
         isProcessGroup: vi.fn().mockReturnValue(options.isProcessGroup ?? false),
-        getResolvedExecutionEngine: vi.fn().mockReturnValue(options.resolvedExecutionEngine ?? 'STANDARD')
+        getResolvedExecutionEngine: vi.fn().mockReturnValue(options.resolvedExecutionEngine ?? 'STANDARD'),
+        canModifyCurrentGroup: vi.fn().mockReturnValue(true),
+        getCurrentProcessGroupDrainRequestId: vi.fn().mockReturnValue(null)
     };
 
     await TestBed.configureTestingModule({
@@ -170,6 +173,110 @@ describe('CanvasContextMenu', () => {
             };
 
             expect(stopSources.condition!(selection as never)).toBe(false);
+        });
+    });
+
+    describe('Drain and View Drain', () => {
+        function processGroupSelection(overrides: Record<string, unknown> = {}) {
+            const selectionData = {
+                id: 'pg-child',
+                resolvedExecutionEngine: 'STANDARD',
+                permissions: { canRead: true, canWrite: true },
+                component: { id: 'pg-child' },
+                ...overrides
+            };
+            return { empty: () => false, datum: () => selectionData };
+        }
+
+        it('offers Drain only for a writable STANDARD process group without a drain', async () => {
+            const { service, canvasUtils, dispatchSpy } = await setup({ isProcessGroup: true });
+            const drain = menuItem(service.getMenu('root')!.menuItems, 'Drain');
+
+            expect(drain.condition!(processGroupSelection() as never)).toBe(true);
+            expect(drain.condition!(processGroupSelection({ resolvedExecutionEngine: 'STATELESS' }) as never)).toBe(
+                false
+            );
+            expect(
+                drain.condition!(processGroupSelection({ permissions: { canRead: true, canWrite: false } }) as never)
+            ).toBe(false);
+            expect(
+                drain.condition!(
+                    processGroupSelection({ component: { id: 'pg-child', drainRequestId: 'drain-1' } }) as never
+                )
+            ).toBe(false);
+
+            drain.action!(processGroupSelection() as never);
+            expect(dispatchSpy).toHaveBeenCalledWith(
+                ProcessGroupDrainActions.promptDrainRequest({ request: { processGroupId: 'pg-child' } })
+            );
+
+            // an empty selection refers to the current group
+            const emptySelection = { empty: () => true };
+            expect(drain.condition!(emptySelection as never)).toBe(true);
+            drain.action!(emptySelection as never);
+            expect(dispatchSpy).toHaveBeenCalledWith(
+                ProcessGroupDrainActions.promptDrainRequest({ request: { processGroupId: 'current-pg' } })
+            );
+
+            canvasUtils.getCurrentProcessGroupDrainRequestId.mockReturnValue('drain-1');
+            expect(drain.condition!(emptySelection as never)).toBe(false);
+
+            canvasUtils.getCurrentProcessGroupDrainRequestId.mockReturnValue(null);
+            canvasUtils.canModifyCurrentGroup.mockReturnValue(false);
+            expect(drain.condition!(emptySelection as never)).toBe(false);
+
+            canvasUtils.canModifyCurrentGroup.mockReturnValue(true);
+            canvasUtils.getResolvedExecutionEngine.mockReturnValue('STATELESS');
+            expect(drain.condition!(emptySelection as never)).toBe(false);
+        });
+
+        it('offers View Drain only for a writable process group with a drain and polls that drain', async () => {
+            const { service, canvasUtils, dispatchSpy } = await setup({ isProcessGroup: true });
+            const viewDrain = menuItem(service.getMenu('root')!.menuItems, 'View Drain');
+            const draining = processGroupSelection({ component: { id: 'pg-child', drainRequestId: 'drain-1' } });
+
+            expect(viewDrain.condition!(draining as never)).toBe(true);
+            expect(viewDrain.condition!(processGroupSelection() as never)).toBe(false);
+            expect(
+                viewDrain.condition!(
+                    processGroupSelection({
+                        permissions: { canRead: true, canWrite: false },
+                        component: { id: 'pg-child', drainRequestId: 'drain-1' }
+                    }) as never
+                )
+            ).toBe(false);
+
+            viewDrain.action!(draining as never);
+            expect(dispatchSpy).toHaveBeenCalledWith(
+                ProcessGroupDrainActions.viewDrainRequest({
+                    request: { processGroupId: 'pg-child', drainRequestId: 'drain-1' }
+                })
+            );
+
+            // an empty selection refers to the current group
+            const emptySelection = { empty: () => true };
+            expect(viewDrain.condition!(emptySelection as never)).toBe(false);
+
+            canvasUtils.getCurrentProcessGroupDrainRequestId.mockReturnValue('drain-current');
+            expect(viewDrain.condition!(emptySelection as never)).toBe(true);
+            viewDrain.action!(emptySelection as never);
+            expect(dispatchSpy).toHaveBeenCalledWith(
+                ProcessGroupDrainActions.viewDrainRequest({
+                    request: { processGroupId: 'current-pg', drainRequestId: 'drain-current' }
+                })
+            );
+
+            canvasUtils.canModifyCurrentGroup.mockReturnValue(false);
+            expect(viewDrain.condition!(emptySelection as never)).toBe(false);
+        });
+
+        it('are hidden when the selection is not a single process group', async () => {
+            const { service } = await setup({ isProcessGroup: false });
+            const menuItems = service.getMenu('root')!.menuItems;
+            const selection = processGroupSelection({ component: { id: 'pg-child', drainRequestId: 'drain-1' } });
+
+            expect(menuItem(menuItems, 'Drain').condition!(selection as never)).toBe(false);
+            expect(menuItem(menuItems, 'View Drain').condition!(selection as never)).toBe(false);
         });
     });
 });
