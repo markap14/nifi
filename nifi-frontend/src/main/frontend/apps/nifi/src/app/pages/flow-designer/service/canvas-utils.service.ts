@@ -26,6 +26,7 @@ import {
     selectCanvasPermissions,
     selectConnections,
     selectCurrentParameterContext,
+    selectCurrentProcessGroupDrainRequestId,
     selectCurrentProcessGroupId,
     selectParentProcessGroupId,
     selectResolvedExecutionEngine
@@ -92,6 +93,7 @@ export class CanvasUtils {
     private currentResolvedExecutionEngine: ResolvedExecutionEngine =
         initialFlowState.flow.processGroupFlow.resolvedExecutionEngine;
     private canvasPermissions: Permissions = initialFlowState.flow.permissions;
+    private currentDrainRequestId: string | null = null;
     private currentUser: CurrentUser = initialUserState.user;
     private currentParameterContext: ParameterContextReferenceEntity | null =
         initialFlowState.flow.processGroupFlow.parameterContext;
@@ -133,6 +135,13 @@ export class CanvasUtils {
             .pipe(takeUntilDestroyed(this.destroyRef))
             .subscribe((canvasPermissions) => {
                 this.canvasPermissions = canvasPermissions;
+            });
+
+        this.store
+            .select(selectCurrentProcessGroupDrainRequestId)
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe((drainRequestId) => {
+                this.currentDrainRequestId = drainRequestId;
             });
 
         this.store
@@ -473,6 +482,20 @@ export class CanvasUtils {
         }
 
         return false;
+    }
+
+    /**
+     * Returns whether the user can write the current process group, false otherwise.
+     */
+    public canModifyCurrentGroup(): boolean {
+        return this.canvasPermissions.canWrite;
+    }
+
+    /**
+     * Returns the ID of the drain of the current process group, or null if the current process group is not being drained.
+     */
+    public getCurrentProcessGroupDrainRequestId(): string | null {
+        return this.currentDrainRequestId;
     }
 
     /**

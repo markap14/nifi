@@ -68,6 +68,7 @@ import {
     ContextMenuItemDefinition
 } from '../../../ui/common/context-menu/context-menu.component';
 import { promptEmptyQueueRequest, promptEmptyQueuesRequest } from '../../../state/empty-queue/empty-queue.actions';
+import { promptDrainRequest, viewDrainRequest } from '../state/process-group-drain/process-group-drain.actions';
 import { getComponentStateAndOpenDialog } from '../../../state/component-state/component-state.actions';
 import { navigateToComponentDocumentation } from '../../../state/documentation/documentation.actions';
 import * as d3 from 'd3';
@@ -810,6 +811,60 @@ export class CanvasContextMenu implements ContextMenuDefinitionProvider {
                             }
                         })
                     );
+                }
+            },
+            {
+                condition: (selection: any) => {
+                    if (selection.empty()) {
+                        return (
+                            this.canvasUtils.getResolvedExecutionEngine() === 'STANDARD' &&
+                            this.canvasUtils.canModifyCurrentGroup() &&
+                            !this.canvasUtils.getCurrentProcessGroupDrainRequestId()
+                        );
+                    }
+                    return (
+                        this.canvasUtils.isProcessGroup(selection) &&
+                        selection.datum().resolvedExecutionEngine === 'STANDARD' &&
+                        selection.datum().permissions.canWrite &&
+                        !selection.datum().component?.drainRequestId
+                    );
+                },
+                clazz: 'fa fa-tint',
+                text: 'Drain',
+                action: (selection: any) => {
+                    const processGroupId = selection.empty()
+                        ? this.canvasUtils.getProcessGroupId()
+                        : selection.datum().id;
+                    this.store.dispatch(promptDrainRequest({ request: { processGroupId } }));
+                }
+            },
+            {
+                condition: (selection: any) => {
+                    if (selection.empty()) {
+                        return (
+                            this.canvasUtils.canModifyCurrentGroup() &&
+                            !!this.canvasUtils.getCurrentProcessGroupDrainRequestId()
+                        );
+                    }
+                    return (
+                        this.canvasUtils.isProcessGroup(selection) &&
+                        selection.datum().permissions.canWrite &&
+                        !!selection.datum().component?.drainRequestId
+                    );
+                },
+                clazz: 'fa fa-tint',
+                text: 'View Drain',
+                action: (selection: any) => {
+                    const request = selection.empty()
+                        ? {
+                              processGroupId: this.canvasUtils.getProcessGroupId(),
+                              drainRequestId: this.canvasUtils.getCurrentProcessGroupDrainRequestId()!
+                          }
+                        : {
+                              processGroupId: selection.datum().id,
+                              drainRequestId: selection.datum().component.drainRequestId
+                          };
+                    this.store.dispatch(viewDrainRequest({ request }));
                 }
             },
             {
